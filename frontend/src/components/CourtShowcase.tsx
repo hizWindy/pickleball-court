@@ -43,21 +43,21 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
   return (
     <section id="courts" className="py-16 bg-white border-b border-zinc-200">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-12">
-        {/* Architectural Render Showcase Banner */}
+        {/* Architectural Court Venue Showcase Banner */}
         <div className="relative rounded-3xl overflow-hidden border border-emerald-300 shadow-xl group">
-          <div className="relative aspect-[16/8] sm:aspect-[21/9] w-full bg-zinc-950 overflow-hidden">
+          <div className="relative aspect-[4/3] sm:aspect-[16/10] md:aspect-[16/9] lg:aspect-[16/8] w-full bg-zinc-950 overflow-hidden">
             <img
-              src="/images/housepickle-render-cropped.png"
-              alt="HousePickle Club 3D Design"
-              className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-700"
+              src="/images/housepickle-arena-court-clean.webp"
+              alt="HousePickle Club Rooftop Court Arena"
+              className="w-full h-full object-cover object-[center_68%] sm:object-[center_65%] group-hover:scale-103 transition-transform duration-700"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/25 via-45% to-transparent pointer-events-none" />
 
             {/* Top Tag */}
             <div className="absolute top-4 left-4 sm:top-6 sm:left-6 flex items-center gap-2">
-              <span className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md text-[#CCFF00] font-sport font-extrabold text-xs uppercase tracking-wider border border-white/20 flex items-center gap-1.5">
+              <span className="px-3.5 py-1.5 rounded-full bg-black/65 backdrop-blur-md text-[#CCFF00] font-sport font-extrabold text-xs uppercase tracking-wider border border-white/20 flex items-center gap-1.5 shadow-md">
                 <span className="w-2 h-2 rounded-full bg-[#CCFF00] animate-ping" />
-                Official 2-Court Venue Design
+                Official 2-Court Venue • Koronadal City
               </span>
             </div>
 
@@ -66,23 +66,23 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
               <div>
                 <div className="flex items-center gap-3 mb-1">
                   <img src="/housepickle-emblem.svg" alt="HousePickle Emblem" className="w-10 h-10 object-contain drop-shadow-md" />
-                  <span className="font-heading font-black text-xl sm:text-3xl uppercase tracking-tight text-white">
+                  <span className="font-heading font-black text-xl sm:text-3xl uppercase tracking-tight text-white drop-shadow-sm">
                     HOUSE<span className="text-[#84CC16]">PICKLE</span> CLUB
                   </span>
                 </div>
-                <p className="text-xs sm:text-sm text-zinc-300 font-sport font-bold uppercase tracking-widest">
-                  "Good Players Make Better People" • Play • Connect • Repeat
+                <p className="text-xs sm:text-sm text-zinc-200 font-sport font-bold uppercase tracking-widest drop-shadow-xs">
+                  "Good Players Make Better People" • Dedicated Courts 1 & 2 • 24/7 Open
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedImage('/images/housepickle-render-cropped.png')}
-                  className="px-4 py-2 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-md text-white text-xs font-sport font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 border border-white/20"
+                  onClick={() => setSelectedImage('/images/court-venue-full.webp')}
+                  className="px-4 py-2 rounded-full bg-white/20 hover:bg-white/35 backdrop-blur-md text-white text-xs font-sport font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 border border-white/25 shadow-md"
                 >
                   <Maximize2 className="w-3.5 h-3.5" />
-                  <span>Enlarge Render</span>
+                  <span>View Full Arena</span>
                 </button>
               </div>
             </div>
