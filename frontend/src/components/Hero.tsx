@@ -48,62 +48,62 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
         {/* Left Player Cutout: Bouchard Action Strike */}
         <motion.div
-          initial={{ opacity: 0, x: -40, scale: 0.95 }}
+          initial={{ opacity: 0, x: -30, scale: 0.95 }}
           animate={{
             opacity: 1,
             x: 0,
             scale: 1,
-            y: [0, -10, 0]
+            y: [0, -8, 0]
           }}
           transition={{
-            opacity: { duration: 0.9, delay: 0.15 },
-            x: { duration: 0.9, delay: 0.15 },
+            opacity: { duration: 0.8, delay: 0.1 },
+            x: { duration: 0.8, delay: 0.1 },
             y: { duration: 6, repeat: Infinity, ease: 'easeInOut' }
           }}
-          className="absolute -left-20 sm:-left-12 md:-left-6 lg:left-0 xl:left-4 2xl:left-12 top-10 sm:top-14 lg:top-20 w-36 sm:w-48 md:w-60 lg:w-80 xl:w-96 opacity-15 sm:opacity-25 md:opacity-40 lg:opacity-90 xl:opacity-100 select-none pointer-events-none"
+          className="absolute -left-3 sm:-left-4 md:-left-2 lg:left-0 xl:left-4 2xl:left-12 top-2 sm:top-6 lg:top-14 w-44 sm:w-56 md:w-68 lg:w-84 xl:w-96 opacity-90 sm:opacity-95 lg:opacity-100 select-none pointer-events-none"
         >
           {/* Luminous Emerald Stadium Back-Glow */}
-          <div className="absolute -inset-6 bg-[#22C55E]/20 rounded-full blur-3xl -z-10" />
+          <div className="absolute -inset-4 bg-[#22C55E]/20 rounded-full blur-2xl -z-10" />
 
           {/* Borderless Cutout Image with Athletic Silhouette Drop Shadow & Bottom Mesh Fade */}
           <img
             src="/images/player-cutout-1.png"
             alt="HousePickle Athlete Action"
-            className="w-full h-auto object-contain drop-shadow-[0_25px_45px_rgba(21,128,61,0.28)]"
+            className="w-full h-auto object-contain drop-shadow-[0_18px_35px_rgba(21,128,61,0.25)]"
             style={{
-              maskImage: 'linear-gradient(to bottom, black 75%, transparent 100%)',
-              WebkitMaskImage: 'linear-gradient(to bottom, black 75%, transparent 100%)'
+              maskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)',
+              WebkitMaskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)'
             }}
           />
         </motion.div>
 
         {/* Right Player Cutout: Male Player Striking Ball */}
         <motion.div
-          initial={{ opacity: 0, x: 40, scale: 0.95 }}
+          initial={{ opacity: 0, x: 30, scale: 0.95 }}
           animate={{
             opacity: 1,
             x: 0,
             scale: 1,
-            y: [0, 10, 0]
+            y: [0, 8, 0]
           }}
           transition={{
-            opacity: { duration: 0.9, delay: 0.25 },
-            x: { duration: 0.9, delay: 0.25 },
+            opacity: { duration: 0.8, delay: 0.2 },
+            x: { duration: 0.8, delay: 0.2 },
             y: { duration: 7, repeat: Infinity, ease: 'easeInOut' }
           }}
-          className="absolute -right-20 sm:-right-12 md:-right-6 lg:right-0 xl:right-4 2xl:right-10 top-16 sm:top-20 lg:top-28 w-32 sm:w-44 md:w-56 lg:w-76 xl:w-88 opacity-15 sm:opacity-25 md:opacity-40 lg:opacity-90 xl:opacity-100 select-none pointer-events-none"
+          className="absolute -right-3 sm:-right-4 md:-right-2 lg:right-0 xl:right-4 2xl:right-10 top-6 sm:top-12 lg:top-22 w-40 sm:w-52 md:w-64 lg:w-80 xl:w-92 opacity-90 sm:opacity-95 lg:opacity-100 select-none pointer-events-none"
         >
           {/* Luminous Lime Stadium Back-Glow */}
-          <div className="absolute -inset-6 bg-[#84CC16]/25 rounded-full blur-3xl -z-10" />
+          <div className="absolute -inset-4 bg-[#84CC16]/25 rounded-full blur-2xl -z-10" />
 
           {/* Borderless Cutout Image with Athletic Silhouette Drop Shadow & Bottom Mesh Fade */}
           <img
             src="/images/player-cutout-2.png"
             alt="HousePickle Player Dink Rally"
-            className="w-full h-auto object-contain drop-shadow-[0_25px_45px_rgba(132,204,22,0.3)]"
+            className="w-full h-auto object-contain drop-shadow-[0_18px_35px_rgba(132,204,22,0.28)]"
             style={{
-              maskImage: 'linear-gradient(to bottom, black 75%, transparent 100%)',
-              WebkitMaskImage: 'linear-gradient(to bottom, black 75%, transparent 100%)'
+              maskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)',
+              WebkitMaskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)'
             }}
           />
         </motion.div>
@@ -129,12 +129,12 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             </span>
           </motion.div>
 
-          {/* Main Display Headline */}
+          {/* Main Display Headline with Protective Halo */}
           <motion.h1
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.05 }}
-            className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-heading font-black tracking-tight uppercase text-zinc-950 leading-[1.15] break-words"
+            className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-heading font-black tracking-tight uppercase text-zinc-950 leading-[1.15] break-words drop-shadow-[0_2px_10px_rgba(255,255,255,0.95)]"
           >
             HOUSEPICKLE CLUB.{' '}
             <span className="bg-gradient-to-r from-[#15803D] via-[#16a34a] to-[#84CC16] bg-clip-text text-transparent">
@@ -142,15 +142,15 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             </span>
           </motion.h1>
 
-          {/* Polished Facility Summary Card with Frosted Glass for Maximum Contrast & Readability across all screen sizes */}
+          {/* Polished Facility Summary Card with Frosted Glass Shield */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="mt-3.5 max-w-xl mx-auto px-1 sm:px-0"
+            className="mt-3.5 sm:mt-4 max-w-xl mx-auto px-1 sm:px-0"
           >
-            <div className="bg-white/90 sm:bg-white/80 backdrop-blur-md border border-emerald-200/90 shadow-xs shadow-emerald-950/5 rounded-2xl px-4 py-2.5 sm:px-6 sm:py-3 text-center">
-              <p className="text-xs sm:text-sm text-zinc-800 font-medium leading-relaxed">
+            <div className="bg-white/95 backdrop-blur-md border border-emerald-200/90 shadow-md shadow-emerald-950/8 rounded-2xl px-4 py-3 sm:px-6 sm:py-3.5 text-center">
+              <p className="text-xs sm:text-sm text-zinc-800 font-semibold leading-relaxed">
                 Two dedicated pickleball courts right in front of Aloha Suites, Koronadal City. Smooth knee-friendly courts, bright night lights, free parking, and quick GCash booking.
               </p>
             </div>
