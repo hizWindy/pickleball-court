@@ -56,7 +56,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
 
       {/* Dynamic Player Action Cutouts - Staggered vertically on mobile so cutouts remain large & bold without colliding with text */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        {/* Left Player Cutout: Bouchard Action Strike */}
+        {/* Left Player Cutout: Bouchard Action Strike - Scaled up for prominent athletic presence */}
         <motion.div
           style={{ y: player1ScrollY }}
           initial={{ opacity: 0, x: -30, scale: 0.95 }}
@@ -69,10 +69,10 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             opacity: { duration: 0.8, delay: 0.1 },
             x: { duration: 0.8, delay: 0.1 }
           }}
-          className="absolute -left-8 xs:-left-7 sm:left-0 md:left-2 lg:left-4 xl:left-8 2xl:left-14 top-1 xs:top-2 sm:top-12 lg:top-10 w-28 xs:w-32 sm:w-44 md:w-56 lg:w-80 xl:w-96 opacity-90 sm:opacity-95 lg:opacity-100 select-none pointer-events-none z-0 transition-all"
+          className="absolute -left-6 xs:-left-4 sm:left-0 md:left-2 lg:left-4 xl:left-8 2xl:left-14 top-1 xs:top-2 sm:top-10 lg:top-8 w-36 xs:w-44 sm:w-48 md:w-60 lg:w-80 xl:w-96 opacity-95 sm:opacity-100 select-none pointer-events-none z-0 transition-all"
         >
           {/* Luminous Emerald Stadium Back-Glow */}
-          <div className="absolute -inset-4 bg-[#22C55E]/20 rounded-full blur-2xl -z-10" />
+          <div className="absolute -inset-4 bg-[#22C55E]/25 rounded-full blur-2xl -z-10" />
 
           {/* Optimized WebP Cutout with Athletic Silhouette Drop Shadow & Bottom Mesh Fade */}
           <img
@@ -83,7 +83,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             loading="eager"
             decoding="async"
             fetchPriority="high"
-            className="w-full h-auto object-contain drop-shadow-[0_15px_30px_rgba(21,128,61,0.25)]"
+            className="w-full h-auto object-contain drop-shadow-[0_15px_35px_rgba(21,128,61,0.3)]"
             style={{
               maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)',
               WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)'
@@ -91,7 +91,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
           />
         </motion.div>
 
-        {/* Right Player Cutout: Male Player Striking Ball - Staggered down on mobile to prevent horizontal squeeze */}
+        {/* Right Player Cutout: Male Player Striking Ball - Staggered down on mobile, scaled up for athletic impact */}
         <motion.div
           style={{ y: player2ScrollY }}
           initial={{ opacity: 0, x: 30, scale: 0.95 }}
@@ -104,10 +104,10 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             opacity: { duration: 0.8, delay: 0.2 },
             x: { duration: 0.8, delay: 0.2 }
           }}
-          className="absolute -right-8 xs:-right-7 sm:right-0 md:right-2 lg:right-4 xl:right-8 2xl:right-14 top-32 xs:top-28 sm:top-16 lg:top-14 w-28 xs:w-32 sm:w-40 md:w-52 lg:w-76 xl:w-90 opacity-90 sm:opacity-95 lg:opacity-100 select-none pointer-events-none z-0 transition-all"
+          className="absolute -right-6 xs:-right-4 sm:right-0 md:right-2 lg:right-4 xl:right-8 2xl:right-14 top-32 xs:top-28 sm:top-16 lg:top-14 w-36 xs:w-44 sm:w-48 md:w-56 lg:w-76 xl:w-90 opacity-95 sm:opacity-100 select-none pointer-events-none z-0 transition-all"
         >
           {/* Luminous Lime Stadium Back-Glow */}
-          <div className="absolute -inset-4 bg-[#84CC16]/25 rounded-full blur-2xl -z-10" />
+          <div className="absolute -inset-4 bg-[#84CC16]/30 rounded-full blur-2xl -z-10" />
 
           {/* Borderless Cutout Image with Athletic Silhouette Drop Shadow & Bottom Mesh Fade */}
           <img
@@ -117,7 +117,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             height={382}
             loading="eager"
             decoding="async"
-            className="w-full h-auto object-contain drop-shadow-[0_15px_30px_rgba(132,204,22,0.28)]"
+            className="w-full h-auto object-contain drop-shadow-[0_15px_35px_rgba(132,204,22,0.32)]"
             style={{
               maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)',
               WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)'
@@ -129,29 +129,29 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
         {/* Dynamic Stadium Headline Block */}
         <div className="text-center max-w-3xl mx-auto mb-8 pt-2">
-          {/* Compact Eyebrow Pill */}
+          {/* Compact Eyebrow Pill - Full clean label without truncation */}
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-white/95 border border-emerald-200/90 shadow-xs mb-3 text-center max-w-[220px] xs:max-w-fit mx-auto"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1 rounded-full bg-white/95 border border-emerald-200/90 shadow-xs mb-3 text-center mx-auto"
           >
             <span className="w-2 h-2 rounded-full bg-[#84CC16] animate-ping shrink-0" />
-            <span className="text-[11px] sm:text-xs font-sport font-extrabold uppercase tracking-widest text-[#15803D] truncate">
-              HousePickle Club • Koronadal City
+            <span className="text-xs font-sport font-extrabold uppercase tracking-wider text-[#15803D] whitespace-nowrap">
+              HousePickle Club • Koronadal
             </span>
             <span className="text-zinc-300 hidden sm:inline">|</span>
-            <span className="text-[11px] sm:text-xs font-sport font-bold uppercase tracking-wider text-emerald-800 hidden sm:inline whitespace-nowrap">
+            <span className="text-xs font-sport font-bold uppercase tracking-wider text-emerald-800 hidden sm:inline whitespace-nowrap">
               Play • Connect • Repeat
             </span>
           </motion.div>
 
-          {/* Main Display Headline with Bigger Characters - Scaled to fit all mobile brands without touching athletes */}
+          {/* Main Display Headline with Bigger, Bolder Characters */}
           <motion.h1
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.05 }}
-            className="text-lg xs:text-xl sm:text-4xl md:text-5xl lg:text-6xl font-heading font-black tracking-tight uppercase text-zinc-950 leading-[1.15] break-words max-w-[195px] xs:max-w-[225px] sm:max-w-xl md:max-w-2xl mx-auto drop-shadow-[0_2px_8px_rgba(255,255,255,0.95)]"
+            className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-heading font-black tracking-tight uppercase text-zinc-950 leading-[1.1] break-words max-w-[250px] xs:max-w-[290px] sm:max-w-xl md:max-w-2xl mx-auto drop-shadow-[0_2px_12px_rgba(255,255,255,0.95)]"
           >
             HOUSEPICKLE CLUB.{' '}
             <span className="bg-gradient-to-r from-[#15803D] via-[#16a34a] to-[#84CC16] bg-clip-text text-transparent block sm:inline">
@@ -159,12 +159,12 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             </span>
           </motion.h1>
 
-          {/* Concise & Short Facility Description - Bigger characters, crisp line break, and clear air-space */}
+          {/* Concise & Short Facility Description - Bigger characters and clear line break */}
           <motion.p
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="mt-2 text-xs xs:text-sm sm:text-sm md:text-base text-zinc-800 font-semibold max-w-[180px] xs:max-w-[205px] sm:max-w-lg mx-auto leading-relaxed drop-shadow-[0_1px_4px_rgba(255,255,255,0.95)]"
+            className="mt-2.5 text-xs xs:text-sm sm:text-base text-zinc-800 font-medium sm:font-semibold max-w-[220px] xs:max-w-[260px] sm:max-w-lg mx-auto leading-relaxed drop-shadow-[0_1px_4px_rgba(255,255,255,0.95)]"
           >
             Two dedicated courts in front of Aloha Suites.
             <span className="block mt-0.5 text-[#15803D] font-bold">24/7 knee-friendly play.</span>
@@ -175,7 +175,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.15 }}
-            className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-4 mt-3 sm:mt-4 text-[11px] sm:text-xs font-sport font-bold uppercase tracking-wider text-zinc-700 px-2 max-w-[250px] xs:max-w-md sm:max-w-none mx-auto"
+            className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-3 mt-3.5 sm:mt-4 text-xs font-sport font-bold uppercase tracking-wider text-zinc-700 px-2 max-w-[270px] xs:max-w-md sm:max-w-none mx-auto"
           >
             <span className="px-2.5 sm:px-3 py-1 rounded-full bg-white border border-emerald-200 shadow-xs flex items-center gap-1.5 text-[#15803D]">
               <Clock className="w-3.5 h-3.5 shrink-0" /> Court 1 & 2 (24/7)
