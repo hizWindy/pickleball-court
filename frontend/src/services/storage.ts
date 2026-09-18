@@ -48,16 +48,24 @@ const INITIAL_BOOKINGS: Booking[] = [
   }
 ];
 
+let cachedBookings: Booking[] | null = null;
+
 export const getBookings = (): Booking[] => {
+  if (cachedBookings) {
+    return cachedBookings;
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
+      cachedBookings = INITIAL_BOOKINGS;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_BOOKINGS));
       return INITIAL_BOOKINGS;
     }
-    return JSON.parse(raw);
+    cachedBookings = JSON.parse(raw);
+    return cachedBookings || INITIAL_BOOKINGS;
   } catch (err) {
     console.error('Failed to load bookings from storage', err);
+    cachedBookings = INITIAL_BOOKINGS;
     return INITIAL_BOOKINGS;
   }
 };
@@ -65,6 +73,7 @@ export const getBookings = (): Booking[] => {
 export const saveBooking = (newBooking: Booking): Booking[] => {
   const existing = getBookings();
   const updated = [newBooking, ...existing];
+  cachedBookings = updated;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch (err) {
@@ -76,6 +85,7 @@ export const saveBooking = (newBooking: Booking): Booking[] => {
 export const cancelBooking = (bookingId: string): Booking[] => {
   const existing = getBookings();
   const updated = existing.map((b) => (b.id === bookingId ? { ...b, status: 'cancelled' as const } : b));
+  cachedBookings = updated;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch (err) {

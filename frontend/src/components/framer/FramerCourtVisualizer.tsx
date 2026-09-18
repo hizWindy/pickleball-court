@@ -125,10 +125,10 @@ export const FramerCourtVisualizer: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Non-Volley Zone (The Kitchen) Top - Charcoal Gray with HousePickle Branding */}
+                    {/* Non-Volley Zone (The Kitchen) Top - Charcoal Gray with HousePickle Branding */}
                   <div className="absolute inset-x-0 bottom-0 h-[50%] bg-[#374151] flex items-center justify-center">
                     <div className="flex items-center gap-1 sm:gap-1.5 opacity-90 px-1">
-                      <img src="/icon.svg" alt="HousePickle" className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                      <img src="/icon.svg" alt="HousePickle" width={14} height={14} loading="lazy" decoding="async" className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
                       <span className="text-[8px] sm:text-[10px] md:text-[11px] font-heading font-black uppercase text-white tracking-wider sm:tracking-widest">
                         <span className="hidden sm:inline">Kitchen • Charcoal Zone</span>
                         <span className="sm:hidden">Kitchen Zone</span>
@@ -149,7 +149,7 @@ export const FramerCourtVisualizer: React.FC = () => {
                   {/* Non-Volley Zone (The Kitchen) Bottom - Charcoal Gray with HousePickle Branding */}
                   <div className="absolute inset-x-0 top-0 h-[50%] bg-[#374151] flex items-center justify-center border-b-[3px] border-white">
                     <div className="flex items-center gap-1 sm:gap-1.5 opacity-90 px-1">
-                      <img src="/icon.svg" alt="HousePickle" className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                      <img src="/icon.svg" alt="HousePickle" width={14} height={14} loading="lazy" decoding="async" className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
                       <span className="text-[8px] sm:text-[10px] md:text-[11px] font-heading font-black uppercase text-white tracking-wider sm:tracking-widest">
                         <span className="hidden sm:inline">Kitchen • Charcoal Zone</span>
                         <span className="sm:hidden">Kitchen Zone</span>

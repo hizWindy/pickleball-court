@@ -26,7 +26,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
     {
       title: '24/7 Super Bright Night Lights',
       tag: 'No Blinding Glare',
-      image: '/images/night-atmosphere.jpg'
+      image: '/images/night-atmosphere.webp'
     },
     {
       title: 'Official Court Dimensions & Kitchen',
@@ -55,6 +55,10 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
             <img
               src="/images/housepickle-venue-aerial.webp"
               alt="HousePickle Club Official 2-Court Venue Design"
+              width={1024}
+              height={768}
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover object-[center_45%] group-hover:scale-103 transition-transform duration-700"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/30 via-45% to-black/30 pointer-events-none" />
@@ -141,6 +145,10 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                     <img
                       src={court.image}
                       alt={court.name}
+                      width={800}
+                      height={500}
+                      loading="lazy"
+                      decoding="async"
                       style={{ objectPosition: idx === 0 ? 'center 75%' : 'center 58%' }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-95"
                     />
@@ -296,6 +304,8 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                   <img
                     src={item.image}
                     alt={item.title}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-white border border-white/20 shadow-xs">

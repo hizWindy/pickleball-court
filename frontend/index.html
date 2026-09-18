@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
     <!-- SEO & Metadata -->
     <title>HousePickle Club | 24/7 Premier Pickleball Court Koronadal</title>
@@ -14,15 +14,20 @@
     <!-- Open Graph -->
     <meta property="og:title" content="HousePickle Club | 24/7 Premier Pickleball Court Koronadal" />
     <meta property="og:description" content="Direct booking, 24-hour court play, GCash payments, pro lighting & gear rentals in Koronadal City." />
-    <meta property="og:image" content="/images/hero-play.jpg" />
+    <meta property="og:image" content="/images/hero-play.webp" />
     <meta property="og:type" content="website" />
 
     <!-- PWA Settings -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#15803D" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="HousePickle Club" />
+
+    <!-- Performance Preloads -->
+    <link rel="preload" as="image" href="/images/player-cutout-1.webp" type="image/webp" />
+    <link rel="preload" as="image" href="/icon.svg" type="image/svg+xml" />
 
     <!-- Google Fonts: Righteous (Pickleball brand), Space Grotesk, Barlow Semi Condensed & Plus Jakarta Sans -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -33,20 +38,27 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- Immediate Cache Invalidation & Service Worker Cleanup -->
+    <!-- Production Service Worker Registration for Instant Caching & PWA Support -->
     <script>
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then((registrations) => {
-          for (const reg of registrations) {
-            reg.unregister();
-          }
-        });
-      }
-      if ('caches' in window) {
-        caches.keys().then((keys) => {
-          for (const key of keys) {
-            caches.delete(key);
-          }
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => {
+              // Check for SW updates periodically
+              reg.onupdatefound = () => {
+                const installingWorker = reg.installing;
+                if (installingWorker) {
+                  installingWorker.onstatechange = () => {
+                    if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      console.log('[HousePickle] New content is available; refreshing...');
+                    }
+                  };
+                }
+              };
+            })
+            .catch((err) => {
+              console.warn('[HousePickle] ServiceWorker registration skipped:', err);
+            });
         });
       }
     </script>

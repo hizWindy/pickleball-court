@@ -24,7 +24,7 @@ import {
   startOfToday
 } from 'date-fns';
 import confetti from 'canvas-confetti';
-import { COURTS, COURT_DETAILS, GENERATE_TIME_SLOTS } from '../../data/mockData';
+import { COURTS, COURT_DETAILS, SLOTS_BY_PERIOD } from '../../data/mockData';
 import { Court, TimeSlot, Booking } from '../../types';
 import { saveBooking, generateBookingCode, getBookedSlotIdsForDateAndCourt } from '../../services/storage';
 
@@ -95,8 +95,7 @@ export const DirectBookingModal: React.FC<DirectBookingModalProps> = ({
   const formattedDateStr = format(selectedDate, 'yyyy-MM-dd');
 
   const bookedSlotIds = getBookedSlotIdsForDateAndCourt(formattedDateStr, selectedCourt.id);
-  const allSlots = GENERATE_TIME_SLOTS();
-  const slotsForPeriod = allSlots.filter((s) => s.period === activePeriod);
+  const slotsForPeriod = SLOTS_BY_PERIOD[activePeriod];
 
   // Price calculations
   const isNightSlot = selectedSlot?.period === 'night_owl';
@@ -130,7 +129,7 @@ export const DirectBookingModal: React.FC<DirectBookingModalProps> = ({
             key={cloneDay.toISOString()}
             disabled={isPast}
             onClick={() => setSelectedDate(cloneDay)}
-            className={`h-9 w-9 mx-auto rounded-md flex flex-col items-center justify-center text-xs font-semibold transition-colors cursor-pointer ${
+            className={`h-8 w-8 sm:h-9 sm:w-9 mx-auto rounded-md flex flex-col items-center justify-center text-[11px] sm:text-xs font-semibold transition-colors cursor-pointer ${
               !isCurrentMonth
                 ? 'text-zinc-300 opacity-40'
                 : isPast
@@ -700,21 +699,24 @@ export const DirectBookingModal: React.FC<DirectBookingModalProps> = ({
                           <input
                             type="text"
                             required
+                            autoComplete="name"
                             placeholder="Juan dela Cruz"
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
-                            className="w-full px-2.5 py-1.5 rounded-md border border-zinc-300 text-xs focus:outline-none focus:border-[#15803D]"
+                            className="w-full px-2.5 py-2 sm:py-1.5 rounded-md border border-zinc-300 text-xs focus:outline-none focus:border-[#15803D]"
                           />
                         </div>
                         <div>
                           <label className="font-semibold text-zinc-700 block mb-1">Mobile Number *</label>
                           <input
                             type="tel"
+                            inputMode="tel"
+                            autoComplete="tel"
                             required
                             placeholder="0912..."
                             value={customerPhone}
                             onChange={(e) => setCustomerPhone(e.target.value)}
-                            className="w-full px-2.5 py-1.5 rounded-md border border-zinc-300 text-xs focus:outline-none focus:border-[#15803D]"
+                            className="w-full px-2.5 py-2 sm:py-1.5 rounded-md border border-zinc-300 text-xs focus:outline-none focus:border-[#15803D]"
                           />
                         </div>
                       </div>
@@ -725,11 +727,12 @@ export const DirectBookingModal: React.FC<DirectBookingModalProps> = ({
                         </label>
                         <input
                           type="text"
+                          inputMode="numeric"
                           required
                           placeholder="e.g. 1092837461928"
                           value={gcashRefNumber}
                           onChange={(e) => setGcashRefNumber(e.target.value)}
-                          className="w-full px-2.5 py-1.5 rounded-md border border-zinc-300 font-mono text-xs focus:outline-none focus:border-[#15803D]"
+                          className="w-full px-2.5 py-2 sm:py-1.5 rounded-md border border-zinc-300 font-mono text-xs focus:outline-none focus:border-[#15803D]"
                         />
                       </div>
                     </div>

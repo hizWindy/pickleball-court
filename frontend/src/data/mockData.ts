@@ -135,3 +135,13 @@ export const GENERATE_TIME_SLOTS = (): TimeSlot[] => {
 
   return slots;
 };
+
+// Static pre-generated slots so components don't recalculate on each render
+export const ALL_TIME_SLOTS: TimeSlot[] = GENERATE_TIME_SLOTS();
+
+export const SLOTS_BY_PERIOD: Record<TimePeriod, TimeSlot[]> = {
+  morning: ALL_TIME_SLOTS.filter((s) => s.period === 'morning'),
+  afternoon: ALL_TIME_SLOTS.filter((s) => s.period === 'afternoon'),
+  evening: ALL_TIME_SLOTS.filter((s) => s.period === 'evening'),
+  night_owl: ALL_TIME_SLOTS.filter((s) => s.period === 'night_owl'),
+};

@@ -24,7 +24,9 @@ export const FramerFloatingDock: React.FC<FramerFloatingDockProps> = ({ onOpenBo
   return (
     <AnimatePresence>
       {isVisible && (
-        <div className="fixed bottom-3 sm:bottom-5 inset-x-0 z-30 pointer-events-none flex justify-center px-3 sm:px-4">
+        <div
+          className="fixed bottom-3 sm:bottom-5 inset-x-0 z-30 pointer-events-none flex justify-center px-3 sm:px-4 pb-[env(safe-area-inset-bottom)]"
+        >
           <motion.div
             initial={{ y: 50, opacity: 0, scale: 0.95 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}

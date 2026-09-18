@@ -79,13 +79,15 @@ export const FramerBentoFeatures: React.FC = () => {
             transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
             className="md:col-span-7 rounded-3xl border border-emerald-200/90 overflow-hidden shadow-md relative flex flex-col justify-between min-h-[300px] group bg-zinc-950"
           >
-            {/* Permanent Full-Quality Background Image (Always visible, no -z-10) */}
+            {/* Permanent Full-Quality Background Image (Optimized WebP, 110KB) */}
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
               <img
-                src="/images/night-atmosphere.jpg"
+                src="/images/night-atmosphere.webp"
                 alt="Night play atmosphere"
-                loading="eager"
-                decoding="sync"
+                width={1280}
+                height={960}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover select-none"
               />
               {/* Warm stadium lighting glow */}
