@@ -60,7 +60,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             x: { duration: 0.8, delay: 0.1 },
             y: { duration: 6, repeat: Infinity, ease: 'easeInOut' }
           }}
-          className="absolute -left-3 sm:-left-4 md:-left-2 lg:left-0 xl:left-4 2xl:left-12 top-2 sm:top-6 lg:top-14 w-44 sm:w-56 md:w-68 lg:w-84 xl:w-96 opacity-90 sm:opacity-95 lg:opacity-100 select-none pointer-events-none"
+          className="absolute -left-1 sm:left-0 md:left-2 lg:left-4 xl:left-8 2xl:left-14 top-16 sm:top-12 lg:top-10 w-40 sm:w-52 md:w-64 lg:w-80 xl:w-96 opacity-100 select-none pointer-events-none z-0"
         >
           {/* Luminous Emerald Stadium Back-Glow */}
           <div className="absolute -inset-4 bg-[#22C55E]/20 rounded-full blur-2xl -z-10" />
@@ -69,10 +69,10 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
           <img
             src="/images/player-cutout-1.png"
             alt="HousePickle Athlete Action"
-            className="w-full h-auto object-contain drop-shadow-[0_18px_35px_rgba(21,128,61,0.25)]"
+            className="w-full h-auto object-contain drop-shadow-[0_15px_30px_rgba(21,128,61,0.25)]"
             style={{
-              maskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)',
-              WebkitMaskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)'
+              maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)',
+              WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)'
             }}
           />
         </motion.div>
@@ -91,7 +91,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             x: { duration: 0.8, delay: 0.2 },
             y: { duration: 7, repeat: Infinity, ease: 'easeInOut' }
           }}
-          className="absolute -right-3 sm:-right-4 md:-right-2 lg:right-0 xl:right-4 2xl:right-10 top-6 sm:top-12 lg:top-22 w-40 sm:w-52 md:w-64 lg:w-80 xl:w-92 opacity-90 sm:opacity-95 lg:opacity-100 select-none pointer-events-none"
+          className="absolute -right-1 sm:right-0 md:right-2 lg:right-4 xl:right-8 2xl:right-14 top-20 sm:top-16 lg:top-14 w-36 sm:w-48 md:w-60 lg:w-76 xl:w-90 opacity-100 select-none pointer-events-none z-0"
         >
           {/* Luminous Lime Stadium Back-Glow */}
           <div className="absolute -inset-4 bg-[#84CC16]/25 rounded-full blur-2xl -z-10" />
@@ -100,10 +100,10 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
           <img
             src="/images/player-cutout-2.png"
             alt="HousePickle Player Dink Rally"
-            className="w-full h-auto object-contain drop-shadow-[0_18px_35px_rgba(132,204,22,0.28)]"
+            className="w-full h-auto object-contain drop-shadow-[0_15px_30px_rgba(132,204,22,0.28)]"
             style={{
-              maskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)',
-              WebkitMaskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)'
+              maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)',
+              WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)'
             }}
           />
         </motion.div>
@@ -112,32 +112,32 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
         {/* Dynamic Stadium Headline Block */}
         <div className="text-center max-w-3xl mx-auto mb-8 pt-2">
-          {/* Eyebrow Pill */}
+          {/* Compact Eyebrow Pill - Leaves sides open so athlete faces are never blocked */}
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="inline-flex flex-wrap sm:flex-nowrap items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-2xl sm:rounded-full bg-white/95 border border-emerald-200/90 shadow-xs mb-3 text-center"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-white/95 border border-emerald-200/90 shadow-xs mb-3 text-center max-w-fit mx-auto"
           >
             <span className="w-2 h-2 rounded-full bg-[#84CC16] animate-ping shrink-0" />
-            <span className="text-[11px] font-sport font-extrabold uppercase tracking-widest text-[#15803D]">
+            <span className="text-[10px] sm:text-[11px] font-sport font-extrabold uppercase tracking-widest text-[#15803D] whitespace-nowrap">
               HousePickle Club • Koronadal City
             </span>
             <span className="text-zinc-300 hidden sm:inline">|</span>
-            <span className="text-[11px] font-sport font-bold uppercase tracking-wider text-emerald-800">
+            <span className="text-[10px] sm:text-[11px] font-sport font-bold uppercase tracking-wider text-emerald-800 hidden sm:inline whitespace-nowrap">
               Play • Connect • Repeat
             </span>
           </motion.div>
 
-          {/* Main Display Headline with Protective Halo */}
+          {/* Main Display Headline with Centered Mobile Bounds */}
           <motion.h1
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.05 }}
-            className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-heading font-black tracking-tight uppercase text-zinc-950 leading-[1.15] break-words drop-shadow-[0_2px_10px_rgba(255,255,255,0.95)]"
+            className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-heading font-black tracking-tight uppercase text-zinc-950 leading-[1.15] break-words max-w-[280px] sm:max-w-xl md:max-w-2xl mx-auto drop-shadow-[0_2px_8px_rgba(255,255,255,0.95)]"
           >
             HOUSEPICKLE CLUB.{' '}
-            <span className="bg-gradient-to-r from-[#15803D] via-[#16a34a] to-[#84CC16] bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-[#15803D] via-[#16a34a] to-[#84CC16] bg-clip-text text-transparent block sm:inline">
               BOOK IN SECONDS.
             </span>
           </motion.h1>
