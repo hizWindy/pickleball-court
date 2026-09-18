@@ -44,7 +44,126 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#22C55E]/10 rounded-full blur-3xl pointer-events-none -z-10" />
       <div className="absolute top-20 right-10 w-80 h-80 bg-[#84CC16]/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+      {/* Creative Athletic Framed Photos (Hero Section Background Only) */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+        {/* Left Frame: Bouchard Action Strike */}
+        <motion.div
+          initial={{ opacity: 0, x: -30, rotate: -6 }}
+          animate={{
+            opacity: 1,
+            x: 0,
+            y: [0, -10, 0],
+            rotate: [-5, -3, -5]
+          }}
+          transition={{
+            opacity: { duration: 0.8, delay: 0.2 },
+            x: { duration: 0.8, delay: 0.2 },
+            y: { duration: 6, repeat: Infinity, ease: 'easeInOut' },
+            rotate: { duration: 6, repeat: Infinity, ease: 'easeInOut' }
+          }}
+          className="absolute -left-12 sm:-left-6 lg:left-2 xl:left-8 2xl:left-14 top-20 sm:top-24 lg:top-28 w-44 sm:w-52 lg:w-64 xl:w-72 opacity-25 lg:opacity-95 select-none"
+        >
+          {/* Ambient Glow */}
+          <div className="absolute -inset-3 bg-[#22C55E]/20 rounded-3xl blur-2xl -z-10" />
+
+          {/* Framed Card */}
+          <div className="relative bg-white/95 backdrop-blur-md p-2 sm:p-2.5 pb-4 sm:pb-5 rounded-2xl sm:rounded-3xl shadow-2xl shadow-emerald-950/20 border-2 border-emerald-200/90 ring-1 ring-black/5">
+            {/* Athletic Tape / Stamp Accent */}
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-zinc-950 text-[#CCFF00] font-sport font-black text-[9px] uppercase tracking-widest rounded shadow-sm border border-emerald-500/30 flex items-center gap-1 whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#CCFF00] animate-ping" />
+              <span>LIVE RALLY • 01</span>
+            </div>
+
+            {/* Photo Container */}
+            <div className="relative rounded-xl sm:rounded-2xl overflow-hidden aspect-square bg-zinc-900 border border-emerald-100">
+              <img
+                src="/images/hero-action-1.webp"
+                alt="HousePickle Live Action"
+                className="w-full h-full object-cover object-center"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-xs text-white font-sport text-[9px] font-bold uppercase tracking-wider">
+                Court Speed • Fast Dink
+              </div>
+            </div>
+
+            {/* Caption Bar */}
+            <div className="mt-2 px-1 flex items-center justify-between text-zinc-700">
+              <div className="flex flex-col">
+                <span className="font-heading font-black text-[10px] sm:text-[11px] uppercase tracking-tight text-zinc-900 leading-none">
+                  Match Action
+                </span>
+                <span className="text-[8px] font-sport text-zinc-400 uppercase mt-0.5">
+                  Pro-Standard Play
+                </span>
+              </div>
+              <span className="text-[9px] font-mono font-extrabold text-[#15803D] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                #01
+              </span>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Right Frame: Dedicated Arena Court Action */}
+        <motion.div
+          initial={{ opacity: 0, x: 30, rotate: 6 }}
+          animate={{
+            opacity: 1,
+            x: 0,
+            y: [0, 10, 0],
+            rotate: [5, 3, 5]
+          }}
+          transition={{
+            opacity: { duration: 0.8, delay: 0.3 },
+            x: { duration: 0.8, delay: 0.3 },
+            y: { duration: 7, repeat: Infinity, ease: 'easeInOut' },
+            rotate: { duration: 7, repeat: Infinity, ease: 'easeInOut' }
+          }}
+          className="absolute -right-12 sm:-right-6 lg:right-2 xl:right-8 2xl:right-14 top-32 sm:top-36 lg:top-40 w-44 sm:w-52 lg:w-64 xl:w-72 opacity-25 lg:opacity-95 select-none"
+        >
+          {/* Ambient Glow */}
+          <div className="absolute -inset-3 bg-[#84CC16]/20 rounded-3xl blur-2xl -z-10" />
+
+          {/* Framed Card */}
+          <div className="relative bg-white/95 backdrop-blur-md p-2 sm:p-2.5 pb-4 sm:pb-5 rounded-2xl sm:rounded-3xl shadow-2xl shadow-emerald-950/20 border-2 border-emerald-200/90 ring-1 ring-black/5">
+            {/* Athletic Tape / Stamp Accent */}
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-[#15803D] text-white font-sport font-black text-[9px] uppercase tracking-widest rounded shadow-sm border border-emerald-300 flex items-center gap-1 whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#CCFF00]" />
+              <span>DEDICATED ARENA • 02</span>
+            </div>
+
+            {/* Photo Container */}
+            <div className="relative rounded-xl sm:rounded-2xl overflow-hidden aspect-[4/3] bg-zinc-900 border border-emerald-100">
+              <img
+                src="/images/hero-action-2.webp"
+                alt="HousePickle Arena Court"
+                className="w-full h-full object-cover object-center"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-xs text-white font-sport text-[9px] font-bold uppercase tracking-wider">
+                Court 1 & 2 • 24/7 Open
+              </div>
+            </div>
+
+            {/* Caption Bar */}
+            <div className="mt-2 px-1 flex items-center justify-between text-zinc-700">
+              <div className="flex flex-col">
+                <span className="font-heading font-black text-[10px] sm:text-[11px] uppercase tracking-tight text-zinc-900 leading-none">
+                  HousePickle Arena
+                </span>
+                <span className="text-[8px] font-sport text-zinc-400 uppercase mt-0.5">
+                  Aloha Suites, Koronadal
+                </span>
+              </div>
+              <span className="text-[9px] font-mono font-extrabold text-[#15803D] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                #02
+              </span>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
         {/* Dynamic Stadium Headline Block */}
         <div className="text-center max-w-3xl mx-auto mb-8 pt-2">
           {/* Eyebrow Pill */}
