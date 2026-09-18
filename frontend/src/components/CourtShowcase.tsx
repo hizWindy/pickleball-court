@@ -16,7 +16,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
     {
       title: 'HousePickle Club 3D Architecture',
       tag: 'Official 2-Court Vision',
-      image: '/images/housepickle-render-cropped.png'
+      image: '/images/housepickle-3d-architecture.webp'
     },
     {
       title: 'Blue & Green Acrylic Court',
@@ -47,17 +47,17 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
         <div className="relative rounded-3xl overflow-hidden border border-emerald-300 shadow-xl group">
           <div className="relative aspect-[4/3] sm:aspect-[16/10] md:aspect-[16/9] lg:aspect-[16/8] w-full bg-zinc-950 overflow-hidden">
             <img
-              src="/images/housepickle-arena-court-clean.webp"
-              alt="HousePickle Club Rooftop Court Arena"
-              className="w-full h-full object-cover object-[center_68%] sm:object-[center_65%] group-hover:scale-103 transition-transform duration-700"
+              src="/images/housepickle-venue-aerial.webp"
+              alt="HousePickle Club Official 2-Court Venue Design"
+              className="w-full h-full object-cover object-[center_45%] group-hover:scale-103 transition-transform duration-700"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/25 via-45% to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/30 via-45% to-black/30 pointer-events-none" />
 
             {/* Top Tag */}
             <div className="absolute top-4 left-4 sm:top-6 sm:left-6 flex items-center gap-2">
-              <span className="px-3.5 py-1.5 rounded-full bg-black/65 backdrop-blur-md text-[#CCFF00] font-sport font-extrabold text-xs uppercase tracking-wider border border-white/20 flex items-center gap-1.5 shadow-md">
-                <span className="w-2 h-2 rounded-full bg-[#CCFF00] animate-ping" />
-                Official 2-Court Venue • Koronadal City
+              <span className="px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-[#CCFF00] font-sport font-extrabold text-[10px] sm:text-xs uppercase tracking-wider border border-white/20 flex items-center gap-2 shadow-md">
+                <span className="w-2 h-2 rounded-full bg-[#CCFF00] animate-pulse" />
+                OFFICIAL 2-COURT VENUE DESIGN
               </span>
             </div>
 
@@ -65,24 +65,24 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
             <div className="absolute bottom-4 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6 flex flex-col sm:flex-row sm:items-end justify-between gap-3 text-white">
               <div>
                 <div className="flex items-center gap-3 mb-1">
-                  <img src="/housepickle-emblem.svg" alt="HousePickle Emblem" className="w-10 h-10 object-contain drop-shadow-md" />
-                  <span className="font-heading font-black text-xl sm:text-3xl uppercase tracking-tight text-white drop-shadow-sm">
+                  <img src="/housepickle-emblem.svg" alt="HousePickle Emblem" className="w-9 h-9 sm:w-10 sm:h-10 object-contain drop-shadow-md" />
+                  <span className="font-heading font-black text-xl sm:text-2xl md:text-3xl uppercase tracking-tight text-white drop-shadow-sm">
                     HOUSE<span className="text-[#84CC16]">PICKLE</span> CLUB
                   </span>
                 </div>
-                <p className="text-xs sm:text-sm text-zinc-200 font-sport font-bold uppercase tracking-widest drop-shadow-xs">
-                  "Good Players Make Better People" • Dedicated Courts 1 & 2 • 24/7 Open
+                <p className="text-[11px] sm:text-xs md:text-sm text-zinc-200 font-sport font-bold uppercase tracking-widest drop-shadow-xs">
+                  "GOOD PLAYERS MAKE BETTER PEOPLE" • PLAY • CONNECT • REPEAT
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedImage('/images/court-venue-full.webp')}
-                  className="px-4 py-2 rounded-full bg-white/20 hover:bg-white/35 backdrop-blur-md text-white text-xs font-sport font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 border border-white/25 shadow-md"
+                  onClick={() => setSelectedImage('/images/housepickle-venue-aerial.webp')}
+                  className="px-4 py-2 rounded-full bg-white/20 hover:bg-white/35 backdrop-blur-md text-white text-xs font-sport font-extrabold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 border border-white/25 shadow-md"
                 >
                   <Maximize2 className="w-3.5 h-3.5" />
-                  <span>View Full Arena</span>
+                  <span>ENLARGE RENDER</span>
                 </button>
               </div>
             </div>
@@ -119,12 +119,15 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                   className="rounded-3xl border border-emerald-200/80 bg-white overflow-hidden shadow-lg shadow-emerald-950/5 flex flex-col justify-between group"
                 >
                   {/* Photo Header with Overlay Badges */}
-                  <div className="relative h-56 overflow-hidden bg-zinc-950">
+                  <div
+                    onClick={() => setSelectedImage(court.image)}
+                    className="relative h-56 sm:h-60 overflow-hidden bg-zinc-950 cursor-pointer"
+                  >
                     <img
-                      src="/images/housepickle-render-cropped.png"
+                      src={court.image}
                       alt={court.name}
-                      style={{ objectPosition: idx === 0 ? 'left center' : 'right center' }}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-90"
+                      style={{ objectPosition: idx === 0 ? 'center 75%' : 'center 58%' }}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-95"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
 
@@ -135,10 +138,13 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                       </span>
                     </div>
 
-                    {/* Lighting Badge */}
-                    <div className="absolute top-3 sm:top-4 right-3 sm:right-4">
+                    {/* Lighting Badge & Zoom Icon */}
+                    <div className="absolute top-3 sm:top-4 right-3 sm:right-4 flex items-center gap-2">
                       <span className="px-2.5 py-1 rounded-full bg-[#15803D] text-white font-sport font-bold text-[9px] sm:text-[10px] uppercase tracking-wider shadow-xs">
                         <span className="hidden xs:inline">Super Bright </span>Night Lights
+                      </span>
+                      <span className="p-1 rounded-full bg-black/60 text-white backdrop-blur-md border border-white/20">
+                        <Maximize2 className="w-3 h-3" />
                       </span>
                     </div>
 
@@ -148,7 +154,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                         {court.name}
                       </h4>
                       <p className="text-[11px] sm:text-xs text-zinc-300 font-medium mt-0.5">
-                        Tournament Red & Charcoal Surface • Full 20 × 44 ft
+                        Dual-Tone Pro Blue Surface • Full 20 × 44 ft
                       </p>
                     </div>
                   </div>
@@ -186,7 +192,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                     <div className="space-y-1.5 text-xs text-zinc-600 pt-1">
                       <div className="flex items-center gap-2">
                         <Check className="w-3.5 h-3.5 text-[#15803D] shrink-0" />
-                        <span>Smooth red non-slip surface with charcoal kitchen</span>
+                        <span>Smooth dual-tone blue non-slip surface with kitchen zone</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-3.5 h-3.5 text-[#15803D] shrink-0" />
