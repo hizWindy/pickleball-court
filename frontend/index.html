@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <!-- SEO & Metadata -->
+    <title>Pikol | 24/7 Premier Pickleball Court Koronadal</title>
+    <meta name="description" content="Book 24/7 pickleball courts in Koronadal City. In front of Aloha Suites, Brgy. San Isidro. Smooth knee-friendly courts, bright night lights, easy GCash payment, and paddle rentals." />
+    <meta name="keywords" content="Pickleball Koronadal, Pikol Court, 24/7 pickleball, Koronadal City sports, Aloha Suites pickleball, Reymark Vergara" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Pikol | 24/7 Premier Pickleball Court Koronadal" />
+    <meta property="og:description" content="Direct booking, 24-hour court play, GCash payments, pro lighting & gear rentals in Koronadal City." />
+    <meta property="og:image" content="/images/hero-play.jpg" />
+    <meta property="og:type" content="website" />
+
+    <!-- PWA Settings -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#15803D" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Pikol Court" />
+
+    <!-- Google Fonts: Righteous (Pickleball brand), Space Grotesk, Barlow Semi Condensed & Plus Jakarta Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,700;1,800&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Righteous&family=Space+Grotesk:wght@500;600;700;800&display=swap" rel="stylesheet">
+  </head>
+  <body class="bg-[#F8FAFC] text-[#0F172A] font-sans antialiased selection:bg-[#15803D] selection:text-white min-h-screen">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Immediate Cache Invalidation & Service Worker Cleanup -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const reg of registrations) {
+            reg.unregister();
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then((keys) => {
+          for (const key of keys) {
+            caches.delete(key);
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

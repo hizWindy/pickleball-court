@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-pickle: 'Righteous', cursive, sans-serif;
+    --font-heading: 'Space Grotesk', 'Outfit', sans-serif;
+    --font-sport: 'Barlow Semi Condensed', 'Space Grotesk', sans-serif;
+    --font-display: 'Space Grotesk', 'Barlow Semi Condensed', sans-serif;
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+
+    /* Authentic Pickleball Tournament Greens & Electric Optic Lime */
+    --court-green: #15803D;        /* Official tournament emerald green */
+    --court-green-dark: #093b1b;   /* Deep court perimeter green */
+    --court-green-light: #22C55E;  /* High-visibility line green */
+    --court-green-hover: #166534;  /* Active hover green */
+    --court-lime: #84CC16;         /* Optic pickleball ball lime */
+    --court-lime-bright: #CCFF00;  /* High-voltage optic neon */
+    --court-mint-bg: #F0FDF4;      /* Soft court section background */
+    --court-mint-border: #BBF7D0;  /* Soft emerald border */
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #FAFCF9;
+    color: #0F172A;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+  }
+}
+
+.font-pickle {
+  font-family: var(--font-pickle);
+  letter-spacing: 0.03em;
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.font-sport {
+  font-family: var(--font-sport);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* Atmospheric court radial gradients */
+.bg-court-mesh {
+  background: 
+    radial-gradient(ellipse at 15% 10%, rgba(34, 197, 94, 0.12), transparent 45%),
+    radial-gradient(ellipse at 85% 20%, rgba(204, 255, 0, 0.08), transparent 40%),
+    radial-gradient(ellipse at 50% 80%, rgba(21, 128, 61, 0.07), transparent 50%),
+    #FAFCF9;
+}
+
+/* Glowing accents */
+.glow-emerald {
+  box-shadow: 0 0 30px -5px rgba(21, 128, 61, 0.35);
+}
+
+.glow-lime {
+  box-shadow: 0 0 25px -4px rgba(204, 255, 0, 0.45);
+}
+
+/* Double-bezel hardware styling (Apple/Linear tier) */
+.double-bezel {
+  border-radius: 1.75rem;
+  padding: 0.375rem;
+  background: linear-gradient(135deg, rgba(21, 128, 61, 0.15), rgba(255, 255, 255, 0.9), rgba(132, 204, 22, 0.15));
+  border: 1px solid rgba(21, 128, 61, 0.2);
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.07);
+}
+
+.double-bezel-inner {
+  border-radius: calc(1.75rem - 0.375rem);
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #15803D;
+}

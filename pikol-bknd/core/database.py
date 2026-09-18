@@ -1,0 +1,90 @@
+"""
+core/database.py
+
+Async SQLAlchemy database setup for pikol-bknd.
+Database: postgresql
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import AsyncGenerator
+from pathlib import Path
+
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase
+
+from core.db_mode import resolve_binding
+
+# Resolve which database this process binds to (online / offline / auto) exactly
+# once at startup. Every surface reads mode/engine/name from this binding.
+BINDING = resolve_binding()
+
+# Ensure the offline SQLite directory exists so the fallback can be created.
+if BINDING.url.startswith("sqlite") and "/./" in BINDING.url:
+    _rel = BINDING.url.split("///", 1)[-1]
+    Path(_rel).parent.mkdir(parents=True, exist_ok=True)
+
+
+class Base(DeclarativeBase):
+    """Shared declarative base for all ORM models."""
+
+
+# SQL echo is OFF by default — the flood of DDL/PRAGMA lines is opt-in via
+# `kaira run --sql` (which sets KAIRA_SQL_ECHO=1), never tied to DEBUG.
+_SQL_ECHO = os.getenv("KAIRA_SQL_ECHO") == "1"
+
+engine_kwargs: dict = {
+    "echo": _SQL_ECHO,
+    "pool_pre_ping": True,
+}
+
+if not BINDING.url.startswith("sqlite"):
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+
+engine = create_async_engine(
+    BINDING.url,
+    **engine_kwargs,
+)
+
+AsyncSessionLocal = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    FastAPI dependency that yields an async database session.
+
+    Yields:
+        AsyncSession: An active SQLAlchemy async session.
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
+async def create_tables() -> None:
+    """Create all database tables on startup (development only)."""
+    try:
+        import importlib
+        import pkgutil
+        import models
+        if models is not None:
+            for _, module_name, _ in pkgutil.walk_packages(models.__path__, models.__name__ + "."):
+                importlib.import_module(module_name)
+    except ImportError as e:
+        if e.name != "models":
+            raise
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)

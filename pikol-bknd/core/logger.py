@@ -1,0 +1,495 @@
+"""
+core/logger.py
+
+Terminal-only structured logger for pikol-bknd.
+
+One sink, one format, one timestamp style. A Loguru ``InterceptHandler``
+captures the stdlib loggers that FastAPI's stack writes to — ``uvicorn``,
+``uvicorn.access``, ``uvicorn.error``, ``watchfiles`` and ``sqlalchemy.engine``
+— so they no longer collide with Loguru or print in three different styles.
+All output goes to stdout only; there are no log files.
+
+Layout
+------
+Every line is ``HH:MM:SS  LEVEL     message``. Continuation lines produced by
+:func:`detail` align under the message column, so a multi-part event reads as
+one visual block instead of five competing lines::
+
+    12:41:16  ERROR     ValueError on GET /api/v1/users/list
+                        ├─ request  63cb0206
+                        ├─ where    services/user_service.py:170 in get_all
+                        └─ detail   invalid literal for int() with base 10
+
+Colour is used as *signal*, not decoration: timestamps and structural glyphs
+are dim, the level word carries the severity, and inside an HTTP line only the
+status code and a slow duration are tinted. Everything else stays default
+foreground so a normal request log is calm to read.
+
+Environment
+-----------
+``KAIRA_LOG_LEVEL``   Minimum level to print (default ``INFO``). ``DEBUG``
+                      reveals per-layer traces and the request id on every line.
+``KAIRA_ACCESS_LOG``  Set to ``1`` to re-enable uvicorn's own access log. Off by
+                      default because the request middleware already logs a
+                      richer, single line per request.
+``KAIRA_DIAGNOSE``    ``1``/``0`` to force Loguru's variable-value tracebacks on
+                      or off. Defaults to on outside production.
+``KAIRA_LOG_FORMAT``  ``json`` switches the sink to one JSON object per line,
+                      **still on stdout**. Default is the human-readable format
+                      above, so setting nothing changes nothing.
+``NO_COLOR``          Standard opt-out; also implied when stdout is not a TTY.
+
+Structured output
+-----------------
+``KAIRA_LOG_FORMAT=json`` is how you ship these logs to a platform's aggregator
+— Railway, Render, Fly, CloudWatch, Loki. They all capture the process's stdout,
+so a JSON *formatter* is all that is needed.
+
+There is no file sink, and there will not be one. A log file inside a container
+is invisible to the platform collecting stdout, grows until it fills the disk,
+and needs rotation config to survive — three problems in exchange for nothing
+the platform does not already do better.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import sys
+
+from loguru import logger
+
+# ── Runtime configuration ────────────────────────────────────────────────────
+
+LOG_LEVEL = os.getenv("KAIRA_LOG_LEVEL", "INFO").upper()
+APP_ENV = os.getenv("APP_ENV", "development")
+LOG_FORMAT = os.getenv("KAIRA_LOG_FORMAT", "text").strip().lower()
+
+JSON_LOGS = LOG_FORMAT == "json"
+"""One JSON object per line instead of the aligned human format.
+
+A formatter switch on the existing stdout sink — not a second sink, and never a
+file. Colour is disabled implicitly in this mode: ANSI escapes inside a JSON
+string are noise to every aggregator that would read it.
+"""
+
+_ACCESS_LOG = os.getenv("KAIRA_ACCESS_LOG") == "1"
+# Colour when attached to a terminal; FORCE_COLOR keeps it through a pipe (CI,
+# `docker logs`), NO_COLOR always wins.
+_COLOR = (
+    bool(getattr(sys.stdout, "isatty", lambda: False)()) or bool(os.getenv("FORCE_COLOR"))
+) and not os.getenv("NO_COLOR")
+_UTF8 = "utf" in (getattr(sys.stdout, "encoding", "") or "").lower()
+
+# Loguru's `diagnose` prints the *values* of local variables inside a traceback.
+# Invaluable while developing, unacceptable in production where those values may
+# be credentials or user data — so it follows APP_ENV unless forced.
+_diagnose_env = os.getenv("KAIRA_DIAGNOSE")
+DIAGNOSE = (
+    _diagnose_env == "1" if _diagnose_env is not None else APP_ENV != "production"
+)
+
+
+def is_debug() -> bool:
+    """Return True when the sink is printing DEBUG/TRACE records."""
+    return LOG_LEVEL in ("DEBUG", "TRACE")
+
+
+# ── Alignment & glyphs ───────────────────────────────────────────────────────
+
+# "HH:MM:SS" (8) + 2 spaces + level padded to 8 + 2 spaces = 20 columns.
+_LEVEL_WIDTH = 8
+INDENT = " " * (8 + 2 + _LEVEL_WIDTH + 2)
+
+_TREE_MID, _TREE_END = ("├─ ", "└─ ") if _UTF8 else ("|- ", "`- ")
+_DOT = "·" if _UTF8 else "-"
+
+# ── Palette ──────────────────────────────────────────────────────────────────
+#
+# The level word is the only always-coloured element. INFO is cyan (calm,
+# reads as "normal"), everything below it is dim, everything above it escalates.
+
+_LEVEL_STYLE = {
+    "TRACE": "light-black",
+    "DEBUG": "light-black",
+    "INFO": "cyan",
+    "SUCCESS": "green",
+    "WARNING": "yellow",
+    "ERROR": "red",
+    "CRITICAL": "light-red",
+}
+
+# Message bodies stay default-coloured unless the level itself is a problem —
+# colouring every INFO message is what makes logs tiring to read.
+_MESSAGE_STYLE = {
+    "WARNING": "yellow",
+    "ERROR": "red",
+    "CRITICAL": "bold light-red",
+}
+
+
+def status_style(status: int) -> str:
+    """Return the Loguru colour tag name for an HTTP status code."""
+    if status >= 500:
+        return "red"
+    if status >= 400:
+        return "yellow"
+    if status >= 300:
+        return "cyan"
+    return "green"
+
+
+def _duration_style(duration_ms: float) -> str:
+    """Dim for a fast response, tinted once it is worth noticing."""
+    if duration_ms >= 1500:
+        return "red"
+    if duration_ms >= 500:
+        return "yellow"
+    return "light-black"
+
+
+# ── Detail blocks ────────────────────────────────────────────────────────────
+
+
+def detail(*pairs: tuple[str, object], **rows: object) -> str:
+    """Render aligned continuation lines to append to a log message.
+
+    Produces a small tree that lines up under the message column, turning what
+    would otherwise be several separate log lines into one readable event.
+
+    Args:
+        *pairs: ``(label, value)`` tuples, for labels that repeat or are not
+            valid Python identifiers (e.g. request-body field paths).
+        **rows: ``label=value`` pairs; underscores in the label become spaces.
+
+    Returns:
+        A string starting with a newline, or ``""`` when there is nothing to
+        show — safe to concatenate onto any message unconditionally.
+    """
+    items: list[tuple[str, object]] = [(str(k), v) for k, v in pairs]
+    items += [(k.replace("_", " "), v) for k, v in rows.items()]
+    if not items:
+        return ""
+
+    width = max(len(label) for label, _ in items)
+    lines = []
+    for index, (label, value) in enumerate(items):
+        glyph = _TREE_END if index == len(items) - 1 else _TREE_MID
+        lines.append("\n" + INDENT + glyph + label.ljust(width) + "  " + str(value))
+    return "".join(lines)
+
+
+# ── Formatter ────────────────────────────────────────────────────────────────
+
+
+def _http_body(extra: dict) -> str:
+    """Build the colourised body of a request-completion line."""
+    status = int(extra.get("status", 0))
+    duration = float(extra.get("duration_ms", 0.0))
+    s_style = status_style(status)
+    d_style = _duration_style(duration)
+
+    body = (
+        "<bold>{extra[method]: <7}</bold>"
+        "<" + s_style + ">{extra[status]}</" + s_style + ">  "
+        "{extra[path]}"
+        "  <light-black>" + _DOT + "</light-black>  "
+        "<" + d_style + ">{extra[duration_ms]:.1f}ms</" + d_style + ">"
+    )
+    if extra.get("show_id"):
+        body += (
+            "  <light-black>" + _DOT + " req {extra[request_id]}</light-black>"
+        )
+    return body
+
+
+_JSON_RESERVED = {"kaira_http", "show_id"}
+"""Keys the terminal formatter uses for presentation only — not facts about the
+event, so they are dropped from the structured form rather than shipped."""
+
+
+def _json_line(record: dict) -> str:
+    """Render one record as a single-line JSON object on stdout.
+
+    Field names follow the shape aggregators already index: ``timestamp``,
+    ``level``, ``message``, plus the request fields flat at the top level so a
+    query like ``status:500`` works without a nested path.
+
+    Args:
+        record: Loguru's record dict.
+
+    Returns:
+        The JSON line, newline-terminated.
+    """
+    extra = record["extra"]
+    payload: dict = {
+        "timestamp": record["time"].isoformat(),
+        "level": record["level"].name,
+        "message": record["message"],
+        "logger": record["name"],
+    }
+
+    if extra.get("kaira_http"):
+        payload["event"] = "request"
+        payload["method"] = extra.get("method")
+        payload["path"] = extra.get("path")
+        payload["status"] = extra.get("status")
+        payload["duration_ms"] = round(float(extra.get("duration_ms", 0.0)), 2)
+        payload["request_id"] = extra.get("request_id")
+        payload["client"] = extra.get("client")
+
+    for key, value in extra.items():
+        if key not in _JSON_RESERVED and key not in payload:
+            payload[key] = value
+
+    exception = record.get("exception")
+    if exception is not None:
+        payload["exception"] = {
+            "type": getattr(exception.type, "__name__", str(exception.type)),
+            "value": str(exception.value),
+        }
+
+    # `default=str` keeps a stray datetime or UUID in `extra` from turning a log
+    # line into a serialisation crash inside the logger.
+    return json.dumps(payload, default=str) + "\n"
+
+
+def _formatter(record: dict) -> str:
+    """Return the Loguru format string for a single record.
+
+    A callable formatter (rather than a fixed template) is what allows the
+    request lines to carry their own colouring without embedding markup in the
+    message itself — user-supplied values such as URL paths are substituted
+    *after* the markup is parsed, so a path containing ``<`` can never break or
+    inject terminal styling.
+    """
+    level_name = record["level"].name
+    level_style = _LEVEL_STYLE.get(level_name, "white")
+
+    parts = [
+        "<light-black>{time:HH:mm:ss}</light-black>  ",
+        "<" + level_style + ">{level: <" + str(_LEVEL_WIDTH) + "}</" + level_style + ">  ",
+    ]
+
+    if record["extra"].get("kaira_http"):
+        parts.append(_http_body(record["extra"]))
+    else:
+        message_style = _MESSAGE_STYLE.get(level_name)
+        if message_style:
+            parts.append("<" + message_style + ">{message}</" + message_style + ">")
+        else:
+            parts.append("{message}")
+
+    # A callable formatter is responsible for its own newline and exception field.
+    parts.append("\n{exception}")
+    return "".join(parts)
+
+
+# ── Sink ─────────────────────────────────────────────────────────────────────
+
+logger.remove()
+
+
+def _json_sink(message: object) -> None:
+    """Write one structured record to stdout.
+
+    A sink rather than a format string: Loguru's formatter path adds its own
+    newline and exception block, which would append a traceback *after* the JSON
+    object and break every line-oriented parser downstream.
+    """
+    sys.stdout.write(_json_line(message.record))  # type: ignore[attr-defined]
+
+
+if JSON_LOGS:
+    # Same stdout, same level, same single sink — only the rendering changes.
+    logger.add(
+        _json_sink,
+        level=LOG_LEVEL,
+        enqueue=True,
+        backtrace=is_debug(),
+        # Loguru's `diagnose` prints local variable *values*. Those are already
+        # unacceptable in production; embedding them in a machine-readable line
+        # that gets shipped to a third-party aggregator is strictly worse, so
+        # structured mode never enables it.
+        diagnose=False,
+    )
+else:
+    logger.add(
+        sys.stdout,
+        format=_formatter,
+        level=LOG_LEVEL,
+        colorize=_COLOR,
+        enqueue=True,
+        # `backtrace` extends a traceback with the frames *above* the catch point —
+        # for a web request that is ~20 identical lines of runpy/click/asyncio before
+        # anything about this application appears. Reserved for --debug.
+        backtrace=is_debug(),
+        diagnose=DIAGNOSE,
+    )
+
+
+# ── Request logging ──────────────────────────────────────────────────────────
+
+
+def http(
+    method: str,
+    path: str,
+    status: int,
+    duration_ms: float,
+    request_id: str,
+    client: str | None = None,
+) -> None:
+    """Log one completed request as a single, status-coloured line.
+
+    Replaces the old arrow-in/arrow-out pair: the entry line carried nothing the
+    completion line does not, so it now only appears at DEBUG level (see
+    ``middleware/security.py``).
+
+    Args:
+        method: HTTP method.
+        path: Request path (never the query string — it may carry secrets).
+        status: Response status code.
+        duration_ms: Wall-clock handling time in milliseconds.
+        request_id: Short correlation id, also returned as ``X-Request-ID``.
+        client: Client host, shown only at DEBUG level.
+    """
+    if status >= 500:
+        level = "ERROR"
+    elif status >= 400:
+        level = "WARNING"
+    else:
+        level = "INFO"
+
+    # The correlation id is only worth screen space when something went wrong —
+    # or when the developer explicitly asked for detail.
+    show_id = status >= 400 or is_debug()
+
+    bound = logger.bind(
+        kaira_http=True,
+        method=method,
+        path=path,
+        status=status,
+        duration_ms=duration_ms,
+        request_id=request_id,
+        client=client or "unknown",
+        show_id=show_id,
+    )
+    # Plain-text fallback message: unused by the terminal formatter, but keeps
+    # the record meaningful if another sink is ever attached.
+    bound.log(level, "{} {} {} {:.1f}ms".format(method, status, path, duration_ms))
+
+
+# ── stdlib bridge ────────────────────────────────────────────────────────────
+
+# uvicorn's lifecycle chatter duplicates what the launch banner and our own
+# startup block already say. Kept as DEBUG rather than dropped, so `--debug`
+# still shows the real server lifecycle when diagnosing a startup hang.
+_DEMOTED_PREFIXES = (
+    "Started server process",
+    "Started reloader process",
+    "Waiting for application startup",
+    "Application startup complete",
+    "Waiting for application shutdown",
+    "Application shutdown complete",
+    "Finished server process",
+    "Stopping reloader process",
+    # Uvicorn re-logs every unhandled exception after Starlette's error handler
+    # has already printed the diagnostic block — the same traceback twice.
+    "Exception in ASGI application",
+)
+
+
+class InterceptHandler(logging.Handler):
+    """Route stdlib ``logging`` records into Loguru's single sink.
+
+    Standard-library loggers (uvicorn, SQLAlchemy) emit through the ``logging``
+    module. Without this bridge they bypass Loguru entirely and print with their
+    own handlers/format. Installing this handler on those loggers unifies every
+    line under one Loguru format and timestamp.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # Map the stdlib level number to Loguru's level name where possible.
+        try:
+            level: str | int = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        message = record.getMessage()
+
+        if record.name.startswith("uvicorn") and message.startswith(_DEMOTED_PREFIXES):
+            level = "DEBUG"
+
+        # Walk back to the caller so file/line info is meaningful, not this shim.
+        frame, depth = logging.currentframe(), 2
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        logger.opt(depth=depth, exception=record.exc_info).log(level, message)
+
+
+def configure_intercept(sql_echo: bool = False) -> None:
+    """Redirect the noisy stdlib loggers into Loguru's single sink.
+
+    Args:
+        sql_echo: When True, allow ``sqlalchemy.engine`` INFO (the SQL echo) to
+            flow through. When False (default), SQLAlchemy is capped at WARNING
+            so DDL/PRAGMA chatter never floods the terminal — ``kaira run --sql``
+            (which also sets the engine's ``echo``) is the opt-in.
+    """
+    intercept = InterceptHandler()
+    root_level = logging.DEBUG if is_debug() else logging.INFO
+    logging.basicConfig(handlers=[intercept], level=root_level, force=True)
+
+    for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+        std = logging.getLogger(name)
+        std.handlers = [intercept]
+        std.propagate = False
+
+    # The request middleware logs a richer single line per request; uvicorn's
+    # own access log would print a second, less informative copy of each.
+    if not _ACCESS_LOG:
+        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+    sa = logging.getLogger("sqlalchemy.engine")
+    sa.handlers = [intercept]
+    sa.propagate = False
+    sa.setLevel(logging.INFO if sql_echo else logging.WARNING)
+
+    # Third-party chatter that says nothing about *this* application. httpx logs
+    # a full INFO line for every outbound call it makes, which doubles the log
+    # of any endpoint that talks to another service.
+    for name in (
+        "watchfiles",
+        "watchfiles.main",
+        "pymongo",
+        "motor",
+        "asyncio",
+        "httpx",
+        "httpcore",
+    ):
+        noisy = logging.getLogger(name)
+        noisy.handlers = [intercept]
+        noisy.propagate = False
+        noisy.setLevel(logging.WARNING)
+
+
+# Install the bridge at import time so it is active before uvicorn configures
+# its own logging. `sql_echo` follows the same env flag the engine reads.
+configure_intercept(sql_echo=os.getenv("KAIRA_SQL_ECHO") == "1")
+
+__all__ = [
+    "logger",
+    "InterceptHandler",
+    "configure_intercept",
+    "detail",
+    "http",
+    "status_style",
+    "is_debug",
+    "INDENT",
+    "JSON_LOGS",
+    "LOG_FORMAT",
+    "LOG_LEVEL",
+]

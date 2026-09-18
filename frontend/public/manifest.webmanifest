@@ -1,0 +1,31 @@
+{
+  "name": "Pikol 24/7 Pickleball Court",
+  "short_name": "Pikol Court",
+  "description": "Book premier 24/7 pickleball courts in Koronadal City. Advance booking, GCash payments, equipment rentals & tournament lighting.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0F17",
+  "theme_color": "#0B0F17",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["sports", "lifestyle", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Book Court Now",
+      "url": "/#booking",
+      "description": "Direct appointment or 24/7 advance court booking"
+    },
+    {
+      "name": "Special Promotions",
+      "url": "/#promos",
+      "description": "Midnight smash & off-peak court deals"
+    }
+  ]
+}

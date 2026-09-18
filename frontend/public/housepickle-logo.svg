@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 115" fill="none">
+  <defs>
+    <linearGradient id="hph-green-pillar" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ADE80" />
+      <stop offset="50%" stop-color="#22C55E" />
+      <stop offset="100%" stop-color="#15803D" />
+    </linearGradient>
+
+    <linearGradient id="hph-gray-pillar" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#64748B" />
+      <stop offset="100%" stop-color="#334155" />
+    </linearGradient>
+
+    <linearGradient id="hph-ball" x1="20%" y1="10%" x2="85%" y2="90%">
+      <stop offset="0%" stop-color="#BEF264" />
+      <stop offset="45%" stop-color="#84CC16" />
+      <stop offset="100%" stop-color="#4D7C0F" />
+    </linearGradient>
+
+    <linearGradient id="hph-roof-trim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F1F5F9" />
+    </linearGradient>
+
+    <filter id="hph-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Left Emblem Mark (Scaled and positioned) -->
+  <g transform="translate(10, 8) scale(0.95)">
+    <!-- Left Gray Tower Pillar -->
+    <rect x="25" y="30" width="14" height="42" rx="2" fill="url(#hph-gray-pillar)" />
+    <rect x="25" y="30" width="14" height="3" rx="1" fill="#94A3B8" opacity="0.6" />
+
+    <!-- Right Vibrant Green Tower Pillar -->
+    <rect x="67" y="8" width="17" height="64" rx="2.5" fill="url(#hph-green-pillar)" filter="url(#hph-shadow)" />
+    <rect x="67" y="8" width="17" height="4" rx="1" fill="#86EFAC" opacity="0.7" />
+
+    <!-- House Triangle Interior -->
+    <polygon points="52,26 19,63 85,63" fill="#0F172A" />
+
+    <!-- Outer Roof Gable Chevron -->
+    <path d="M 52 16 L 11 58 L 19 66 L 52 30 L 85 66 L 93 58 Z" fill="url(#hph-roof-trim)" filter="url(#hph-shadow)" />
+
+    <!-- 4-Pane Architectural Window -->
+    <g transform="translate(43.5, 43)">
+      <rect x="0" y="0" width="7" height="7" rx="1" fill="#FFFFFF" />
+      <rect x="10" y="0" width="7" height="7" rx="1" fill="#FFFFFF" />
+      <rect x="0" y="10" width="7" height="7" rx="1" fill="#FFFFFF" />
+      <rect x="10" y="10" width="7" height="7" rx="1" fill="#FFFFFF" />
+    </g>
+
+    <!-- Lime Optic Pickleball with Perforated Holes -->
+    <g filter="url(#hph-shadow)">
+      <circle cx="97" cy="48" r="19" fill="url(#hph-ball)" stroke="#365314" stroke-width="0.8" />
+      <path d="M 84 37 A 16 16 0 0 1 109 35" stroke="#ECFCCB" stroke-width="1.8" stroke-linecap="round" fill="none" opacity="0.75" />
+
+      <!-- Authentic Pickleball Holes -->
+      <circle cx="90" cy="38" r="2.0" fill="#14532D" />
+      <circle cx="99" cy="35" r="2.2" fill="#14532D" />
+      <circle cx="106" cy="41" r="2.0" fill="#14532D" />
+      <circle cx="88" cy="47" r="2.3" fill="#14532D" />
+      <circle cx="97" cy="46" r="2.4" fill="#14532D" />
+      <circle cx="106" cy="50" r="2.0" fill="#14532D" />
+      <circle cx="91" cy="57" r="1.9" fill="#14532D" />
+      <circle cx="100" cy="58" r="2.1" fill="#14532D" />
+      <circle cx="108" cy="59" r="1.6" fill="#14532D" />
+    </g>
+  </g>
+
+  <!-- Right Typography Group -->
+  <!-- 1. HOUSEPICKLE -->
+  <g transform="translate(145, 46)">
+    <text font-family="'Space Grotesk', 'Plus Jakarta Sans', system-ui, sans-serif" font-weight="900" font-size="36" letter-spacing="1.5">
+      <tspan fill="#0F172A">HOUSE</tspan><tspan fill="#16A34A">PICKLE</tspan>
+    </text>
+  </g>
+
+  <!-- 2. Divider Lines & CLUB -->
+  <g transform="translate(145, 75)">
+    <!-- Left Line -->
+    <line x1="0" y1="-5" x2="65" y2="-5" stroke="#CBD5E1" stroke-width="1.5" stroke-linecap="round" />
+    <!-- CLUB Text -->
+    <text x="110" y="0" text-anchor="middle" font-family="'Space Grotesk', system-ui, sans-serif" font-weight="900" font-size="15" letter-spacing="8" fill="#1E293B">CLUB</text>
+    <!-- Right Line -->
+    <line x1="155" y1="-5" x2="220" y2="-5" stroke="#CBD5E1" stroke-width="1.5" stroke-linecap="round" />
+  </g>
+
+  <!-- 3. Slogan: PLAY CONNECT REPEAT -->
+  <g transform="translate(145, 99)">
+    <text font-family="'Barlow Semi Condensed', 'Space Grotesk', sans-serif" font-weight="800" font-size="11.5" letter-spacing="5" fill="#15803D">
+      PLAY • CONNECT • REPEAT
+    </text>
+  </g>
+</svg>

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 260" fill="none">
+  <defs>
+    <linearGradient id="stkd-green-pillar" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ADE80" />
+      <stop offset="50%" stop-color="#22C55E" />
+      <stop offset="100%" stop-color="#15803D" />
+    </linearGradient>
+
+    <linearGradient id="stkd-gray-pillar" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#94A3B8" />
+      <stop offset="100%" stop-color="#475569" />
+    </linearGradient>
+
+    <linearGradient id="stkd-ball" x1="20%" y1="10%" x2="85%" y2="90%">
+      <stop offset="0%" stop-color="#BEF264" />
+      <stop offset="45%" stop-color="#84CC16" />
+      <stop offset="100%" stop-color="#4D7C0F" />
+    </linearGradient>
+
+    <linearGradient id="stkd-roof-trim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#E2E8F0" />
+    </linearGradient>
+
+    <filter id="stkd-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+
+    <filter id="stkd-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#22C55E" flood-opacity="0.4" />
+    </filter>
+  </defs>
+
+  <!-- Centered Emblem Mark -->
+  <g transform="translate(90, 15)">
+    <!-- Left Gray Tower Pillar -->
+    <rect x="25" y="30" width="14" height="42" rx="2" fill="url(#stkd-gray-pillar)" />
+    <rect x="25" y="30" width="14" height="3" rx="1" fill="#CBD5E1" opacity="0.6" />
+
+    <!-- Right Vibrant Green Tower Pillar -->
+    <rect x="67" y="8" width="17" height="64" rx="2.5" fill="url(#stkd-green-pillar)" filter="url(#stkd-shadow)" />
+    <rect x="67" y="8" width="17" height="4" rx="1" fill="#BBF7D0" opacity="0.8" />
+
+    <!-- House Triangle Interior -->
+    <polygon points="52,26 19,63 85,63" fill="#090D16" />
+
+    <!-- Outer Roof Gable Chevron -->
+    <path d="M 52 16 L 11 58 L 19 66 L 52 30 L 85 66 L 93 58 Z" fill="url(#stkd-roof-trim)" filter="url(#stkd-shadow)" />
+
+    <!-- 4-Pane Architectural Window -->
+    <g transform="translate(43.5, 43)">
+      <rect x="0" y="0" width="7" height="7" rx="1" fill="#FFFFFF" />
+      <rect x="10" y="0" width="7" height="7" rx="1" fill="#FFFFFF" />
+      <rect x="0" y="10" width="7" height="7" rx="1" fill="#FFFFFF" />
+      <rect x="10" y="10" width="7" height="7" rx="1" fill="#FFFFFF" />
+    </g>
+
+    <!-- Lime Optic Pickleball with Perforated Holes -->
+    <g filter="url(#stkd-shadow)">
+      <circle cx="97" cy="48" r="19" fill="url(#stkd-ball)" stroke="#365314" stroke-width="0.8" />
+      <path d="M 84 37 A 16 16 0 0 1 109 35" stroke="#ECFCCB" stroke-width="1.8" stroke-linecap="round" fill="none" opacity="0.8" />
+
+      <!-- Authentic Pickleball Holes -->
+      <circle cx="90" cy="38" r="2.0" fill="#14532D" />
+      <circle cx="99" cy="35" r="2.2" fill="#14532D" />
+      <circle cx="106" cy="41" r="2.0" fill="#14532D" />
+      <circle cx="88" cy="47" r="2.3" fill="#14532D" />
+      <circle cx="97" cy="46" r="2.4" fill="#14532D" />
+      <circle cx="106" cy="50" r="2.0" fill="#14532D" />
+      <circle cx="91" cy="57" r="1.9" fill="#14532D" />
+      <circle cx="100" cy="58" r="2.1" fill="#14532D" />
+      <circle cx="108" cy="59" r="1.6" fill="#14532D" />
+    </g>
+  </g>
+
+  <!-- Typography Group (Centered for Dark Backgrounds) -->
+  <!-- 1. HOUSEPICKLE -->
+  <g transform="translate(160, 155)">
+    <text text-anchor="middle" font-family="'Space Grotesk', 'Plus Jakarta Sans', system-ui, sans-serif" font-weight="900" font-size="34" letter-spacing="1.5">
+      <tspan fill="#FFFFFF">HOUSE</tspan><tspan fill="#22C55E">PICKLE</tspan>
+    </text>
+  </g>
+
+  <!-- 2. Divider Lines & CLUB -->
+  <g transform="translate(160, 192)">
+    <!-- Left Line -->
+    <line x1="-120" y1="-5" x2="-45" y2="-5" stroke="#475569" stroke-width="1.5" stroke-linecap="round" />
+    <!-- CLUB Text -->
+    <text text-anchor="middle" font-family="'Space Grotesk', system-ui, sans-serif" font-weight="900" font-size="16" letter-spacing="9" fill="#FFFFFF">CLUB</text>
+    <!-- Right Line -->
+    <line x1="45" y1="-5" x2="120" y2="-5" stroke="#475569" stroke-width="1.5" stroke-linecap="round" />
+  </g>
+
+  <!-- 3. Slogan: PLAY CONNECT REPEAT -->
+  <g transform="translate(160, 226)">
+    <text text-anchor="middle" font-family="'Barlow Semi Condensed', 'Space Grotesk', sans-serif" font-weight="800" font-size="12" letter-spacing="6" fill="#F59E0B">
+      PLAY • CONNECT • REPEAT
+    </text>
+  </g>
+</svg>

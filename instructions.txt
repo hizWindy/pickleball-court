@@ -1,0 +1,13 @@
+So the pickleball website can do is
+- pwa website
+- direct appointment or booking by date
+- can pay thru gcash.
+- 24 hrs business hours
+- advance booking. 
+- part of promotional
+- react website pwa
+- gcash payment. ill attach the number later.
+- include the number or contact or details of the court.
+	- in front of aloha suites, Purok Masinadyahon, Brgy. San Isidro. | Koronadal
+	- contact number: 09128285344
+	- name: Reymark Vergara

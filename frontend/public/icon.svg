@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <defs>
+    <!-- Background Gradient: Deep Athletic Stadium Dark -->
+    <linearGradient id="ico-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="50%" stop-color="#092612" />
+      <stop offset="100%" stop-color="#061A0C" />
+    </linearGradient>
+
+    <!-- Border Ring Gradient -->
+    <linearGradient id="ico-border" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ADE80" stop-opacity="0.8" />
+      <stop offset="50%" stop-color="#22C55E" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#15803D" stop-opacity="0.2" />
+    </linearGradient>
+
+    <linearGradient id="ico-green-pillar" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ADE80" />
+      <stop offset="50%" stop-color="#22C55E" />
+      <stop offset="100%" stop-color="#15803D" />
+    </linearGradient>
+
+    <linearGradient id="ico-gray-pillar" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#94A3B8" />
+      <stop offset="100%" stop-color="#475569" />
+    </linearGradient>
+
+    <linearGradient id="ico-ball" x1="20%" y1="10%" x2="85%" y2="90%">
+      <stop offset="0%" stop-color="#BEF264" />
+      <stop offset="45%" stop-color="#84CC16" />
+      <stop offset="100%" stop-color="#4D7C0F" />
+    </linearGradient>
+
+    <linearGradient id="ico-roof-trim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#E2E8F0" />
+    </linearGradient>
+
+    <filter id="ico-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Squircle App Container -->
+  <rect x="4" y="4" width="152" height="152" rx="36" fill="url(#ico-bg)" stroke="url(#ico-border)" stroke-width="2" />
+
+  <!-- Ambient Glow -->
+  <circle cx="80" cy="80" r="45" fill="#22C55E" opacity="0.12" filter="blur(16px)" />
+
+  <!-- Centered Emblem Mark (width: 110, height: 80, centered) -->
+  <g transform="translate(18, 30) scale(0.92)">
+    <!-- Left Gray Tower Pillar -->
+    <rect x="25" y="30" width="14" height="42" rx="2" fill="url(#ico-gray-pillar)" />
+    <rect x="25" y="30" width="14" height="3" rx="1" fill="#CBD5E1" opacity="0.6" />
+
+    <!-- Right Vibrant Green Tower Pillar -->
+    <rect x="67" y="8" width="17" height="64" rx="2.5" fill="url(#ico-green-pillar)" filter="url(#ico-shadow)" />
+    <rect x="67" y="8" width="17" height="4" rx="1" fill="#BBF7D0" opacity="0.8" />
+
+    <!-- House Triangle Interior -->
+    <polygon points="52,26 19,63 85,63" fill="#090D16" />
+
+    <!-- Outer Roof Gable Chevron -->
+    <path d="M 52 16 L 11 58 L 19 66 L 52 30 L 85 66 L 93 58 Z" fill="url(#ico-roof-trim)" filter="url(#ico-shadow)" />
+
+    <!-- 4-Pane Architectural Window -->
+    <g transform="translate(43.5, 43)">
+      <rect x="0" y="0" width="7" height="7" rx="1" fill="#FFFFFF" />
+      <rect x="10" y="0" width="7" height="7" rx="1" fill="#FFFFFF" />
+      <rect x="0" y="10" width="7" height="7" rx="1" fill="#FFFFFF" />
+      <rect x="10" y="10" width="7" height="7" rx="1" fill="#FFFFFF" />
+    </g>
+
+    <!-- Lime Optic Pickleball with Perforated Holes -->
+    <g filter="url(#ico-shadow)">
+      <circle cx="97" cy="48" r="19" fill="url(#ico-ball)" stroke="#365314" stroke-width="0.8" />
+      <path d="M 84 37 A 16 16 0 0 1 109 35" stroke="#ECFCCB" stroke-width="1.8" stroke-linecap="round" fill="none" opacity="0.8" />
+
+      <!-- Authentic Pickleball Holes -->
+      <circle cx="90" cy="38" r="2.0" fill="#14532D" />
+      <circle cx="99" cy="35" r="2.2" fill="#14532D" />
+      <circle cx="106" cy="41" r="2.0" fill="#14532D" />
+      <circle cx="88" cy="47" r="2.3" fill="#14532D" />
+      <circle cx="97" cy="46" r="2.4" fill="#14532D" />
+      <circle cx="106" cy="50" r="2.0" fill="#14532D" />
+      <circle cx="91" cy="57" r="1.9" fill="#14532D" />
+      <circle cx="100" cy="58" r="2.1" fill="#14532D" />
+      <circle cx="108" cy="59" r="1.6" fill="#14532D" />
+    </g>
+  </g>
+</svg>
