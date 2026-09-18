@@ -44,7 +44,13 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
     <section id="courts" className="py-16 bg-white border-b border-zinc-200">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-12">
         {/* Architectural Court Venue Showcase Banner */}
-        <div className="relative rounded-3xl overflow-hidden border border-emerald-300 shadow-xl group">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: 30 }}
+          whileInView={{ opacity: 1, scale: 1, y: 0 }}
+          viewport={{ once: true, margin: '-60px' }}
+          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+          className="relative rounded-3xl overflow-hidden border border-emerald-300 shadow-xl group"
+        >
           <div className="relative aspect-[4/3] sm:aspect-[16/10] md:aspect-[16/9] lg:aspect-[16/8] w-full bg-zinc-950 overflow-hidden">
             <img
               src="/images/housepickle-venue-aerial.webp"
@@ -87,11 +93,17 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Section 1: Direct Selection - CHOOSE YOUR COURT (Exactly Court 1 & Court 2) */}
         <div>
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6">
+          <motion.div
+            initial={{ opacity: 0, y: 25 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-50px' }}
+            transition={{ duration: 0.6 }}
+            className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6"
+          >
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F0FDF4] border border-emerald-200 text-[#15803D] font-sport font-extrabold text-xs uppercase tracking-widest mb-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-[#84CC16]" />
@@ -106,15 +118,18 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                 Late Night Promo: ₱200/hr (10PM - 6AM)
               </span>
             </div>
-          </div>
+          </motion.div>
 
           {/* Dual Interactive Stadium Cards (Court 1 and Court 2) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {COURTS.map((court, idx) => {
               return (
                 <motion.div
-                  whileHover={{ y: -5 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                  initial={{ opacity: 0, x: idx === 0 ? -30 : 30, y: 20 }}
+                  whileInView={{ opacity: 1, x: 0, y: 0 }}
+                  viewport={{ once: true, margin: '-50px' }}
+                  whileHover={{ y: -6, scale: 1.01 }}
+                  transition={{ duration: 0.65, delay: idx * 0.15, ease: [0.22, 1, 0.36, 1] }}
                   key={court.id}
                   className="rounded-3xl border border-emerald-200/80 bg-white overflow-hidden shadow-lg shadow-emerald-950/5 flex flex-col justify-between group"
                 >
@@ -227,7 +242,13 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
         </div>
 
         {/* Section 2: Interactive Court Blueprint & Architecture */}
-        <div id="blueprint">
+        <motion.div
+          id="blueprint"
+          initial={{ opacity: 0, y: 35 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-60px' }}
+          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+        >
           <div className="text-center max-w-2xl mx-auto mb-8">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F0FDF4] border border-emerald-200 text-[#15803D] font-sport font-extrabold text-xs uppercase tracking-widest mb-2">
               <Sparkles className="w-3.5 h-3.5 text-[#84CC16]" />
@@ -242,10 +263,15 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
           </div>
 
           <FramerCourtVisualizer />
-        </div>
+        </motion.div>
 
         {/* Section 3: Court & Atmosphere Photos Gallery */}
-        <div>
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-60px' }}
+          transition={{ duration: 0.6 }}
+        >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xs font-heading font-black text-zinc-900 uppercase tracking-wider">
               Court & Atmosphere Photos
@@ -255,8 +281,11 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {gallery.map((item, idx) => (
               <motion.div
-                whileHover={{ y: -3 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                initial={{ opacity: 0, scale: 0.94, y: 20 }}
+                whileInView={{ opacity: 1, scale: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: idx * 0.08 }}
+                whileHover={{ y: -5, scale: 1.02 }}
                 key={idx}
                 onClick={() => setSelectedImage(item.image)}
                 className={`border border-zinc-200 hover:border-[#15803D] rounded-2xl overflow-hidden bg-white shadow-xs transition-colors cursor-pointer group ${
@@ -280,7 +309,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
               </motion.div>
             ))}
           </div>
-        </div>
+        </motion.div>
 
         {/* Lightbox Modal */}
         {selectedImage && (

@@ -29,7 +29,13 @@ export const LocationDetails: React.FC = () => {
   return (
     <section id="location" className="py-16 bg-white border-b border-zinc-200">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="text-center max-w-2xl mx-auto mb-10">
+        <motion.div
+          initial={{ opacity: 0, y: 25 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-50px' }}
+          transition={{ duration: 0.6 }}
+          className="text-center max-w-2xl mx-auto mb-10"
+        >
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F0FDF4] border border-emerald-200 text-[#15803D] font-sport font-extrabold text-xs uppercase tracking-widest mb-2">
             <Sparkles className="w-3.5 h-3.5 text-[#84CC16]" />
             Koronadal City Venue
@@ -40,11 +46,17 @@ export const LocationDetails: React.FC = () => {
           <p className="text-xs text-zinc-500 font-medium mt-1">
             Centrally situated in Purok Masinadyahon, directly across the Aloha Suites entrance.
           </p>
-        </div>
+        </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Address Box with Double-Bezel Hardware Styling */}
-          <div className="double-bezel shadow-md">
+          <motion.div
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, margin: '-50px' }}
+            transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+            className="double-bezel shadow-md"
+          >
             <div className="double-bezel-inner p-6 space-y-4">
               <div className="flex items-start justify-between">
                 <div>
@@ -87,10 +99,16 @@ export const LocationDetails: React.FC = () => {
                 </motion.a>
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Host & Direct Payment Box */}
-          <div className="double-bezel shadow-md">
+          <motion.div
+            initial={{ opacity: 0, x: 30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, margin: '-50px' }}
+            transition={{ duration: 0.65, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            className="double-bezel shadow-md"
+          >
             <div className="double-bezel-inner p-6 space-y-4">
               <div>
                 <span className="text-xs font-heading font-black uppercase tracking-wider text-zinc-950 block">
@@ -144,7 +162,7 @@ export const LocationDetails: React.FC = () => {
                 </motion.a>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </section>

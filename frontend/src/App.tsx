@@ -6,6 +6,7 @@ import { CourtShowcase } from './components/CourtShowcase';
 import { FramerRulesAccordion } from './components/framer/FramerRulesAccordion';
 import { LocationDetails } from './components/LocationDetails';
 import { FramerFloatingDock } from './components/framer/FramerFloatingDock';
+import { FramerScrollProgress } from './components/framer/FramerScrollProgress';
 import { Footer } from './components/Footer';
 import { DirectBookingModal } from './components/booking/DirectBookingModal';
 import { MyBookingsModal } from './components/MyBookingsModal';
@@ -44,6 +45,9 @@ export function App() {
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-white text-zinc-900 flex flex-col antialiased selection:bg-[#15803D] selection:text-white pb-14">
+      {/* Scroll Progress & Motion Controller */}
+      <FramerScrollProgress />
+
       {/* Top Clean Navbar */}
       <Navbar
         onOpenDirectBooking={() => handleOpenDirectBooking()}

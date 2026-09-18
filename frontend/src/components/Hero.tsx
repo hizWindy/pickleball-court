@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   MapPin,
   Phone,
@@ -8,9 +8,10 @@ import {
   Zap,
   Clock,
   ShieldCheck,
-  ChevronRight
+  ChevronRight,
+  ChevronDown
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, useScroll, useTransform } from 'motion/react';
 import { format, addDays, isSameDay } from 'date-fns';
 import { COURT_DETAILS, COURTS, GENERATE_TIME_SLOTS } from '../data/mockData';
 import { Court, TimeSlot } from '../types';
@@ -21,6 +22,16 @@ interface HeroProps {
 }
 
 export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
+  const heroRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: heroRef,
+    offset: ['start start', 'end start']
+  });
+
+  const player1ScrollY = useTransform(scrollYProgress, [0, 1], [0, 90]);
+  const player2ScrollY = useTransform(scrollYProgress, [0, 1], [0, -70]);
+  const scrollIndicatorOpacity = useTransform(scrollYProgress, [0, 0.25], [1, 0]);
+
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedCourt, setSelectedCourt] = useState<Court>(COURTS[0]);
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
@@ -39,26 +50,25 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
   const hourlyRate = isNight ? selectedCourt.nightRate : selectedCourt.dayRate;
 
   return (
-    <section id="console" className="relative pt-6 pb-12 sm:pb-16 bg-court-mesh overflow-hidden border-b border-emerald-100">
+    <section ref={heroRef} id="console" className="relative pt-6 pb-12 sm:pb-16 bg-court-mesh overflow-hidden border-b border-emerald-100">
       {/* Decorative ambient blurred stadium glow orbs */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#22C55E]/10 rounded-full blur-3xl pointer-events-none -z-10" />
       <div className="absolute top-20 right-10 w-80 h-80 bg-[#84CC16]/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
-      {/* Dynamic Player Action Cutouts (Hero Section Background Only - Borderless Transparent Silhouette) */}
+      {/* Dynamic Player Action Cutouts (Hero Section Background Only - Borderless Transparent Silhouette with Scroll Parallax) */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
         {/* Left Player Cutout: Bouchard Action Strike */}
         <motion.div
+          style={{ y: player1ScrollY }}
           initial={{ opacity: 0, x: -30, scale: 0.95 }}
           animate={{
             opacity: 1,
             x: 0,
-            scale: 1,
-            y: [0, -8, 0]
+            scale: 1
           }}
           transition={{
             opacity: { duration: 0.8, delay: 0.1 },
-            x: { duration: 0.8, delay: 0.1 },
-            y: { duration: 6, repeat: Infinity, ease: 'easeInOut' }
+            x: { duration: 0.8, delay: 0.1 }
           }}
           className="absolute -left-1 sm:left-0 md:left-2 lg:left-4 xl:left-8 2xl:left-14 top-16 sm:top-12 lg:top-10 w-40 sm:w-52 md:w-64 lg:w-80 xl:w-96 opacity-100 select-none pointer-events-none z-0"
         >
@@ -79,17 +89,16 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
 
         {/* Right Player Cutout: Male Player Striking Ball */}
         <motion.div
+          style={{ y: player2ScrollY }}
           initial={{ opacity: 0, x: 30, scale: 0.95 }}
           animate={{
             opacity: 1,
             x: 0,
-            scale: 1,
-            y: [0, 8, 0]
+            scale: 1
           }}
           transition={{
             opacity: { duration: 0.8, delay: 0.2 },
-            x: { duration: 0.8, delay: 0.2 },
-            y: { duration: 7, repeat: Infinity, ease: 'easeInOut' }
+            x: { duration: 0.8, delay: 0.2 }
           }}
           className="absolute -right-1 sm:right-0 md:right-2 lg:right-4 xl:right-8 2xl:right-14 top-20 sm:top-16 lg:top-14 w-36 sm:w-48 md:w-60 lg:w-76 xl:w-90 opacity-100 select-none pointer-events-none z-0"
         >
@@ -439,6 +448,22 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             </button>
           </div>
         </div>
+
+        {/* Scroll Motion Hint */}
+        <motion.div
+          style={{ opacity: scrollIndicatorOpacity }}
+          className="flex flex-col items-center justify-center mt-6 text-zinc-400 pointer-events-none"
+        >
+          <span className="text-[10px] font-sport uppercase tracking-widest text-emerald-800/80 font-bold mb-1">
+            Scroll to explore courts
+          </span>
+          <motion.div
+            animate={{ y: [0, 4, 0] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <ChevronDown className="w-4 h-4 text-[#15803D]" />
+          </motion.div>
+        </motion.div>
       </div>
     </section>
   );

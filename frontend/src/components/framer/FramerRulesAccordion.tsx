@@ -52,7 +52,13 @@ export const FramerRulesAccordion: React.FC = () => {
   return (
     <section className="py-16 bg-[#FAFCF9] border-b border-zinc-200">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        <div className="text-center mb-10">
+        <motion.div
+          initial={{ opacity: 0, y: 25 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-50px' }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-10"
+        >
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F0FDF4] border border-emerald-200 text-[#15803D] font-sport font-extrabold text-xs uppercase tracking-widest mb-2">
             <HelpCircle className="w-3.5 h-3.5 text-[#84CC16]" />
             Quick Player Guide
@@ -63,14 +69,18 @@ export const FramerRulesAccordion: React.FC = () => {
           <p className="text-xs text-zinc-500 font-medium mt-1 max-w-md mx-auto">
             Everything you need to know about court hours, night lights, kitchen rules, and quick GCash payment.
           </p>
-        </div>
+        </motion.div>
 
         {/* Framer Accordion Container */}
         <div className="space-y-3">
-          {FAQ_ITEMS.map((item) => {
+          {FAQ_ITEMS.map((item, idx) => {
             const isOpen = openId === item.id;
             return (
               <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-40px' }}
+                transition={{ duration: 0.45, delay: idx * 0.08 }}
                 key={item.id}
                 layout
                 className={`rounded-2xl border transition-all overflow-hidden ${

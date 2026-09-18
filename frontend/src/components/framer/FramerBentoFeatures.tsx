@@ -47,7 +47,13 @@ export const FramerBentoFeatures: React.FC = () => {
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         {/* Section Header */}
-        <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <motion.div
+          initial={{ opacity: 0, y: 25 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-60px' }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4"
+        >
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#F0FDF4] border border-emerald-200 text-[#15803D] font-sport font-extrabold text-xs uppercase tracking-widest mb-2">
               <Sparkles className="w-3.5 h-3.5 text-[#84CC16]" />
@@ -60,14 +66,17 @@ export const FramerBentoFeatures: React.FC = () => {
           <p className="text-xs text-zinc-500 font-medium max-w-sm">
             Open all night, easy on your knees, with bright night lights, free parking, and quick booking right on your phone.
           </p>
-        </div>
+        </motion.div>
 
         {/* Dynamic Bento Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
           {/* Card 1: 24/7 Night Owl Arena (Span 7) - Always Shows Night Court Photo */}
           <motion.div
-            whileHover={{ y: -4 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            initial={{ opacity: 0, y: 35 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            whileHover={{ y: -5, scale: 1.01 }}
+            transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
             className="md:col-span-7 rounded-3xl border border-emerald-200/90 overflow-hidden shadow-md relative flex flex-col justify-between min-h-[300px] group bg-zinc-950"
           >
             {/* Permanent Full-Quality Background Image (Always visible, no -z-10) */}
@@ -122,8 +131,11 @@ export const FramerBentoFeatures: React.FC = () => {
 
           {/* Card 2: GCash Direct Pay (Span 5) */}
           <motion.div
-            whileHover={{ y: -4 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            initial={{ opacity: 0, y: 35 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            whileHover={{ y: -5, scale: 1.01 }}
+            transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
             className="md:col-span-5 rounded-3xl border border-blue-200/80 bg-gradient-to-br from-blue-50/70 via-white to-white p-6 shadow-sm flex flex-col justify-between"
           >
             <div>
@@ -174,8 +186,11 @@ export const FramerBentoFeatures: React.FC = () => {
 
           {/* Card 3: Location / Aloha Suites (Span 6) */}
           <motion.div
-            whileHover={{ y: -4 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            initial={{ opacity: 0, y: 35 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            whileHover={{ y: -5, scale: 1.01 }}
+            transition={{ duration: 0.6, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
             className="md:col-span-6 rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm flex flex-col justify-between group"
           >
             <div>
@@ -214,8 +229,11 @@ export const FramerBentoFeatures: React.FC = () => {
 
           {/* Card 4: Pro Carbon Paddle Station (Span 6) with Image Preview */}
           <motion.div
-            whileHover={{ y: -4 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            initial={{ opacity: 0, y: 35 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            whileHover={{ y: -5, scale: 1.01 }}
+            transition={{ duration: 0.6, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="md:col-span-6 rounded-3xl border border-emerald-200 bg-[#F0FDF4] p-6 shadow-sm flex flex-col justify-between relative overflow-hidden group"
           >
             <div>
