@@ -142,19 +142,15 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             </span>
           </motion.h1>
 
-          {/* Polished Facility Summary Card with Frosted Glass Shield */}
-          <motion.div
+          {/* Concise & Short Facility Description without Card Background */}
+          <motion.p
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="mt-3.5 sm:mt-4 max-w-xl mx-auto px-1 sm:px-0"
+            className="mt-3 text-xs sm:text-sm md:text-base text-zinc-800 font-semibold max-w-lg mx-auto leading-relaxed drop-shadow-[0_1px_4px_rgba(255,255,255,0.95)]"
           >
-            <div className="bg-white/95 backdrop-blur-md border border-emerald-200/90 shadow-md shadow-emerald-950/8 rounded-2xl px-4 py-3 sm:px-6 sm:py-3.5 text-center">
-              <p className="text-xs sm:text-sm text-zinc-800 font-semibold leading-relaxed">
-                Two dedicated pickleball courts right in front of Aloha Suites, Koronadal City. Smooth knee-friendly courts, bright night lights, free parking, and quick GCash booking.
-              </p>
-            </div>
-          </motion.div>
+            Two dedicated courts in front of Aloha Suites, Koronadal City. 24/7 knee-friendly play.
+          </motion.p>
 
           {/* Quick Stat Highlights */}
           <motion.div
