@@ -60,7 +60,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             x: { duration: 0.9, delay: 0.15 },
             y: { duration: 6, repeat: Infinity, ease: 'easeInOut' }
           }}
-          className="absolute -left-12 sm:-left-6 lg:left-0 xl:left-4 2xl:left-12 top-14 sm:top-18 lg:top-20 w-52 sm:w-64 md:w-72 lg:w-80 xl:w-96 opacity-20 sm:opacity-30 lg:opacity-90 xl:opacity-100 select-none"
+          className="absolute -left-20 sm:-left-12 md:-left-6 lg:left-0 xl:left-4 2xl:left-12 top-10 sm:top-14 lg:top-20 w-36 sm:w-48 md:w-60 lg:w-80 xl:w-96 opacity-15 sm:opacity-25 md:opacity-40 lg:opacity-90 xl:opacity-100 select-none pointer-events-none"
         >
           {/* Luminous Emerald Stadium Back-Glow */}
           <div className="absolute -inset-6 bg-[#22C55E]/20 rounded-full blur-3xl -z-10" />
@@ -91,7 +91,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             x: { duration: 0.9, delay: 0.25 },
             y: { duration: 7, repeat: Infinity, ease: 'easeInOut' }
           }}
-          className="absolute -right-12 sm:-right-6 lg:right-0 xl:right-4 2xl:right-10 top-20 sm:top-24 lg:top-28 w-48 sm:w-60 md:w-68 lg:w-76 xl:w-88 opacity-20 sm:opacity-30 lg:opacity-90 xl:opacity-100 select-none"
+          className="absolute -right-20 sm:-right-12 md:-right-6 lg:right-0 xl:right-4 2xl:right-10 top-16 sm:top-20 lg:top-28 w-32 sm:w-44 md:w-56 lg:w-76 xl:w-88 opacity-15 sm:opacity-25 md:opacity-40 lg:opacity-90 xl:opacity-100 select-none pointer-events-none"
         >
           {/* Luminous Lime Stadium Back-Glow */}
           <div className="absolute -inset-6 bg-[#84CC16]/25 rounded-full blur-3xl -z-10" />
@@ -142,14 +142,19 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             </span>
           </motion.h1>
 
-          <motion.p
+          {/* Polished Facility Summary Card with Frosted Glass for Maximum Contrast & Readability across all screen sizes */}
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="mt-3 text-xs sm:text-sm text-zinc-600 font-medium max-w-xl mx-auto leading-relaxed"
+            className="mt-3.5 max-w-xl mx-auto px-1 sm:px-0"
           >
-            Two dedicated pickleball courts right in front of Aloha Suites, Koronadal City. Smooth knee-friendly courts, bright night lights, free parking, and quick GCash booking.
-          </motion.p>
+            <div className="bg-white/90 sm:bg-white/80 backdrop-blur-md border border-emerald-200/90 shadow-xs shadow-emerald-950/5 rounded-2xl px-4 py-2.5 sm:px-6 sm:py-3 text-center">
+              <p className="text-xs sm:text-sm text-zinc-800 font-medium leading-relaxed">
+                Two dedicated pickleball courts right in front of Aloha Suites, Koronadal City. Smooth knee-friendly courts, bright night lights, free parking, and quick GCash booking.
+              </p>
+            </div>
+          </motion.div>
 
           {/* Quick Stat Highlights */}
           <motion.div
