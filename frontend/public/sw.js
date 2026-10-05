@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'housepickle-v3';
+const CACHE_VERSION = 'housepickle-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -47,6 +47,9 @@ self.addEventListener('fetch', (event) => {
 
   // Ignore non-GET requests
   if (request.method !== 'GET') return;
+
+  // Never cache the booking API: availability and booking status must always be live.
+  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) return;
 
   // Cache-first for images, fonts, and hashed Vite build assets
   const isStaticAsset =

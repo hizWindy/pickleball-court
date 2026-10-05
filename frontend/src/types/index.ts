@@ -1,3 +1,4 @@
+// ── Marketing content (static) ───────────────────────────────────────────────
 export type CourtType = 'standard' | 'championship' | 'tournament' | 'training';
 
 export interface Court {
@@ -8,7 +9,7 @@ export interface Court {
   surface: string;
   image: string;
   dayRate: number; // 6 AM - 10 PM
-  nightRate: number; // 10 PM - 6 AM (Night Owl discount/lighting included)
+  nightRate: number; // 10 PM - 6 AM
   badge: string;
   features: string[];
   dimensions: string;
@@ -25,49 +26,106 @@ export interface TimeSlot {
   rateType: 'standard' | 'night_owl';
 }
 
-export interface BookingAddon {
+// ── Booking API (mirrors backend/app/schemas.py) ─────────────────────────────
+export type PaymentMethod = 'gcash' | 'gotyme';
+export type BookingStatus = 'held' | 'pending_verification' | 'confirmed' | 'rejected' | 'expired' | 'cancelled';
+export type SlotState = 'available' | 'held' | 'booked' | 'past';
+export type RateType = 'standard' | 'night_owl';
+
+export interface CourtConfig {
   id: string;
   name: string;
-  price: number;
-  perHour?: boolean;
-  description: string;
-  image?: string;
+  dayRate: number;
+  nightRate: number;
 }
 
-export interface Promotion {
-  id: string;
-  code: string;
-  title: string;
-  discountPercent?: number;
-  discountFixed?: number;
-  description: string;
-  badge: string;
-  nightOwlOnly?: boolean;
-  minHours?: number;
+export interface PaymentAccount {
+  method: PaymentMethod;
+  label: string;
+  accountName: string;
+  accountNumber: string;
+  enabled: boolean;
+}
+
+export interface AppConfig {
+  courts: CourtConfig[];
+  paymentAccounts: PaymentAccount[];
+  paddleFee: number;
+  holdMinutes: number;
+  maxHours: number;
+  bookingWindowDays: number;
+  consentVersion: string;
+  today: string; // current play day, YYYY-MM-DD (Manila)
+  serverNow: string;
+}
+
+export interface SlotAvailability {
+  hour: number;
+  startAt: string;
+  period: TimePeriod;
+  rateType: RateType;
+  courts: Record<string, SlotState>;
+}
+
+export interface Availability {
+  date: string;
+  serverNow: string;
+  slots: SlotAvailability[];
+}
+
+export interface LineItem {
+  startAt: string;
+  rate: number;
+  rateType: RateType;
 }
 
 export interface Booking {
-  id: string;
-  bookingRef: string; // e.g. "PKL-2026-9821"
+  code: string;
+  status: BookingStatus;
   courtId: string;
   courtName: string;
-  date: string; // YYYY-MM-DD
-  slots: string[]; // array of time strings e.g. ["19:00", "20:00"]
-  timeRangeFormatted: string; // "7:00 PM - 9:00 PM"
-  hoursCount: number;
-  addons: { addonId: string; name: string; quantity: number; cost: number }[];
+  playDate: string;
+  startAt: string;
+  endAt: string;
+  hours: number;
   customerName: string;
-  customerPhone: string;
-  customerEmail?: string;
-  specialNotes?: string;
-  appliedPromo?: string;
+  customerPhoneMasked: string;
+  paymentMethod: PaymentMethod;
+  paddles: boolean;
+  lineItems: LineItem[];
   courtCost: number;
   addonsCost: number;
-  discountAmount: number;
-  totalAmount: number;
-  paymentMethod: 'gcash';
-  gcashRefNumber: string;
-  gcashReceiptImage?: string;
-  status: 'confirmed' | 'pending_verification' | 'completed' | 'cancelled';
+  total: number;
   createdAt: string;
+  holdExpiresAt: string;
+  submittedAt: string | null;
+  proofType: 'receipt' | 'reference' | null;
+  closedAt: string | null;
+  serverNow: string;
+}
+
+export interface BookingWithToken {
+  booking: Booking;
+  accessToken: string;
+}
+
+export interface CreateBookingRequest {
+  courtId: string;
+  date: string;
+  hour: number;
+  hours: number;
+  paddles: boolean;
+  customerName: string;
+  customerPhone: string;
+  paymentMethod: PaymentMethod;
+  consent: boolean;
+  consentVersion: string;
+  marketingOptIn: boolean;
+}
+
+/** What the booking sheet can be pre-filled with (e.g. from the hero console). */
+export interface BookingDraftSeed {
+  date?: string;
+  hour?: number;
+  courtId?: string;
 }

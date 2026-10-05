@@ -19,13 +19,13 @@
   "shortcuts": [
     {
       "name": "Book Court Now",
-      "url": "/#booking",
+      "url": "/?book=1",
       "description": "Direct appointment or 24/7 advance court booking"
     },
     {
-      "name": "Special Promotions",
-      "url": "/#promos",
-      "description": "Midnight smash & off-peak court deals"
+      "name": "Court Rates",
+      "url": "/#courts",
+      "description": "Court 1 & 2 rates, including the late-night promo"
     }
   ]
 }

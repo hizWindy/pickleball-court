@@ -12,13 +12,14 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { motion, useScroll, useTransform } from 'motion/react';
-import { format, addDays, isSameDay } from 'date-fns';
 import { COURT_DETAILS, COURTS, SLOTS_BY_PERIOD } from '../data/mockData';
-import { Court, TimeSlot } from '../types';
-import { getBookedSlotIdsForDateAndCourt } from '../services/storage';
+import type { BookingDraftSeed, Court, SlotState, TimePeriod, TimeSlot } from '../types';
+import { useAvailability, useConfig } from '../hooks/useBookingData';
+import { serverNowMs } from '../lib/api';
+import { addDays, currentPlayDate, fmtDate } from '../lib/time';
 
 interface HeroProps {
-  onOpenDirectBooking: (date?: Date, slot?: TimeSlot, court?: Court) => void;
+  onOpenDirectBooking: (seed?: BookingDraftSeed) => void;
 }
 
 export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
@@ -32,21 +33,33 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
   const player2ScrollY = useTransform(scrollYProgress, [0, 1], [0, -70]);
   const scrollIndicatorOpacity = useTransform(scrollYProgress, [0, 0.25], [1, 0]);
 
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const { config } = useConfig();
+  const today = config?.today ?? currentPlayDate(serverNowMs());
+  const [pickedDate, setPickedDate] = useState<string | null>(null);
   const [selectedCourt, setSelectedCourt] = useState<Court>(COURTS[0]);
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-  const [timeFilter, setTimeFilter] = useState<'morning' | 'afternoon' | 'evening' | 'night_owl'>('morning');
+  const [pickedFilter, setTimeFilter] = useState<TimePeriod | null>(null);
 
-  // Quick 7-day strip
-  const dateOptions = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i));
-  const dateStr = format(selectedDate, 'yyyy-MM-dd');
+  // Quick 7-day strip (Manila play days)
+  const selectedDate = pickedDate ?? today;
+  const dateOptions = Array.from({ length: 7 }, (_, i) => addDays(today, i));
 
-  // Fast O(1) slots lookup from pre-computed static data
-  const bookedSlotIds = getBookedSlotIdsForDateAndCourt(dateStr, selectedCourt.id);
+  // Live availability from the booking server
+  const { data: avail } = useAvailability(selectedDate, { intervalMs: 20000 });
+  const slotState = (hour: number): SlotState | null =>
+    avail?.slots.find((s) => s.hour === hour)?.courts[selectedCourt.id] ?? null;
+  // Until the player picks a tab, open on the first period that still has free slots (not "Morning" at 11 PM).
+  const firstOpenPeriod = avail?.slots.find((s) => s.courts[selectedCourt.id] === 'available')?.period;
+  const timeFilter: TimePeriod = pickedFilter ?? firstOpenPeriod ?? 'morning';
   const currentSlots = SLOTS_BY_PERIOD[timeFilter];
 
-  const isNight = selectedSlot?.period === 'night_owl';
+  // A selected slot that just got taken shouldn't stay selected.
+  const selectedState = selectedSlot ? slotState(selectedSlot.hour) : null;
+  const activeSlot = selectedState && selectedState !== 'available' ? null : selectedSlot;
+
+  const isNight = activeSlot?.period === 'night_owl';
   const hourlyRate = isNight ? selectedCourt.nightRate : selectedCourt.dayRate;
+  const seed = (): BookingDraftSeed => ({ date: selectedDate, hour: activeSlot?.hour, courtId: selectedCourt.id });
 
   return (
     <section ref={heroRef} id="console" className="relative pt-4 sm:pt-6 pb-12 sm:pb-16 bg-court-mesh overflow-hidden border-b border-emerald-100">
@@ -211,10 +224,10 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                 <span>1. Date → 2. Time → 3. Court → 4. Pay</span>
                 <button
                   type="button"
-                  onClick={() => onOpenDirectBooking(selectedDate, selectedSlot || undefined, selectedCourt)}
+                  onClick={() => onOpenDirectBooking(seed())}
                   className="px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 text-white font-bold cursor-pointer transition-colors text-[10px] shrink-0"
                 >
-                  Modal View
+                  Full screen
                 </button>
               </div>
             </div>
@@ -229,23 +242,23 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                     Select Playing Date
                   </label>
                   <span className="text-[11px] sm:text-xs font-sport font-bold uppercase text-[#15803D]">
-                    {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+                    {fmtDate(selectedDate, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                   </span>
                 </div>
 
                 <div className="flex items-center gap-2 overflow-x-auto pb-2 pt-0.5 scroll-smooth snap-x snap-mandatory [-webkit-overflow-scrolling:touch]">
-                  {dateOptions.map((date, i) => {
-                    const isSelected = isSameDay(date, selectedDate);
-                    const isToday = isSameDay(date, new Date());
+                  {dateOptions.map((date) => {
+                    const isSelected = date === selectedDate;
+                    const isToday = date === today;
                     return (
                       <motion.button
                         whileHover={{ y: -2 }}
                         whileTap={{ scale: 0.95 }}
                         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                        key={i}
+                        key={date}
                         type="button"
                         onClick={() => {
-                          setSelectedDate(date);
+                          setPickedDate(date);
                           setSelectedSlot(null);
                         }}
                         className={`relative shrink-0 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl text-xs border transition-all cursor-pointer text-left min-w-[70px] sm:min-w-[76px] snap-start ${
@@ -255,13 +268,13 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                         }`}
                       >
                         <div className="text-[10px] font-sport uppercase tracking-widest opacity-80">
-                          {isToday ? 'Today' : format(date, 'EEE')}
+                          {isToday ? 'Today' : fmtDate(date, { weekday: 'short' })}
                         </div>
                         <div className="font-heading font-extrabold text-base leading-tight mt-0.5">
-                          {format(date, 'd')}
+                          {fmtDate(date, { day: 'numeric' })}
                         </div>
                         <div className="text-[9px] font-sport uppercase opacity-70">
-                          {format(date, 'MMM')}
+                          {fmtDate(date, { month: 'short' })}
                         </div>
                         {isSelected && (
                           <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[#CCFF00]" />
@@ -317,8 +330,9 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                 {/* Slot grid with spring micro-motion - responsive from mobile to tablet to desktop */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
                   {currentSlots.map((slot) => {
-                    const isBooked = bookedSlotIds.includes(slot.id);
-                    const isSelected = selectedSlot?.id === slot.id;
+                    const state = slotState(slot.hour);
+                    const isBooked = state !== null && state !== 'available';
+                    const isSelected = activeSlot?.id === slot.id;
 
                     return (
                       <motion.button
@@ -340,7 +354,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                         <div className="text-xs font-mono font-bold">{slot.time}</div>
                         <div className="text-[10px] mt-0.5 font-sport uppercase tracking-wider">
                           {isBooked ? (
-                            'Reserved'
+                            state === 'held' ? 'On hold' : state === 'past' ? 'Passed' : 'Reserved'
                           ) : slot.period === 'night_owl' ? (
                             <span className={isSelected ? 'text-[#CCFF00]' : 'text-[#15803D] font-bold'}>
                               ₱200 Promo
@@ -422,10 +436,10 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                       whileTap={{ scale: 0.97 }}
                       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                       type="button"
-                      onClick={() => onOpenDirectBooking(selectedDate, selectedSlot || undefined, selectedCourt)}
+                      onClick={() => onOpenDirectBooking(seed())}
                       className="group w-full sm:w-auto flex items-center justify-between sm:justify-start gap-3 pl-5 pr-2 py-2.5 rounded-full bg-[#15803D] hover:bg-[#166534] text-white text-xs font-sport font-extrabold uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-emerald-950/20"
                     >
-                      <span>Book with GCash</span>
+                      <span>{activeSlot ? 'Continue booking' : 'Book a slot'}</span>
                       <div className="w-7 h-7 rounded-full bg-white/20 group-hover:bg-[#CCFF00] group-hover:text-zinc-950 flex items-center justify-center transition-colors">
                         <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                       </div>

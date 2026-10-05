@@ -1,4 +1,5 @@
-import { Court, BookingAddon, Promotion, TimeSlot, TimePeriod } from '../types';
+// Static marketing content. Rates, courts and payment accounts used for booking come from the API (/api/config).
+import { Court, TimeSlot, TimePeriod } from '../types';
 
 export const COURTS: Court[] = [
   {
@@ -38,34 +39,6 @@ export const COURTS: Court[] = [
       'Free parking right beside the court'
     ],
     dimensions: '20 x 44 ft'
-  }
-];
-
-export const ADDONS: BookingAddon[] = [
-  {
-    id: 'addon-paddles',
-    name: 'Pickleball Paddles (Pair)',
-    price: 80,
-    description: 'Pair of comfortable, lightweight paddles ready for your game.',
-    image: '/images/gear-paddle.webp'
-  },
-  {
-    id: 'addon-balls',
-    name: 'Outdoor Pickleballs (Set of 3)',
-    price: 50,
-    description: 'High-bounce durable balls for casual and tournament matches.'
-  }
-];
-
-export const PROMOTIONS: Promotion[] = [
-  {
-    id: 'promo-midnight',
-    code: 'NIGHTOWL',
-    title: 'Late Night Promo',
-    discountFixed: 50,
-    description: 'Save ₱50 per hour automatically from 10:00 PM to 6:00 AM (₱200/hr promo rate).',
-    badge: '₱200 Promo Rate',
-    nightOwlOnly: true
   }
 ];
 

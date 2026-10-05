@@ -14,6 +14,12 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  server: {
+    // The booking API (backend/) runs on :8000 in development; same-origin /api in production.
+    proxy: {
+      '/api': 'http://127.0.0.1:8000',
+    },
+  },
   build: {
     rollupOptions: {
       output: {
@@ -29,9 +35,6 @@ export default defineConfig({
           }
           if (id.includes('node_modules/canvas-confetti/')) {
             return 'vendor-confetti';
-          }
-          if (id.includes('node_modules/date-fns/')) {
-            return 'vendor-date-fns';
           }
         },
       },

@@ -1,18 +1,12 @@
 import React from 'react';
-import { BookmarkCheck, ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface NavbarProps {
   onOpenDirectBooking: () => void;
-  onOpenMyBookings: () => void;
-  bookingCount: number;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({
-  onOpenDirectBooking,
-  onOpenMyBookings,
-  bookingCount
-}) => {
+export const Navbar: React.FC<NavbarProps> = ({ onOpenDirectBooking }) => {
   return (
     <header className="fixed top-2 sm:top-3 inset-x-0 z-50 px-2 sm:px-6 pointer-events-none">
       <div className="max-w-6xl mx-auto pointer-events-auto">
@@ -58,24 +52,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            {/* My Passes */}
-            <motion.button
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-              onClick={onOpenMyBookings}
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-zinc-800 bg-emerald-50/50 hover:bg-emerald-100/60 border border-emerald-200 text-[11px] sm:text-xs font-heading font-bold uppercase tracking-wider transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-              title="My Passes"
-            >
-              <BookmarkCheck className="w-3.5 h-3.5 text-[#15803D]" />
-              <span className="hidden xs:inline">Passes</span>
-              {bookingCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-[#15803D] text-white font-mono font-bold text-[10px]">
-                  {bookingCount}
-                </span>
-              )}
-            </motion.button>
-
             {/* Book Court CTA */}
             <motion.button
               whileHover={{ scale: 1.03, y: -1 }}

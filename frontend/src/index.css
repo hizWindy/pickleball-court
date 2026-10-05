@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* The components use `xs:` for large phones; Tailwind 4 has no xs breakpoint by default,
+   so those classes generated nothing until this was defined. 30rem = 480px keeps the
+   tuned small-phone hero layout unchanged. */
+@theme {
+  --breakpoint-xs: 30rem;
+}
+
 @layer base {
   :root {
     --font-pickle: 'Righteous', cursive, sans-serif;
