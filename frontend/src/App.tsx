@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
+import { AnnouncementStrip } from './components/AnnouncementStrip';
 import { NextOpenSlots } from './components/NextOpenSlots';
 import { FramerBentoFeatures } from './components/framer/FramerBentoFeatures';
 import { CourtShowcase } from './components/CourtShowcase';
@@ -120,6 +121,7 @@ export function App() {
         <Navbar onOpenDirectBooking={() => openBooking()} />
 
         <main className="flex-1 pt-18 sm:pt-20">
+          <AnnouncementStrip onBook={openBooking} />
           <Hero onOpenDirectBooking={openBooking} />
           <NextOpenSlots onBook={openBooking} />
           <FramerBentoFeatures />

@@ -3,30 +3,17 @@ import { motion } from 'motion/react';
 import { ArrowRight, CalendarSearch, Zap } from 'lucide-react';
 import { useAvailability, useConfig } from '../hooks/useBookingData';
 import { serverNowMs } from '../lib/api';
+import { dayLabel, minutesUntil, primeTime, toPicks, type OpenPick } from '../lib/openSlots';
 import { addDays, currentPlayDate, hourLabel, peso } from '../lib/time';
-import type { BookingDraftSeed, CourtConfig, SlotAvailability } from '../types';
+import type { BookingDraftSeed, CourtConfig } from '../types';
 
 interface NextOpenSlotsProps {
   onBook: (seed: BookingDraftSeed) => void;
 }
 
-interface Pick {
-  date: string;
-  slot: SlotAvailability;
-  freeCourts: CourtConfig[];
-}
-
 const MAX_CARDS = 4;
-const isNight = (hour: number) => hour >= 22 || hour < 6;
-
-function dayLabel(date: string, today: string, hour: number) {
-  const night = isNight(hour);
-  if (date === today) return night ? 'Tonight' : 'Today';
-  return night ? 'Tomorrow night' : 'Tomorrow';
-}
-
 function startsIn(startAt: string): string | null {
-  const mins = Math.round((Date.parse(startAt) - serverNowMs()) / 60000);
+  const mins = minutesUntil(startAt);
   if (mins <= 0 || mins > 180) return null;
   if (mins < 60) return `Starts in ${mins} min`;
   const h = Math.floor(mins / 60);
@@ -47,12 +34,7 @@ export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
   const { data: tomorrowAvail } = useAvailability(tomorrow, { intervalMs: 30000 });
   const courts = config?.courts ?? [];
 
-  const toPicks = (date: string, slots: SlotAvailability[] | undefined): Pick[] =>
-    (slots ?? [])
-      .map((slot) => ({ date, slot, freeCourts: courts.filter((c) => slot.courts[c.id] === 'available') }))
-      .filter((p) => p.freeCourts.length > 0);
-
-  const all = [...toPicks(today, todayAvail?.slots), ...toPicks(tomorrow, tomorrowAvail?.slots)];
+  const all = [...toPicks(today, todayAvail?.slots, courts), ...toPicks(tomorrow, tomorrowAvail?.slots, courts)];
   // One card per part of the day (the soonest free hour in each), so the options are genuinely
   // different (e.g. Tonight 12 AM · Tomorrow 6 AM · Tomorrow 12 PM · Tomorrow 5 PM) instead of
   // four back-to-back hours. Falls back to consecutive hours if there are fewer parts left.
@@ -72,14 +54,8 @@ export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
   }
 
   // Prime-time scarcity: real numbers for today's 5-10 PM, or tomorrow's once tonight's have passed.
-  const primeFor = (slots: SlotAvailability[] | undefined) => {
-    const prime = (slots ?? []).filter((s) => s.period === 'evening');
-    const states = prime.flatMap((s) => courts.map((c) => s.courts[c.id]));
-    const open = states.filter((s) => s !== 'past');
-    return { free: states.filter((s) => s === 'available').length, total: open.length };
-  };
-  const primeToday = primeFor(todayAvail?.slots);
-  const prime = primeToday.total > 0 ? { ...primeToday, when: 'tonight' } : { ...primeFor(tomorrowAvail?.slots), when: 'tomorrow' };
+  const primeToday = primeTime(todayAvail?.slots, courts);
+  const prime = primeToday.total > 0 ? { ...primeToday, when: 'tonight' } : { ...primeTime(tomorrowAvail?.slots, courts), when: 'tomorrow' };
 
   const loading = !todayAvail || !config;
   const nothingFree = !loading && tomorrowAvail && picks.length === 0;
@@ -128,7 +104,7 @@ export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
   );
 };
 
-function SlotCard({ pick, today, courts, onBook }: { pick: Pick; today: string; courts: CourtConfig[]; onBook: NextOpenSlotsProps['onBook'] }) {
+function SlotCard({ pick, today, courts, onBook }: { pick: OpenPick; today: string; courts: CourtConfig[]; onBook: NextOpenSlotsProps['onBook'] }) {
   const { date, slot, freeCourts } = pick;
   const night = slot.rateType === 'night_owl';
   const court = freeCourts[0];
