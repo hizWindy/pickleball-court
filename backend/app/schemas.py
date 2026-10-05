@@ -32,6 +32,8 @@ class PaymentAccountOut(ApiModel):
     label: str
     account_name: str
     account_number: str
+    qr_image: str
+    account_hint: str
     enabled: bool
 
 

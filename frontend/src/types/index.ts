@@ -44,6 +44,8 @@ export interface PaymentAccount {
   label: string;
   accountName: string;
   accountNumber: string;
+  qrImage: string;
+  accountHint: string;
   enabled: boolean;
 }
 

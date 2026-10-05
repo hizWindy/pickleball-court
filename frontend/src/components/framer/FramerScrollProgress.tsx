@@ -11,7 +11,6 @@ export const FramerScrollProgress: React.FC = () => {
   });
 
   const [isVisible, setIsVisible] = useState(false);
-  const percentRef = React.useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     let currentVisible = false;
@@ -23,19 +22,6 @@ export const FramerScrollProgress: React.FC = () => {
       }
     });
   }, [scrollY]);
-
-  useEffect(() => {
-    let lastPercent = -1;
-    return scrollYProgress.on('change', (latest) => {
-      const p = Math.round(latest * 100);
-      if (p !== lastPercent) {
-        lastPercent = p;
-        if (percentRef.current) {
-          percentRef.current.textContent = `${p}%`;
-        }
-      }
-    });
-  }, [scrollYProgress]);
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -54,23 +40,21 @@ export const FramerScrollProgress: React.FC = () => {
         </motion.div>
       </div>
 
-      {/* Floating Scroll Percentage Indicator & Quick Return to Top */}
+      {/* Back to top */}
       <motion.div
         initial={{ opacity: 0, scale: 0.8, y: 20 }}
         animate={isVisible ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.8, y: 20 }}
         transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-        className="fixed bottom-22 sm:bottom-24 right-4 sm:right-6 z-40 flex items-center gap-1.5"
+        className={`fixed bottom-5 sm:bottom-6 right-4 sm:right-6 z-40 ${isVisible ? '' : 'pointer-events-none'}`}
       >
         <button
           type="button"
           onClick={scrollToTop}
-          className="group flex items-center gap-1.5 px-3 py-2 rounded-full bg-zinc-950/85 hover:bg-zinc-900 text-white backdrop-blur-md border border-white/20 shadow-xl shadow-emerald-950/20 text-xs font-sport font-extrabold uppercase tracking-wider cursor-pointer transition-all hover:scale-105 active:scale-95"
-          title="Return to top"
+          className="group flex h-10 w-10 items-center justify-center rounded-full bg-zinc-950/85 hover:bg-zinc-900 text-white backdrop-blur-md border border-white/20 shadow-xl shadow-emerald-950/20 cursor-pointer transition-all hover:scale-105 active:scale-95"
+          title="Back to top"
+          aria-label="Back to top"
         >
-          <div className="relative w-4 h-4 flex items-center justify-center">
-            <ArrowUp className="w-3.5 h-3.5 text-[#CCFF00] group-hover:-translate-y-0.5 transition-transform" />
-          </div>
-          <span ref={percentRef} className="text-[11px] font-mono text-[#CCFF00]">0%</span>
+          <ArrowUp className="w-4 h-4 text-[#CCFF00] group-hover:-translate-y-0.5 transition-transform" />
         </button>
       </motion.div>
     </>

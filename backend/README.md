@@ -56,4 +56,4 @@ Errors are always `{"error": {"code", "message"}}`, with a message that is safe 
 - Everything lives in `DATA_DIR` (default `backend/data/`): `housepickle.db` plus `receipts/`. Put it on a persistent disk and back it up. Serverless hosts won't work.
 - Receipts are never served publicly. Only the upcoming admin will see them.
 - Production: `npm run build` in `frontend/`, then `uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers`. The API serves the built PWA from the same origin, so no CORS setup is needed. Put it behind HTTPS, which PWAs and the clipboard require.
-- Set `GOTYME_ACCOUNT_NUMBER` in `.env` to switch on GoTyme. Until then it shows as "Coming soon".
+- Payment methods: each needs an account number or a QR image to be offered, otherwise it shows "Coming soon". The QR images live in `frontend/public/images/` (`payment-qr-gcash.jpg`, `payment-qr-gotyme.jpg`) and can be swapped via `GCASH_QR_IMAGE` / `GOTYME_QR_IMAGE`. GoTyme shows `GOTYME_ACCOUNT_HINT` (last digits only) because the full account number was never shared.

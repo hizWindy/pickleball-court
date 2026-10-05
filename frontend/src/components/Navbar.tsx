@@ -39,6 +39,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenDirectBooking }) => {
 
           {/* Nav Links */}
           <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-xs font-heading font-bold uppercase tracking-wider text-zinc-600 shrink-0">
+            <a href="#open-slots" className="hover:text-[#15803D] transition-colors whitespace-nowrap">
+              Open Slots
+            </a>
             <a href="#courts" className="hover:text-[#15803D] transition-colors whitespace-nowrap">
               Courts & Rates
             </a>
@@ -52,13 +55,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenDirectBooking }) => {
 
           {/* Right Action Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            {/* Book Court CTA */}
+            {/* Book Court CTA: the one persistent booking button. The navbar is fixed, so it's always in reach. */}
             <motion.button
               whileHover={{ scale: 1.03, y: -1 }}
               whileTap={{ scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 400, damping: 25 }}
               onClick={onOpenDirectBooking}
-              className="group flex items-center gap-1.5 sm:gap-2 pl-2.5 sm:pl-4 pr-1 sm:pr-1.5 py-1.5 rounded-full bg-[#15803D] hover:bg-[#166534] text-white text-[11px] sm:text-xs font-sport font-bold uppercase tracking-wider transition-all cursor-pointer shadow-md shadow-emerald-950/20 shrink-0 whitespace-nowrap"
+              className="group flex items-center gap-1.5 sm:gap-2 pl-2.5 sm:pl-4 pr-1 sm:pr-1.5 py-1.5 rounded-full bg-[#15803D] hover:bg-[#166534] text-white text-[11px] sm:text-xs font-sport font-bold uppercase tracking-wider transition-all cursor-pointer shadow-md shadow-emerald-950/20 shrink-0 whitespace-nowrap animate-book-glow md:animate-none motion-reduce:animate-none"
             >
               <span>Book<span className="hidden sm:inline"> Court</span></span>
               <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-white/20 group-hover:bg-[#CCFF00] group-hover:text-zinc-950 flex items-center justify-center transition-colors">

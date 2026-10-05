@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
+import { NextOpenSlots } from './components/NextOpenSlots';
 import { FramerBentoFeatures } from './components/framer/FramerBentoFeatures';
 import { CourtShowcase } from './components/CourtShowcase';
 import { FramerRulesAccordion } from './components/framer/FramerRulesAccordion';
 import { LocationDetails } from './components/LocationDetails';
-import { FramerFloatingDock } from './components/framer/FramerFloatingDock';
 import { FramerScrollProgress } from './components/framer/FramerScrollProgress';
 import { Footer } from './components/Footer';
 import { Toast } from './components/booking/Toast';
@@ -113,7 +113,7 @@ export function App() {
       <div
         inert={behindLayer ? true : undefined}
         aria-hidden={behindLayer ? true : undefined}
-        className="min-h-screen w-full overflow-x-hidden bg-white text-zinc-900 flex flex-col antialiased selection:bg-[#15803D] selection:text-white pb-14"
+        className="min-h-screen w-full overflow-x-hidden bg-white text-zinc-900 flex flex-col antialiased selection:bg-[#15803D] selection:text-white"
       >
         <FramerScrollProgress />
 
@@ -121,13 +121,13 @@ export function App() {
 
         <main className="flex-1 pt-18 sm:pt-20">
           <Hero onOpenDirectBooking={openBooking} />
+          <NextOpenSlots onBook={openBooking} />
           <FramerBentoFeatures />
           <CourtShowcase onBookCourt={handleBookSpecificCourt} />
           <FramerRulesAccordion />
           <LocationDetails />
         </main>
 
-        <FramerFloatingDock onOpenBooking={() => openBooking()} />
         <Footer />
       </div>
 

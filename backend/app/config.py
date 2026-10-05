@@ -38,10 +38,15 @@ class PaymentAccount:
     label: str
     account_name: str
     account_number: str
+    # Static InstaPay / QR Ph image shown on the pay screen (a path the frontend serves)
+    qr_image: str = ""
+    # Shown instead of the number when only a masked version is known, e.g. "•••• 1204"
+    account_hint: str = ""
 
     @property
     def enabled(self) -> bool:
-        return bool(self.account_number.strip())
+        """A method is usable once players have a number to send to or a QR to scan."""
+        return bool(self.account_number.strip() or self.qr_image.strip())
 
 
 @dataclass(frozen=True)
@@ -64,12 +69,21 @@ class Settings:
     consent_version: str = field(default_factory=lambda: _env("CONSENT_VERSION", "2026-10-v1"))
     gcash: PaymentAccount = field(
         default_factory=lambda: PaymentAccount(
-            "gcash", "GCash", _env("GCASH_ACCOUNT_NAME", "Reymark Vergara"), _env("GCASH_ACCOUNT_NUMBER", "09128285344")
+            "gcash",
+            "GCash",
+            _env("GCASH_ACCOUNT_NAME", "Reymark Vergara"),
+            _env("GCASH_ACCOUNT_NUMBER", "09128285344"),
+            qr_image=_env("GCASH_QR_IMAGE", "/images/payment-qr-gcash.jpg"),
         )
     )
     gotyme: PaymentAccount = field(
         default_factory=lambda: PaymentAccount(
-            "gotyme", "GoTyme", _env("GOTYME_ACCOUNT_NAME", "Reymark Vergara"), _env("GOTYME_ACCOUNT_NUMBER", "")
+            "gotyme",
+            "GoTyme",
+            _env("GOTYME_ACCOUNT_NAME", "Rey Mark Vergara"),
+            _env("GOTYME_ACCOUNT_NUMBER", ""),
+            qr_image=_env("GOTYME_QR_IMAGE", "/images/payment-qr-gotyme.jpg"),
+            account_hint=_env("GOTYME_ACCOUNT_HINT", "•••• 1204"),
         )
     )
     frontend_dist: Path = field(

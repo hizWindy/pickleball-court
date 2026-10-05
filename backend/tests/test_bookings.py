@@ -212,6 +212,28 @@ def test_old_receipts_are_purged_but_still_block_reuse(client, booking_payload, 
     assert res.json()["error"]["code"] == "receipt_used"
 
 
+def test_method_with_only_a_qr_image_is_offered(client, booking_payload, monkeypatch):
+    from dataclasses import replace
+
+    from app import booking_service
+    from app.config import PaymentAccount
+
+    gotyme = PaymentAccount(
+        "gotyme", "GoTyme", "Rey Mark Vergara", "", qr_image="/images/payment-qr-gotyme.jpg", account_hint="•••• 1204"
+    )
+    monkeypatch.setattr(booking_service, "settings", replace(booking_service.settings, gotyme=gotyme))
+
+    cfg = client.get("/api/config").json()
+    entry = next(a for a in cfg["paymentAccounts"] if a["method"] == "gotyme")
+    assert entry["enabled"] is True
+    assert entry["qrImage"] == "/images/payment-qr-gotyme.jpg"
+    assert entry["accountHint"] == "•••• 1204"
+    assert entry["accountNumber"] == ""
+
+    b = create(client, booking_payload, paymentMethod="gotyme").json()
+    assert b["booking"]["paymentMethod"] == "gotyme"
+
+
 def test_config_exposes_rules(client):
     cfg = client.get("/api/config").json()
     assert cfg["holdMinutes"] == 15

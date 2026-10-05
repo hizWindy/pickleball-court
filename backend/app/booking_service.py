@@ -171,7 +171,8 @@ def get_config(conn: sqlite3.Connection) -> ConfigOut:
         payment_accounts=[
             PaymentAccountOut(
                 method=a.method, label=a.label, account_name=a.account_name,
-                account_number=a.account_number, enabled=a.enabled,
+                account_number=a.account_number, qr_image=a.qr_image, account_hint=a.account_hint,
+                enabled=a.enabled,
             )
             for a in (settings.gcash, settings.gotyme)
         ],

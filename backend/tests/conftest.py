@@ -6,7 +6,9 @@ import pytest
 
 # Point the app at a throwaway data dir *before* it is imported.
 os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="housepickle-test-")
-os.environ.setdefault("GOTYME_ACCOUNT_NUMBER", "")
+# GoTyme starts "unconfigured" in tests; one test switches it on with a QR image only.
+os.environ["GOTYME_ACCOUNT_NUMBER"] = ""
+os.environ["GOTYME_QR_IMAGE"] = ""
 
 from fastapi.testclient import TestClient  # noqa: E402
 

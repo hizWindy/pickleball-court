@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { AlertTriangle, ImagePlus, Keyboard, RefreshCw, Upload } from 'lucide-react';
+import { AlertTriangle, Download, ImagePlus, Keyboard, Maximize2, QrCode, RefreshCw, Upload } from 'lucide-react';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { prepareReceipt } from '../../lib/image';
 import { fmtCountdown, fmtSchedule, fmtTime, pesoExact } from '../../lib/time';
@@ -36,6 +36,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const left = useCountdown(booking?.holdExpiresAt ?? null);
@@ -194,16 +195,81 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
               <section>
                 <StepHeading n={1} title={`Send ${pesoExact(booking.total)} via ${account?.label ?? 'GCash'}`} />
                 <div className="space-y-3 rounded-3xl border border-zinc-200 bg-white p-4">
+                  {account?.qrImage && (
+                    <div className="flex flex-col items-center gap-3 rounded-2xl bg-zinc-50 p-4 text-center">
+                      <div>
+                        <p className="flex items-center justify-center gap-1.5 text-sm font-bold text-zinc-950">
+                          <QrCode className="h-4 w-4 shrink-0 text-[#15803D]" /> Pay by QR
+                        </p>
+                        <p className="mt-0.5 text-xs text-zinc-500">Works with {account.label} and other InstaPay apps</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setQrOpen(true)}
+                        className="relative h-44 w-44 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 cursor-pointer"
+                        aria-label={`Enlarge ${account.label} QR code`}
+                      >
+                        <img src={account.qrImage} alt={`${account.label} QR code`} className="h-full w-full object-contain" />
+                        <span className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-zinc-950/70 text-white">
+                          <Maximize2 className="h-3 w-3" />
+                        </span>
+                      </button>
+                      <a
+                        href={account.qrImage}
+                        download={`HousePickle-${account.label}-QR.jpg`}
+                        className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-white px-4 text-sm font-semibold text-zinc-800 ring-1 ring-zinc-200 hover:bg-zinc-100"
+                      >
+                        <Download className="h-4 w-4" /> Save QR image
+                      </a>
+                    </div>
+                  )}
                   <Row label="Account name" value={account?.accountName ?? '—'} />
-                  <Row label={isGcash ? 'GCash number' : 'GoTyme account'} value={account?.accountNumber ?? '—'} mono copy={account?.accountNumber} />
+                  {account?.accountNumber ? (
+                    <Row label={isGcash ? 'GCash number' : 'GoTyme account'} value={account.accountNumber} mono copy={account.accountNumber} />
+                  ) : account?.accountHint ? (
+                    <Row label="Account number" value={account.accountHint} mono />
+                  ) : null}
                   <Row label="Exact amount" value={pesoExact(booking.total)} strong copy={booking.total.toFixed(2)} />
-                  <p className="rounded-2xl bg-zinc-50 px-3 py-2.5 text-xs text-zinc-600">
-                    {isGcash
-                      ? 'Open GCash → Send → Express Send. Paste the number and amount, check the name matches, then send.'
-                      : 'Open GoTyme and send to the account above. Check the name matches before you send.'}{' '}
+                  <p className="rounded-2xl bg-zinc-50 px-3 py-2.5 text-xs leading-relaxed text-zinc-600">
+                    {account?.qrImage ? (
+                      <>
+                        <strong className="text-zinc-800">Easiest:</strong> tap <em>Save QR image</em>, open {account.label}, choose
+                        Scan QR, and upload the saved image from your gallery. Enter <strong>{pesoExact(booking.total)}</strong> and check
+                        the name matches.
+                        {account.accountNumber && isGcash && ' Or use Send Money with the number above.'}
+                      </>
+                    ) : (
+                      <>Open {account?.label ?? 'GCash'} and send to the account above. Check the name matches before you send.</>
+                    )}{' '}
                     Then take a screenshot of the receipt.
                   </p>
                 </div>
+                {qrOpen && account?.qrImage && (
+                  <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/80 p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`${account.label} QR code`}
+                    onClick={() => setQrOpen(false)}
+                  >
+                    <div className="max-h-full w-full max-w-xs overflow-y-auto rounded-3xl bg-white p-3 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                      <img src={account.qrImage} alt={`${account.label} QR code`} className="w-full rounded-2xl" />
+                      <p className="mt-2 px-2 text-center text-xs text-zinc-500">
+                        On iPhone, press and hold the image and choose <strong>Save to Photos</strong>.
+                      </p>
+                      <div className="mt-3 flex gap-2">
+                        <a
+                          href={account.qrImage}
+                          download={`HousePickle-${account.label}-QR.jpg`}
+                          className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-[#15803D] text-sm font-semibold text-white hover:bg-[#166534]"
+                        >
+                          <Download className="h-4 w-4" /> Save
+                        </a>
+                        <SecondaryButton className="flex-1" onClick={() => setQrOpen(false)}>Close</SecondaryButton>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </section>
 
               {/* Step 2: proof */}
