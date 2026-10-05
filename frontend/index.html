@@ -25,41 +25,66 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="HousePickle Club" />
 
-    <!-- Performance Preloads -->
-    <link rel="preload" as="image" href="/images/player-cutout-1.webp" type="image/webp" />
+    <!-- Performance Preloads (Critical Above-the-fold Assets) -->
+    <link rel="preload" as="image" href="/images/player-cutout-1.webp" type="image/webp" fetchpriority="high" />
+    <link rel="preload" as="image" href="/images/player-cutout-2.webp" type="image/webp" fetchpriority="high" />
     <link rel="preload" as="image" href="/icon.svg" type="image/svg+xml" />
+    <link rel="preload" as="image" href="/housepickle-emblem.svg" type="image/svg+xml" />
 
-    <!-- Google Fonts: Righteous (Pickleball brand), Space Grotesk, Barlow Semi Condensed & Plus Jakarta Sans -->
+    <!-- Google Fonts: Righteous (Pickleball brand), Space Grotesk, Barlow Semi Condensed & Plus Jakarta Sans (Non-blocking) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,700;1,800&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Righteous&family=Space+Grotesk:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Righteous&family=Space+Grotesk:wght@600;700;800&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Righteous&family=Space+Grotesk:wght@600;700;800&display=swap" media="print" onload="this.media='all'" />
+    <noscript>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Righteous&family=Space+Grotesk:wght@600;700;800&display=swap" />
+    </noscript>
   </head>
   <body class="bg-[#F8FAFC] text-[#0F172A] font-sans antialiased selection:bg-[#15803D] selection:text-white min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- Production Service Worker Registration for Instant Caching & PWA Support -->
+    <!-- Service Worker: production caching only; automatically bypasses on localhost to prevent port desync -->
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then((reg) => {
-              // Check for SW updates periodically
-              reg.onupdatefound = () => {
-                const installingWorker = reg.installing;
-                if (installingWorker) {
-                  installingWorker.onstatechange = () => {
-                    if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                      console.log('[HousePickle] New content is available; refreshing...');
-                    }
-                  };
-                }
-              };
-            })
-            .catch((err) => {
-              console.warn('[HousePickle] ServiceWorker registration skipped:', err);
+        const isLocalhost = Boolean(
+          window.location.hostname === 'localhost' ||
+          window.location.hostname === '127.0.0.1' ||
+          window.location.hostname === '[::1]'
+        );
+
+        if (isLocalhost) {
+          // Unregister any active SW and purge cache on localhost so dev ports are always aligned
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (const registration of registrations) {
+              registration.unregister();
+            }
+          });
+          if ('caches' in window) {
+            caches.keys().then((keys) => {
+              for (const key of keys) caches.delete(key);
             });
-        });
+          }
+        } else {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+              .then((reg) => {
+                reg.onupdatefound = () => {
+                  const installingWorker = reg.installing;
+                  if (installingWorker) {
+                    installingWorker.onstatechange = () => {
+                      if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        console.log('[HousePickle] New content available; refreshing...');
+                      }
+                    };
+                  }
+                };
+              })
+              .catch((err) => {
+                console.warn('[HousePickle] ServiceWorker registration skipped:', err);
+              });
+          });
+        }
       }
     </script>
   </body>

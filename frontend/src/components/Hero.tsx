@@ -58,7 +58,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
         {/* Left Player Cutout: Bouchard Action Strike - Scaled up for prominent athletic presence */}
         <motion.div
-          style={{ y: player1ScrollY }}
+          style={{ y: player1ScrollY, willChange: 'transform' }}
           initial={{ opacity: 0, x: -30, scale: 0.95 }}
           animate={{
             opacity: 1,
@@ -93,7 +93,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
 
         {/* Right Player Cutout: Male Player Striking Ball - Staggered down on mobile, scaled up for athletic impact */}
         <motion.div
-          style={{ y: player2ScrollY }}
+          style={{ y: player2ScrollY, willChange: 'transform' }}
           initial={{ opacity: 0, x: 30, scale: 0.95 }}
           animate={{
             opacity: 1,
@@ -109,14 +109,15 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
           {/* Luminous Lime Stadium Back-Glow */}
           <div className="absolute -inset-4 bg-[#84CC16]/30 rounded-full blur-2xl -z-10" />
 
-          {/* Borderless Cutout Image with Athletic Silhouette Drop Shadow & Bottom Mesh Fade */}
+          {/* Borderless WebP Cutout with Athletic Silhouette Drop Shadow & Bottom Mesh Fade */}
           <img
-            src="/images/player-cutout-2.png"
+            src="/images/player-cutout-2.webp"
             alt="HousePickle Player Dink Rally"
             width={346}
             height={382}
             loading="eager"
             decoding="async"
+            fetchPriority="high"
             className="w-full h-auto object-contain drop-shadow-[0_15px_35px_rgba(132,204,22,0.32)]"
             style={{
               maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)',

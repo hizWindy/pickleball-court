@@ -99,3 +99,16 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #15803D;
 }
+
+/* Performance Optimizations: content-visibility skips rendering offscreen DOM subtrees */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 700px;
+}
+
+/* GPU hardware compositing layer promotion */
+.gpu-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}

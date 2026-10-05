@@ -50,7 +50,7 @@ export const FramerRulesAccordion: React.FC = () => {
   };
 
   return (
-    <section className="py-16 bg-[#FAFCF9] border-b border-zinc-200">
+    <section className="py-16 bg-[#FAFCF9] border-b border-zinc-200 cv-auto">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 25 }}

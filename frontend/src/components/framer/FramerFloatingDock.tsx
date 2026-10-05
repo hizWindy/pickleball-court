@@ -10,10 +10,14 @@ export const FramerFloatingDock: React.FC<FramerFloatingDockProps> = ({ onOpenBo
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    let currentVisible = false;
     const handleScroll = () => {
-      // Only show dock after scrolling down past the hero booking console
-      const scrolled = window.scrollY > 480;
-      setIsVisible(scrolled);
+      // Only trigger state update when crossing the visibility threshold
+      const nextVisible = window.scrollY > 480;
+      if (nextVisible !== currentVisible) {
+        currentVisible = nextVisible;
+        setIsVisible(nextVisible);
+      }
     };
 
     handleScroll();

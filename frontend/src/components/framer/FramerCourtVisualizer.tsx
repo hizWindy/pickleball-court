@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useRef } from 'react';
+import { motion, AnimatePresence, useInView } from 'motion/react';
 import { Sparkles, Eye, Layers, Play, Pause } from 'lucide-react';
 
 interface Hotspot {
@@ -67,11 +67,13 @@ const HOTSPOTS: Hotspot[] = [
 ];
 
 export const FramerCourtVisualizer: React.FC = () => {
+  const visualizerRef = useRef<HTMLDivElement>(null);
+  const isInView = useInView(visualizerRef, { margin: '150px' });
   const [activeHotspot, setActiveHotspot] = useState<Hotspot | null>(HOTSPOTS[0]);
   const [isSimulating, setIsSimulating] = useState(true);
 
   return (
-    <div className="double-bezel max-w-5xl mx-auto shadow-2xl shadow-emerald-950/10">
+    <div ref={visualizerRef} className="double-bezel max-w-5xl mx-auto shadow-2xl shadow-emerald-950/10">
       <div className="double-bezel-inner overflow-hidden">
         {/* Header Bar */}
         <div className="bg-gradient-to-r from-[#15803D] via-[#166534] to-[#093b1b] px-5 py-3.5 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -174,10 +176,11 @@ export const FramerCourtVisualizer: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Animated Pickleball Rally Simulation with Impact Glow */}
-                {isSimulating && (
+                {/* Animated Pickleball Rally Simulation with Impact Glow (Only animates while on-screen) */}
+                {isSimulating && isInView && (
                   <motion.div
                     className="absolute z-20 w-5 h-5 rounded-full bg-[#CCFF00] border-2 border-zinc-950 shadow-lg shadow-[#CCFF00]/50"
+                    style={{ willChange: 'left, top, transform' }}
                     animate={{
                       left: ['26%', '70%', '32%', '66%', '26%'],
                       top: ['22%', '80%', '68%', '16%', '22%'],

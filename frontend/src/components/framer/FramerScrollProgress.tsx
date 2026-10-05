@@ -11,17 +11,29 @@ export const FramerScrollProgress: React.FC = () => {
   });
 
   const [isVisible, setIsVisible] = useState(false);
-  const [scrollPercent, setScrollPercent] = useState(0);
+  const percentRef = React.useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
+    let currentVisible = false;
     return scrollY.on('change', (latest) => {
-      setIsVisible(latest > 350);
+      const nextVisible = latest > 350;
+      if (nextVisible !== currentVisible) {
+        currentVisible = nextVisible;
+        setIsVisible(nextVisible);
+      }
     });
   }, [scrollY]);
 
   useEffect(() => {
+    let lastPercent = -1;
     return scrollYProgress.on('change', (latest) => {
-      setScrollPercent(Math.round(latest * 100));
+      const p = Math.round(latest * 100);
+      if (p !== lastPercent) {
+        lastPercent = p;
+        if (percentRef.current) {
+          percentRef.current.textContent = `${p}%`;
+        }
+      }
     });
   }, [scrollYProgress]);
 
@@ -58,7 +70,7 @@ export const FramerScrollProgress: React.FC = () => {
           <div className="relative w-4 h-4 flex items-center justify-center">
             <ArrowUp className="w-3.5 h-3.5 text-[#CCFF00] group-hover:-translate-y-0.5 transition-transform" />
           </div>
-          <span className="text-[11px] font-mono text-[#CCFF00]">{scrollPercent}%</span>
+          <span ref={percentRef} className="text-[11px] font-mono text-[#CCFF00]">0%</span>
         </button>
       </motion.div>
     </>

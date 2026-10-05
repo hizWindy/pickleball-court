@@ -41,7 +41,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
   ];
 
   return (
-    <section id="courts" className="py-16 bg-white border-b border-zinc-200">
+    <section id="courts" className="py-16 bg-white border-b border-zinc-200 cv-auto">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-12">
         {/* Architectural Court Venue Showcase Banner */}
         <motion.div

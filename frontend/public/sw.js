@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'housepickle-v2';
+const CACHE_VERSION = 'housepickle-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -7,13 +7,7 @@ const STATIC_ASSETS = [
   '/favicon.svg',
   '/housepickle-emblem.svg',
   '/images/player-cutout-1.webp',
-  '/images/player-cutout-2.png',
-  '/images/night-atmosphere.webp',
-  '/images/gear-paddle.webp',
-  '/images/housepickle-arena-court-clean.webp',
-  '/images/housepickle-venue-aerial.webp',
-  '/images/court-championship.webp',
-  '/images/court-guide.webp'
+  '/images/player-cutout-2.webp'
 ];
 
 // Install: pre-cache critical shell assets

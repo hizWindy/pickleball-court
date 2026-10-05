@@ -13,15 +13,14 @@ import {
 } from 'lucide-react';
 import { COURT_DETAILS } from '../../data/mockData';
 
-export const FramerBentoFeatures: React.FC = () => {
-  const [currentTime, setCurrentTime] = useState<string>('');
-  const [copiedNumber, setCopiedNumber] = useState(false);
+// Memoized standalone live clock so its 1-second interval never re-renders the whole Bento grid
+const LiveClock: React.FC = React.memo(() => {
+  const [time, setTime] = useState<string>('');
 
   useEffect(() => {
     const update = () => {
-      const now = new Date();
-      setCurrentTime(
-        now.toLocaleTimeString('en-US', {
+      setTime(
+        new Date().toLocaleTimeString('en-US', {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
@@ -34,6 +33,12 @@ export const FramerBentoFeatures: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  return <span>{time || '12:00:00 AM'}</span>;
+});
+
+export const FramerBentoFeatures: React.FC = () => {
+  const [copiedNumber, setCopiedNumber] = useState(false);
+
   const handleCopy = () => {
     navigator.clipboard.writeText(COURT_DETAILS.contactNumber);
     setCopiedNumber(true);
@@ -41,7 +46,7 @@ export const FramerBentoFeatures: React.FC = () => {
   };
 
   return (
-    <section className="py-14 bg-white border-b border-zinc-200 relative overflow-hidden">
+    <section className="py-14 bg-white border-b border-zinc-200 relative overflow-hidden cv-auto">
       {/* Background glow orbs */}
       <div className="absolute top-1/2 left-0 w-72 h-72 bg-[#15803D]/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -121,7 +126,7 @@ export const FramerBentoFeatures: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <span className="text-zinc-300 font-sport uppercase text-[11px] font-semibold">Koronadal Clock:</span>
                   <span className="font-mono font-bold text-[#CCFF00] bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/20 shadow-xs">
-                    {currentTime || '12:00:00 AM'}
+                    <LiveClock />
                   </span>
                 </div>
                 <span className="text-[11px] font-sport font-bold uppercase tracking-wider text-emerald-300">

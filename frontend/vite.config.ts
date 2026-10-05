@@ -27,8 +27,11 @@ export default defineConfig({
           if (id.includes('node_modules/lucide-react/')) {
             return 'vendor-icons';
           }
-          if (id.includes('node_modules/date-fns/') || id.includes('node_modules/canvas-confetti/')) {
-            return 'vendor-utils';
+          if (id.includes('node_modules/canvas-confetti/')) {
+            return 'vendor-confetti';
+          }
+          if (id.includes('node_modules/date-fns/')) {
+            return 'vendor-date-fns';
           }
         },
       },

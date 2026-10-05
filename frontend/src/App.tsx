@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { FramerBentoFeatures } from './components/framer/FramerBentoFeatures';
@@ -8,35 +8,61 @@ import { LocationDetails } from './components/LocationDetails';
 import { FramerFloatingDock } from './components/framer/FramerFloatingDock';
 import { FramerScrollProgress } from './components/framer/FramerScrollProgress';
 import { Footer } from './components/Footer';
-import { DirectBookingModal } from './components/booking/DirectBookingModal';
-import { MyBookingsModal } from './components/MyBookingsModal';
 import { getBookings } from './services/storage';
 import { Booking, Court, TimeSlot } from './types';
 
+// Lazy-load heavy modals to dramatically reduce initial JavaScript bundle size & execution time
+const DirectBookingModal = lazy(() =>
+  import('./components/booking/DirectBookingModal').then((m) => ({ default: m.DirectBookingModal }))
+);
+const MyBookingsModal = lazy(() =>
+  import('./components/MyBookingsModal').then((m) => ({ default: m.MyBookingsModal }))
+);
+
 export function App() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>(() => getBookings());
   const [isDirectBookingOpen, setIsDirectBookingOpen] = useState(false);
   const [isMyBookingsOpen, setIsMyBookingsOpen] = useState(false);
+  const [hasOpenedBooking, setHasOpenedBooking] = useState(false);
+  const [hasOpenedMyBookings, setHasOpenedMyBookings] = useState(false);
 
   const [bookingInitialDate, setBookingInitialDate] = useState<Date>(new Date());
   const [bookingInitialSlot, setBookingInitialSlot] = useState<TimeSlot | undefined>(undefined);
   const [bookingInitialCourt, setBookingInitialCourt] = useState<Court | undefined>(undefined);
 
   useEffect(() => {
-    setBookings(getBookings());
+    // Prefetch modals during browser idle time so when clicked they render instantaneously with zero delay
+    const prefetchModals = () => {
+      import('./components/booking/DirectBookingModal');
+      import('./components/MyBookingsModal');
+    };
+    if (typeof window !== 'undefined') {
+      if ('requestIdleCallback' in window) {
+        (window as unknown as { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => void }).requestIdleCallback(prefetchModals, { timeout: 2500 });
+      } else {
+        setTimeout(prefetchModals, 1500);
+      }
+    }
   }, []);
 
   const handleOpenDirectBooking = (date?: Date, slot?: TimeSlot, court?: Court) => {
     if (date) setBookingInitialDate(date);
     setBookingInitialSlot(slot);
     setBookingInitialCourt(court);
+    setHasOpenedBooking(true);
     setIsDirectBookingOpen(true);
   };
 
   const handleBookSpecificCourt = (court: Court) => {
     setBookingInitialCourt(court);
     setBookingInitialSlot(undefined);
+    setHasOpenedBooking(true);
     setIsDirectBookingOpen(true);
+  };
+
+  const handleOpenMyBookings = () => {
+    setHasOpenedMyBookings(true);
+    setIsMyBookingsOpen(true);
   };
 
   const handleBookingSuccess = (_newBooking: Booking) => {
@@ -51,7 +77,7 @@ export function App() {
       {/* Top Clean Navbar */}
       <Navbar
         onOpenDirectBooking={() => handleOpenDirectBooking()}
-        onOpenMyBookings={() => setIsMyBookingsOpen(true)}
+        onOpenMyBookings={handleOpenMyBookings}
         bookingCount={bookings.filter((b) => b.status !== 'cancelled').length}
       />
 
@@ -79,23 +105,31 @@ export function App() {
       {/* Footer */}
       <Footer />
 
-      {/* Direct Booking Modal */}
-      <DirectBookingModal
-        isOpen={isDirectBookingOpen}
-        onClose={() => setIsDirectBookingOpen(false)}
-        onBookingSuccess={handleBookingSuccess}
-        initialDate={bookingInitialDate}
-        initialSlot={bookingInitialSlot}
-        initialCourt={bookingInitialCourt}
-      />
+      {/* Direct Booking Modal (Code-split with idle prefetch) */}
+      {hasOpenedBooking && (
+        <Suspense fallback={null}>
+          <DirectBookingModal
+            isOpen={isDirectBookingOpen}
+            onClose={() => setIsDirectBookingOpen(false)}
+            onBookingSuccess={handleBookingSuccess}
+            initialDate={bookingInitialDate}
+            initialSlot={bookingInitialSlot}
+            initialCourt={bookingInitialCourt}
+          />
+        </Suspense>
+      )}
 
-      {/* My Passes Modal */}
-      <MyBookingsModal
-        isOpen={isMyBookingsOpen}
-        onClose={() => setIsMyBookingsOpen(false)}
-        bookings={bookings}
-        onBookingsUpdated={(updated) => setBookings(updated)}
-      />
+      {/* My Passes Modal (Code-split with idle prefetch) */}
+      {hasOpenedMyBookings && (
+        <Suspense fallback={null}>
+          <MyBookingsModal
+            isOpen={isMyBookingsOpen}
+            onClose={() => setIsMyBookingsOpen(false)}
+            bookings={bookings}
+            onBookingsUpdated={(updated) => setBookings(updated)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

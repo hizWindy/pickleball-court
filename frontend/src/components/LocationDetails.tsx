@@ -27,7 +27,7 @@ export const LocationDetails: React.FC = () => {
   )}`;
 
   return (
-    <section id="location" className="py-16 bg-white border-b border-zinc-200">
+    <section id="location" className="py-16 bg-white border-b border-zinc-200 cv-auto">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 25 }}
