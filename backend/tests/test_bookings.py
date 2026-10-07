@@ -107,13 +107,13 @@ def test_booking_survives_refresh_until_deadline(client, booking_payload, fake_n
 
 
 # ── Payment proof ─────────────────────────────────────────────────────────────
-def test_receipt_upload_moves_to_pending_and_keeps_slot(client, booking_payload, fake_now):
+def test_receipt_upload_confirms_the_booking_and_keeps_the_slot(client, booking_payload, fake_now):
     body = create(client, booking_payload).json()
     code, token = body["booking"]["code"], body["accessToken"]
     fake_now.advance(minutes=5)
     res = client.post(f"/api/bookings/{code}/receipt", headers=auth(token), files={"receipt": ("r.png", PNG)})
     assert res.status_code == 200, res.text
-    assert res.json()["status"] == "pending_verification"
+    assert res.json()["status"] == "confirmed"
     fake_now.advance(hours=2)  # no longer bound by the 15-minute hold
     assert slot_state(client, "2026-10-10", 19) == "booked"
 
@@ -151,6 +151,15 @@ def test_typed_reference_accepted(client, booking_payload, fake_now):
     res = _reference(client, body)
     assert res.status_code == 200, res.text
     assert res.json()["proofType"] == "reference"
+    assert res.json()["status"] == "confirmed"
+
+
+def test_reference_from_another_bank_is_accepted_for_the_gcash_qr(client, booking_payload, fake_now):
+    # The QR codes are InstaPay QR Ph, so a player may pay the GCash QR from GoTyme.
+    body = create(client, booking_payload).json()
+    fake_now.advance(minutes=4)
+    res = _reference(client, body, referenceNumber="GT2026101009410293")
+    assert res.status_code == 200, res.text
 
 
 def test_gcash_reference_must_be_13_digits(client, booking_payload):
@@ -240,3 +249,56 @@ def test_config_exposes_rules(client):
     assert [c["id"] for c in cfg["courts"]] == ["court-1", "court-2"]
     gotyme = next(a for a in cfg["paymentAccounts"] if a["method"] == "gotyme")
     assert gotyme["enabled"] is False
+
+
+# ── Privacy: the player's IP is only kept while it's needed ───────────────────
+def _ip_of(code):
+    from app.db import connect
+
+    conn = connect()
+    try:
+        return conn.execute("SELECT client_ip FROM bookings WHERE code = ?", (code,)).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_ip_is_kept_only_while_the_hold_is_open(client, booking_payload):
+    body = create(client, booking_payload).json()
+    code, token = body["booking"]["code"], body["accessToken"]
+    assert _ip_of(code)  # needed to cap simultaneous holds per device
+    client.post(f"/api/bookings/{code}/receipt", headers=auth(token), files={"receipt": ("r.png", PNG)})
+    assert _ip_of(code) is None  # proof sent: no longer a hold
+
+
+def test_ip_is_dropped_when_a_hold_is_cancelled_or_expires(client, booking_payload, fake_now):
+    a = create(client, booking_payload).json()
+    client.post(f"/api/bookings/{a['booking']['code']}/cancel", headers=auth(a["accessToken"]))
+    assert _ip_of(a["booking"]["code"]) is None
+
+    b = create(client, booking_payload, hour=20).json()
+    fake_now.advance(minutes=16)
+    client.get("/api/availability", params={"date": "2026-10-10"})  # any request releases overdue holds
+    assert _ip_of(b["booking"]["code"]) is None
+
+
+def test_old_rows_are_cleaned_and_new_indexes_exist():
+    import sqlite3
+
+    from app import db
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    db.apply_schema(conn)
+    conn.execute(
+        """INSERT INTO bookings (id, code, status, court_id, start_at, hours, customer_name, customer_phone, payment_method,
+               court_cost, addons_cost, total, consent_at, consent_version, client_ip, created_at, hold_expires_at)
+           VALUES ('b1', 'HPC-AAAA-BBBB', 'confirmed', 'court-1', '2026-10-10T10:00:00Z', 1, 'A B', '09171234567', 'gcash',
+                   250, 0, 250, 'x', 'v', '1.2.3.4', 'x', 'x')"""
+    )
+    db.apply_schema(conn)  # runs on every start-up
+    assert conn.execute("SELECT client_ip FROM bookings").fetchone()[0] is None
+    plan = " ".join(r[3] for r in conn.execute("EXPLAIN QUERY PLAN SELECT * FROM bookings WHERE start_at >= 'a' AND start_at < 'b' ORDER BY start_at"))
+    assert "idx_bookings_start" in plan
+    plan = " ".join(r[3] for r in conn.execute("EXPLAIN QUERY PLAN SELECT booking_id FROM booking_slots WHERE slot_start BETWEEN 'a' AND 'b'"))
+    assert "idx_slots_start" in plan
+    conn.close()

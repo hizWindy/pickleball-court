@@ -36,7 +36,11 @@ export const PrivacyNotice: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         </div>
         <div>
           <h3 className="font-semibold text-zinc-900">How long</h3>
-          <p>Booking records are kept for reference. Receipt images are deleted after 90 days.</p>
+          <p>
+            Booking records are kept for reference. Receipt images are deleted about a week after your booking is confirmed. To confirm
+            you instantly, our own server reads the amount, reference number, date and recipient off your receipt; the image is not sent
+            to any other company.
+          </p>
         </div>
         <div>
           <h3 className="font-semibold text-zinc-900">Your rights</h3>

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 
-export const Toast: React.FC<{ message: string | null; onDone: () => void }> = ({ message, onDone }) => {
+export const Toast: React.FC<{ message: string | null; onDone: () => void; bottomClass?: string }> = ({ message, onDone, bottomClass = 'bottom-6' }) => {
   useEffect(() => {
     if (!message) return;
     const t = setTimeout(onDone, 5000);
@@ -9,7 +9,7 @@ export const Toast: React.FC<{ message: string | null; onDone: () => void }> = (
   }, [message, onDone]);
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[90] flex justify-center px-4" aria-live="polite">
+    <div className={`pointer-events-none fixed inset-x-0 ${bottomClass} z-[90] flex justify-center px-4`} aria-live="polite">
       <AnimatePresence>
         {message && (
           <motion.div

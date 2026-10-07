@@ -2,6 +2,11 @@ fastapi>=0.115
 uvicorn[standard]>=0.30
 python-multipart>=0.0.9
 
+# Receipt reading (OCR) on our own server. Models ship inside the package (~30 MB).
+# On slim Linux images opencv needs: apt-get install -y libgl1 libglib2.0-0
+rapidocr>=3.0
+onnxruntime>=1.18
+
 # tests
 pytest>=8
 httpx>=0.27

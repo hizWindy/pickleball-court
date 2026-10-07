@@ -64,8 +64,17 @@ class Settings:
     # Paid-time check for typed references: payment must fall inside the hold window ± this tolerance
     paid_time_tolerance_minutes: int = field(default_factory=lambda: _env_int("PAID_TIME_TOLERANCE_MINUTES", 5))
     paddle_fee: int = field(default_factory=lambda: _env_int("PADDLE_FEE", 80))
-    # Privacy Notice promise: receipt images are deleted after this many days (the hash is kept to block reuse)
-    receipt_retention_days: int = field(default_factory=lambda: _env_int("RECEIPT_RETENTION_DAYS", 90))
+    # Privacy Notice promise: a receipt image is deleted this many days after the host confirms or rejects the
+    # payment, or after the hard cap below if nobody ever reviewed it. The hash is kept to block reuse.
+    receipt_keep_after_decision_days: int = field(default_factory=lambda: _env_int("RECEIPT_KEEP_AFTER_DECISION_DAYS", 7))
+    receipt_retention_days: int = field(default_factory=lambda: _env_int("RECEIPT_RETENTION_DAYS", 14))
+    # Read amount / reference / date / recipient off uploaded receipts (on this server; see app/ocr.py).
+    ocr_enabled: bool = field(default_factory=lambda: _env("OCR_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off"))
+    # Admin desk. With neither password set the admin API stays locked and no one can sign in.
+    # ADMIN_PASSWORD_HASH (made with `python -m app.admin_auth`) is preferred over a plain ADMIN_PASSWORD.
+    admin_password: str = field(default_factory=lambda: _env("ADMIN_PASSWORD", ""))
+    admin_password_hash: str = field(default_factory=lambda: _env("ADMIN_PASSWORD_HASH", ""))
+    admin_session_hours: int = field(default_factory=lambda: _env_int("ADMIN_SESSION_HOURS", 168))
     consent_version: str = field(default_factory=lambda: _env("CONSENT_VERSION", "2026-10-v1"))
     gcash: PaymentAccount = field(
         default_factory=lambda: PaymentAccount(

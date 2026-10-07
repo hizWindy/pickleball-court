@@ -15,7 +15,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import booking_service
+from app import admin_auth, booking_service
+from app.admin_api import router as admin_router
 from app.api import router
 from app.config import settings
 from app.db import connect, init_db
@@ -48,6 +49,8 @@ async def _sweep_forever() -> None:
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_db()
+    if not admin_auth.configured():
+        log.warning("Admin desk is locked: set ADMIN_PASSWORD_HASH (python -m app.admin_auth) or ADMIN_PASSWORD to sign in.")
     task = asyncio.create_task(_sweep_forever())
     try:
         yield
@@ -76,11 +79,16 @@ async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    if request.url.path.startswith("/api/"):
+    response.headers.setdefault("X-Frame-Options", "DENY")  # nobody gets to frame the site (or the admin desk)
+    path = request.url.path
+    if path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"  # availability and bookings must never be stale
+    if path.startswith("/api/admin") or path == "/admin" or path.startswith("/admin/"):
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
     return response
 
 
+app.include_router(admin_router)  # before the public router, whose catch-all would swallow /api/admin/*
 app.include_router(router)
 
 # In production, serve the built PWA from the same origin (no CORS, one deployment).

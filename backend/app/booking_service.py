@@ -2,9 +2,15 @@
 
 Lifecycle:
 
-    held ──(receipt / reference submitted)──▶ pending_verification ──(admin)──▶ confirmed | rejected
+    held ──(receipt / reference submitted)──▶ confirmed ──(host spots a problem)──▶ rejected
      │  └─(15 min pass)──▶ expired
-     └────(player cancels)──▶ cancelled        (pending_verification can be cancelled too)
+     └────(player cancels)──▶ cancelled
+
+* Payment proof confirms the booking straight away. A receipt image is read on the server
+  (amount, reference, date, recipient) and anything that doesn't fit the booking is saved as
+  review flags, so the host can check the doubtful ones afterwards. The same payment
+  (image or reference number) can never confirm two bookings.
+* `pending_verification` is only left on bookings made before automatic confirmation.
 
 * A booking occupies one `booking_slots` row per court-hour from the moment it
   is held. The table's primary key makes double booking impossible.
@@ -15,12 +21,14 @@ Lifecycle:
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
+import time
 import sqlite3
 import uuid
 from datetime import date, datetime, timedelta
 
-from app import clock, receipts
+from app import clock, ocr, receipt_reader, receipts
 from app.clock import MANILA, from_iso, to_iso
 from app.config import settings
 from app.db import write_transaction
@@ -48,7 +56,7 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _new_code(conn: sqlite3.Connection) -> str:
+def new_code(conn: sqlite3.Connection) -> str:
     for _ in range(10):
         raw = "".join(secrets.choice(_CODE_ALPHABET) for _ in range(8))
         code = f"HPC-{raw[:4]}-{raw[4:]}"
@@ -78,7 +86,7 @@ def _courts(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute("SELECT * FROM courts WHERE active = 1 ORDER BY sort_order").fetchall()
 
 
-def _release_slots(conn: sqlite3.Connection, booking_id: str) -> None:
+def release_slots(conn: sqlite3.Connection, booking_id: str) -> None:
     conn.execute("DELETE FROM booking_slots WHERE booking_id = ?", (booking_id,))
 
 
@@ -91,10 +99,10 @@ def release_expired(conn: sqlite3.Connection, now: datetime | None = None) -> in
     ).fetchall()
     for row in rows:
         conn.execute(
-            "UPDATE bookings SET status = 'expired', closed_at = ?, close_reason = 'hold_timeout' WHERE id = ?",
+            "UPDATE bookings SET status = 'expired', closed_at = ?, close_reason = 'hold_timeout', client_ip = NULL WHERE id = ?",
             (to_iso(now), row["id"]),
         )
-        _release_slots(conn, row["id"])
+        release_slots(conn, row["id"])
     return len(rows)
 
 
@@ -103,16 +111,35 @@ def sweep(conn: sqlite3.Connection) -> int:
         return release_expired(conn)
 
 
+def claim_slots(conn: sqlite3.Connection, court_name: str, court_id: str, items: list, booking_id: str) -> None:
+    """Take one `booking_slots` row per hour. The primary key turns a clash into a clean Conflict."""
+    for item in items:
+        try:
+            conn.execute(
+                "INSERT INTO booking_slots (court_id, slot_start, booking_id) VALUES (?, ?, ?)",
+                (court_id, to_iso(item.start), booking_id),
+            )
+        except sqlite3.IntegrityError:
+            label = item.start.astimezone(MANILA).strftime("%I:%M %p").lstrip("0")
+            raise Conflict("slot_taken", f"{court_name} at {label} was just taken. Please choose another time or court.") from None
+
+
 def purge_old_receipts(conn: sqlite3.Connection, now: datetime | None = None) -> int:
-    """Delete receipt images past the retention period. The sha256 stays so a receipt can't be reused."""
+    """Delete receipt images once they are no longer needed: a few days after the host decided on the
+    payment, or after a hard cap if nobody ever reviewed it. The sha256 stays so a receipt can't be reused."""
     now = now or clock.now()
-    cutoff = to_iso(now - timedelta(days=settings.receipt_retention_days))
+    decided_cutoff = to_iso(now - timedelta(days=settings.receipt_keep_after_decision_days))
+    hard_cutoff = to_iso(now - timedelta(days=settings.receipt_retention_days))
     with write_transaction(conn):
         rows = conn.execute(
-            "SELECT id, receipt_path FROM bookings WHERE receipt_path IS NOT NULL AND submitted_at <= ?", (cutoff,)
+            """SELECT id, receipt_path FROM bookings
+               WHERE receipt_path IS NOT NULL
+                 AND (COALESCE(decided_at, closed_at) <= ? OR submitted_at <= ?)""",
+            (decided_cutoff, hard_cutoff),
         ).fetchall()
         for row in rows:
             conn.execute("UPDATE bookings SET receipt_path = NULL WHERE id = ?", (row["id"],))
+            conn.execute("UPDATE receipt_scans SET raw_text = NULL WHERE booking_id = ?", (row["id"],))
     for row in rows:
         receipts.delete(row["receipt_path"])
     return len(rows)
@@ -283,7 +310,7 @@ def create_booking(conn: sqlite3.Connection, data: CreateBookingIn, ip: str) -> 
         court_cost = sum(i.rate for i in items)
         addons_cost = settings.paddle_fee if data.paddles else 0
         booking_id = str(uuid.uuid4())
-        code = _new_code(conn)
+        code = new_code(conn)
         conn.execute(
             """INSERT INTO bookings (
                    id, code, status, court_id, start_at, hours, customer_name, customer_phone,
@@ -297,17 +324,7 @@ def create_booking(conn: sqlite3.Connection, data: CreateBookingIn, ip: str) -> 
                 to_iso(now + timedelta(minutes=settings.hold_minutes)),
             ),
         )
-        for item in items:
-            try:
-                conn.execute(
-                    "INSERT INTO booking_slots (court_id, slot_start, booking_id) VALUES (?, ?, ?)",
-                    (court["id"], to_iso(item.start), booking_id),
-                )
-            except sqlite3.IntegrityError:
-                label = item.start.astimezone(MANILA).strftime("%I:%M %p").lstrip("0")
-                raise Conflict(
-                    "slot_taken", f"{court['name']} at {label} was just taken. Please choose another time or court."
-                ) from None
+        claim_slots(conn, court["name"], court["id"], items, booking_id)
         token = _issue_token(conn, booking_id, now)
         row = conn.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,)).fetchone()
     return to_view(conn, row, now), token
@@ -318,18 +335,38 @@ def _held_for_proof(conn: sqlite3.Connection, code: str, token: str | None, now:
     row = _authorized(conn, code, token)
     if row["status"] == "expired":
         raise Gone("hold_expired", "Your 15-minute hold ran out, so the slot was released. Please book again.")
-    if row["status"] == "pending_verification":
+    if row["submitted_at"] and row["status"] in ("pending_verification", "confirmed"):
         raise Conflict("already_submitted", "Payment proof was already submitted for this booking.")
     if row["status"] != "held":
         raise Conflict("not_held", "This booking is no longer waiting for payment.")
     return row
 
 
-def _mark_submitted(conn: sqlite3.Connection, booking_id: str, now: datetime, **fields: object) -> None:
+def _confirm_with_proof(conn: sqlite3.Connection, booking_id: str, now: datetime, flags: list, **fields: object) -> None:
+    """Proof in hand: the booking is confirmed now. What looked off is kept for the host."""
     cols = ", ".join(f"{k} = ?" for k in fields)
     conn.execute(
-        f"UPDATE bookings SET status = 'pending_verification', submitted_at = ?, {cols} WHERE id = ?",
-        (to_iso(now), *fields.values(), booking_id),
+        f"""UPDATE bookings SET status = 'confirmed', submitted_at = ?, decided_at = ?, client_ip = NULL,
+               review_flags = ?, {cols} WHERE id = ?""",
+        (to_iso(now), to_iso(now), json.dumps([{"code": f.code, "message": f.message} for f in flags]), *fields.values(), booking_id),
+    )
+
+
+def _last4(value: str) -> str | None:
+    digits = "".join(c for c in value or "" if c.isdigit())
+    return digits[-4:] if len(digits) >= 4 else None
+
+
+def expected_payment(row: sqlite3.Row, now: datetime) -> receipt_reader.Expected:
+    """A genuine payment for this booking: its total, made during the hold, to one of the club's accounts."""
+    accounts = [a for a in (settings.gcash, settings.gotyme) if a.enabled]
+    return receipt_reader.Expected(
+        total=row["total"],
+        window_start=from_iso(row["created_at"]),
+        window_end=now,
+        tolerance=timedelta(minutes=settings.paid_time_tolerance_minutes),
+        recipient_names=[a.account_name for a in accounts if a.account_name],
+        recipient_last4={d for a in accounts for d in (_last4(a.account_number), _last4(a.account_hint)) if d},
     )
 
 
@@ -337,6 +374,12 @@ def submit_receipt(
     conn: sqlite3.Connection, code: str, token: str | None, data: bytes, payer_name: str | None
 ) -> BookingOut:
     ext, digest = receipts.validate(data)
+    # Read the receipt before taking the write lock: OCR takes a second or two.
+    started = time.monotonic()
+    lines = ocr.read_lines(data)
+    reading = receipt_reader.read(lines) if lines else None
+    took_ms = int((time.monotonic() - started) * 1000)
+
     now = clock.now()
     stored = None
     try:
@@ -346,12 +389,37 @@ def submit_receipt(
                 raise Conflict(
                     "receipt_used", "This receipt was already used for another booking. Upload the receipt for this payment."
                 )
+            ref = reading.reference if reading else None
+            if ref and conn.execute("SELECT 1 FROM bookings WHERE reference_number = ? AND id != ?", (ref, row["id"])).fetchone():
+                raise Conflict(
+                    "payment_used",
+                    "This payment was already used for another booking. Upload the receipt for this booking's payment.",
+                )
+            flags = receipt_reader.assess(reading, expected_payment(row, now))
             stored = receipts.save(row["id"], data, ext, digest)
-            _mark_submitted(
-                conn, row["id"], now, proof_type="receipt", receipt_path=stored.path,
-                receipt_sha256=stored.sha256, payer_name=payer_name,
+            _confirm_with_proof(
+                conn, row["id"], now, flags, proof_type="receipt", receipt_path=stored.path, receipt_sha256=stored.sha256,
+                payer_name=payer_name, reference_number=ref,
+                paid_at=to_iso(reading.paid_at) if reading and reading.paid_at else None,
+            )
+            conn.execute(
+                """INSERT OR REPLACE INTO receipt_scans (booking_id, engine, provider, amount_centavos, reference, paid_at,
+                       recipient_name, recipient_number, success, raw_text, duration_ms, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row["id"], "rapidocr" if lines is not None else "none",
+                    reading.provider if reading else None, reading.amount_centavos if reading else None, ref,
+                    to_iso(reading.paid_at) if reading and reading.paid_at else None,
+                    reading.recipient_name if reading else None, reading.recipient_number if reading else None,
+                    None if not reading or reading.success is None else int(reading.success),
+                    reading.text if reading else None, took_ms, to_iso(now),
+                ),
             )
             row = conn.execute("SELECT * FROM bookings WHERE id = ?", (row["id"],)).fetchone()
+    except sqlite3.IntegrityError:  # two uploads of one payment raced past the check above
+        if stored is not None:
+            receipts.delete(stored.path)
+        raise Conflict("payment_used", "This payment was already used for another booking.") from None
     except BaseException:
         if stored is not None:
             receipts.delete(stored.path)
@@ -388,8 +456,8 @@ def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, dat
         paid_at = _resolve_paid_time(data.paid_time, from_iso(row["created_at"]), now)
         if conn.execute("SELECT 1 FROM bookings WHERE reference_number = ?", (ref,)).fetchone():
             raise Conflict("reference_used", "This reference number was already used for another booking.")
-        _mark_submitted(
-            conn, row["id"], now, proof_type="reference", reference_number=ref,
+        _confirm_with_proof(
+            conn, row["id"], now, receipt_reader.typed_flags(), proof_type="reference", reference_number=ref,
             paid_at=to_iso(paid_at), payer_name=data.payer_name,
         )
         row = conn.execute("SELECT * FROM bookings WHERE id = ?", (row["id"],)).fetchone()
@@ -408,9 +476,9 @@ def cancel(conn: sqlite3.Connection, code: str, token: str | None) -> BookingOut
                 "contact_host", "Confirmed bookings can't be cancelled online. Please contact the host."
             )
         conn.execute(
-            "UPDATE bookings SET status = 'cancelled', closed_at = ?, close_reason = 'customer' WHERE id = ?",
+            "UPDATE bookings SET status = 'cancelled', closed_at = ?, close_reason = 'customer', client_ip = NULL WHERE id = ?",
             (to_iso(now), row["id"]),
         )
-        _release_slots(conn, row["id"])
+        release_slots(conn, row["id"])
         row = conn.execute("SELECT * FROM bookings WHERE id = ?", (row["id"],)).fetchone()
     return to_view(conn, row, now)

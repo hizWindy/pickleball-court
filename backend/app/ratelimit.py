@@ -19,8 +19,9 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def limit(request: Request, bucket: str, max_hits: int, window_seconds: int) -> None:
-    key = f"{bucket}:{client_ip(request)}"
+def limit(request: Request, bucket: str, max_hits: int, window_seconds: int, per_ip: bool = True) -> None:
+    """Count one hit. `per_ip=False` shares a single budget across everyone (used to cap sign-in guessing overall)."""
+    key = f"{bucket}:{client_ip(request)}" if per_ip else bucket
     now = time.monotonic()
     with _lock:
         q = _hits[key]

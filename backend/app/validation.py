@@ -30,11 +30,11 @@ def clean_name(raw: str) -> str:
 
 def normalize_reference(method: str, raw: str) -> str:
     ref = re.sub(r"[\s\-]", "", raw or "").upper()
-    if method == "gcash":
-        if not re.fullmatch(r"\d{13}", ref):
-            raise ValueError("GCash reference numbers are 13 digits. Check your GCash receipt.")
-    elif not re.fullmatch(r"[A-Z0-9]{6,32}", ref):
-        # GoTyme's exact format isn't confirmed, so only a loose sanity check.
+    if method == "gcash" and ref.isdigit() and len(ref) != 13:
+        raise ValueError("GCash reference numbers are 13 digits. Check your GCash receipt.")
+    # The club's QR codes are InstaPay QR Ph, so a payment can come from any bank or e-wallet
+    # (GoTyme's look like GT2026100789410293). Only a loose sanity check for those.
+    if not re.fullmatch(r"[A-Z0-9]{6,32}", ref):
         raise ValueError("Enter the reference number exactly as shown on your receipt.")
     return ref
 

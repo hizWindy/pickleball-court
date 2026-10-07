@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, LockKeyhole } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface NavbarProps {
@@ -55,6 +55,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenDirectBooking }) => {
 
           {/* Right Action Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            {/* Staff sign-in: a quiet outlined button, deliberately not green so it never competes with Book. */}
+            <a
+              href="/admin"
+              rel="nofollow"
+              aria-label="Staff sign-in"
+              title="Staff sign-in"
+              className="flex items-center justify-center gap-1.5 w-7 h-7 sm:w-auto sm:h-8 sm:px-3 rounded-full border border-zinc-300 text-zinc-500 hover:text-[#15803D] hover:border-emerald-300 hover:bg-emerald-50 text-[11px] font-heading font-bold uppercase tracking-wider transition-colors shrink-0"
+            >
+              <LockKeyhole className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Staff</span>
+            </a>
+
             {/* Book Court CTA: the one persistent booking button. The navbar is fixed, so it's always in reach. */}
             <motion.button
               whileHover={{ scale: 1.03, y: -1 }}

@@ -37,6 +37,15 @@ export const Footer: React.FC = () => {
           </div>
         </div>
       </div>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-8 flex items-center gap-1 text-[11px] text-zinc-400">
+        <span>© {new Date().getFullYear()} HousePickle Club</span>
+        <span aria-hidden>·</span>
+        {/* Quiet on purpose: the desk is protected by its password, not by being hard to find.
+            It sits on the left because the back-to-top button covers the bottom-right corner. */}
+        <a href="/admin" rel="nofollow" className="px-1 py-2 hover:text-zinc-600 focus-visible:text-zinc-700">
+          Staff
+        </a>
+      </div>
     </footer>
   );
 };

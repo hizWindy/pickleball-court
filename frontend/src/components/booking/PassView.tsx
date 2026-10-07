@@ -34,7 +34,7 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
     qrDataUrl(code, 360).then(setQr);
   }, [code]);
 
-  // Live status: the pass flips to "Confirmed" as soon as the host verifies the payment.
+  // Live status: payment proof confirms the booking right away; the host can still reject a bad one later.
   useEffect(() => {
     let alive = true;
     const load = async () => {

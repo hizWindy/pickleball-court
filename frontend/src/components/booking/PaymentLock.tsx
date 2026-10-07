@@ -309,13 +309,21 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                       </button>
                     )}
                     {progress != null && (
-                      <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
-                        <div className="h-full rounded-full bg-[#15803D] transition-all" style={{ width: `${Math.round(progress * 100)}%` }} />
+                      <div>
+                        <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+                          <div
+                            className={`h-full rounded-full bg-[#15803D] transition-all ${progress >= 1 ? 'animate-pulse motion-reduce:animate-none' : ''}`}
+                            style={{ width: `${Math.round(progress * 100)}%` }}
+                          />
+                        </div>
+                        <p className="mt-1.5 text-xs text-zinc-500" aria-live="polite">
+                          {progress < 1 ? `Uploading… ${Math.round(progress * 100)}%` : 'Reading your receipt…'}
+                        </p>
                       </div>
                     )}
                     <InlineError>{error}</InlineError>
                     <PrimaryButton className="w-full" disabled={!file} loading={busy} onClick={submitReceipt}>
-                      <Upload className="h-4 w-4" /> Submit receipt
+                      <Upload className="h-4 w-4" /> {busy ? (progress != null && progress >= 1 ? 'Checking receipt' : 'Uploading') : 'Submit receipt'}
                     </PrimaryButton>
                     <button
                       type="button"

@@ -32,7 +32,7 @@ const FAQ_ITEMS: AccordionItem[] = [
     id: 'gcash-process',
     category: 'Payment',
     question: 'How do I pay with GCash?',
-    answer: 'Pick your date, time and court, then confirm. Your slot is held for 15 minutes while you send the exact amount via GCash to Reymark Vergara (09128285344) and upload a screenshot of the receipt. You get your court pass right away, and it switches to Confirmed once the host verifies the payment.'
+    answer: 'Pick your date, time and court, then confirm. Your slot is held for 15 minutes while you send the exact amount via GCash to Reymark Vergara (09128285344) and upload a screenshot of the receipt. Your booking is confirmed right away and your court pass downloads. Each payment can only be used for one booking.'
   },
   {
     id: 'equipment-rental',

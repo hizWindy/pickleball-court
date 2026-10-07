@@ -1,0 +1,19 @@
+{
+  "name": "HousePickle Desk",
+  "short_name": "Desk",
+  "description": "Staff desk for HousePickle Club: check payments, manage bookings and see how the week is going.",
+  "id": "/admin",
+  "start_url": "/admin",
+  "scope": "/admin",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
