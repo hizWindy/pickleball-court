@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Download, MapPin, MessageSquare, Phone, Share2, X } from 'lucide-react';
+import { Clock, Download, MapPin, MessageSquare, Phone, Share2, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { device } from '../../lib/device';
@@ -188,6 +188,20 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
                   </PrimaryButton>
                 ) : null}
                 <SecondaryButton className="w-full" onClick={onClose}>Done</SecondaryButton>
+              </div>
+
+              <div className="rounded-2xl border-2 border-amber-300/80 bg-gradient-to-br from-amber-50 via-white to-amber-50/50 p-4 text-xs text-amber-950 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500 text-white shrink-0">
+                    <Clock className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="font-heading font-black uppercase text-amber-950 tracking-wider text-[11px] sm:text-xs">
+                    Game-Day Notice: 20-Min No-Show Rule
+                  </span>
+                </div>
+                <p className="mt-2 text-[11px] sm:text-xs leading-relaxed text-amber-900/90 font-medium">
+                  Please be on the court within 20 minutes of your scheduled start time. Bookings without check-in after 20 minutes are forfeited to waiting walk-in players. Strictly non-marking court shoes only.
+                </p>
               </div>
 
               <div className="rounded-2xl bg-white/80 p-4 text-sm">

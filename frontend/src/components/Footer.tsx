@@ -29,6 +29,10 @@ export const Footer: React.FC = () => {
           <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 text-[11px] text-zinc-500">
             <span>Court 1 & Court 2</span>
             <span>•</span>
+            <a href="#rules" className="text-zinc-700 font-bold hover:text-[#15803D] transition-colors underline decoration-dotted">
+              House Rules
+            </a>
+            <span>•</span>
             <span>In front of Aloha Suites</span>
             <span>•</span>
             <span>Host: {COURT_DETAILS.contactPerson} ({COURT_DETAILS.contactNumber})</span>

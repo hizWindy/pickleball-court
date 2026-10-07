@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { motion } from 'motion/react';
-import { AlertTriangle, Download, ImagePlus, Keyboard, Maximize2, QrCode, RefreshCw, Upload } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { AlertTriangle, BookOpen, Clock, Download, ImagePlus, Keyboard, Maximize2, QrCode, RefreshCw, Upload } from 'lucide-react';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { prepareReceipt } from '../../lib/image';
 import { fmtCountdown, fmtSchedule, fmtTime, pesoExact } from '../../lib/time';
 import { useConfig, useCountdown } from '../../hooks/useBookingData';
+import { HOUSE_RULES } from '../../data/houseRules';
 import type { Booking } from '../../types';
 import { CopyButton, cx, InlineError, PrimaryButton, SecondaryButton, useBodyScrollLock } from './ui';
 
@@ -37,6 +38,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const left = useCountdown(booking?.holdExpiresAt ?? null);
@@ -150,9 +152,17 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
               <p className="text-xs font-semibold uppercase tracking-wider text-[#CCFF00]">Slot on hold</p>
               <h2 id="pay-title" className="text-lg font-bold leading-tight">Complete your payment</h2>
               {booking && (
-                <p className="mt-0.5 truncate text-sm text-emerald-100">
-                  {booking.courtName} · {sched?.day} · {sched?.time}
-                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="inline-flex items-center rounded-lg bg-white/20 px-2 py-0.5 font-heading font-black uppercase text-white shadow-xs">
+                    {booking.courtName}
+                  </span>
+                  <span className="inline-flex items-center rounded-lg bg-black/20 px-2 py-0.5 text-emerald-100 font-medium">
+                    {sched?.day}
+                  </span>
+                  <span className="inline-flex items-center rounded-lg bg-black/20 px-2 py-0.5 text-emerald-100 font-medium">
+                    {sched?.time}
+                  </span>
+                </div>
               )}
             </div>
           </div>
@@ -270,6 +280,76 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                     </div>
                   </div>
                 )}
+              </section>
+
+              {/* Venue Notice & House Rules Card */}
+              <section className="rounded-3xl border-2 border-amber-300/80 bg-gradient-to-br from-amber-50 via-white to-amber-50/40 p-4 sm:p-5 shadow-xs">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-xs">
+                    <Clock className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-heading font-black text-[10px] uppercase tracking-wider text-amber-950 bg-amber-200/80 px-2 py-0.5 rounded-md">
+                        Critical Rule
+                      </span>
+                      <h4 className="font-heading font-black text-xs sm:text-sm uppercase tracking-tight text-amber-950">
+                        20-Minute No-Show & Forfeiture Policy
+                      </h4>
+                    </div>
+                    <p className="mt-1.5 text-xs text-amber-950/90 font-medium leading-relaxed">
+                      Please arrive on time. If your group does not check in on the court within <strong>20 minutes</strong> of your start time, the reservation is officially labeled a <strong>No-Show</strong>, released to walk-in players, and forfeited with no refund.
+                    </p>
+
+                    <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] font-medium text-amber-900">
+                      <span className="inline-flex items-center gap-1 bg-amber-100/90 border border-amber-200 px-2 py-0.5 rounded-lg">
+                        👟 Court shoes only
+                      </span>
+                      <span className="inline-flex items-center gap-1 bg-amber-100/90 border border-amber-200 px-2 py-0.5 rounded-lg">
+                        🥤 Water bottles only (CLAYGO)
+                      </span>
+                      <span className="inline-flex items-center gap-1 bg-amber-100/90 border border-amber-200 px-2 py-0.5 rounded-lg">
+                        ⏱️ Firm turnover at :58
+                      </span>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-amber-200/70">
+                      <button
+                        type="button"
+                        onClick={() => setRulesOpen(!rulesOpen)}
+                        className="inline-flex items-center gap-1.5 text-xs font-heading font-extrabold uppercase tracking-wider text-[#15803D] hover:text-[#166534] cursor-pointer"
+                      >
+                        <BookOpen className="h-3.5 w-3.5 text-[#15803D]" />
+                        {rulesOpen ? 'Hide Full Rules' : 'Read Full House Rules (7 items) ▾'}
+                      </button>
+
+                      <AnimatePresence>
+                        {rulesOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mt-3 space-y-2.5 overflow-hidden"
+                          >
+                            {HOUSE_RULES.map((rule) => (
+                              <div key={rule.id} className="rounded-xl bg-white p-3 border border-amber-200/80 text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-sport font-black text-amber-700">{rule.number}.</span>
+                                  <span className="font-heading font-black uppercase text-zinc-900 text-[11px] sm:text-xs">
+                                    {rule.title}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-[11px] text-zinc-600 leading-relaxed font-medium">
+                                  {rule.details}
+                                </p>
+                              </div>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                </div>
               </section>
 
               {/* Step 2: proof */}

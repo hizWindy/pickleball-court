@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Moon, Pencil, ShieldCheck, Sun, Sunrise, Sunset, X } from 'lucide-react';
+import { ArrowLeft, Calendar, Check, ChevronLeft, ChevronRight, Clock, Moon, Pencil, ShieldCheck, Sun, Sunrise, Sunset, X } from 'lucide-react';
 import { api, ApiError, errorMessage, serverNowMs } from '../../lib/api';
 import { device } from '../../lib/device';
 import { normalizePhone } from '../../lib/phone';
@@ -201,12 +201,6 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
     setTimeout(() => setStep('court'), 120);
   };
 
-  const summaryParts = [
-    fmtDate(activeDate),
-    hour != null ? hourLabel(hour) : null,
-    step !== 'date' && step !== 'time' && court ? court.name : null,
-    step !== 'date' && step !== 'time' && hour != null ? `${hours} hr${hours > 1 ? 's' : ''}` : null,
-  ].filter(Boolean);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 backdrop-blur-[2px] sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="booking-title">
@@ -331,13 +325,54 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
 
         {/* Footer */}
         <footer className="shrink-0 border-t border-zinc-100 bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">
-          <div className="mb-2.5 flex items-center justify-between gap-3 text-sm">
-            <span className="truncate text-zinc-600">{summaryParts.join(' · ')}</span>
-            {court && hour != null && step !== 'date' && step !== 'time' && (
-              <span className="shrink-0 font-bold text-zinc-950">{peso(total)}</span>
-            )}
+          <div className="mb-3 rounded-2xl border border-emerald-200/90 bg-gradient-to-r from-emerald-50/70 via-white to-emerald-50/50 p-2 sm:p-2.5 shadow-xs">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                {/* Date chip */}
+                <span className="inline-flex items-center gap-1.5 rounded-xl bg-white px-2.5 py-1 text-xs font-heading font-extrabold text-zinc-900 shadow-xs ring-1 ring-zinc-200/90">
+                  <Calendar className="h-3.5 w-3.5 text-[#15803D] shrink-0" />
+                  <span>{fmtDate(activeDate)}</span>
+                </span>
+
+                {/* Time chip */}
+                {hour != null && (
+                  <span className="inline-flex items-center gap-1.5 rounded-xl bg-white px-2.5 py-1 text-xs font-heading font-extrabold text-zinc-900 shadow-xs ring-1 ring-zinc-200/90">
+                    <Clock className="h-3.5 w-3.5 text-[#15803D] shrink-0" />
+                    <span>{hourLabel(hour)}</span>
+                    {isNightHour(hour) && (
+                      <Moon className="h-3 w-3 text-amber-500 fill-amber-500/20 shrink-0" />
+                    )}
+                  </span>
+                )}
+
+                {/* Court chip */}
+                {court && step !== 'date' && step !== 'time' && (
+                  <span className="inline-flex items-center rounded-xl bg-[#15803D] px-2.5 py-1 text-xs font-heading font-black uppercase tracking-wider text-white shadow-xs">
+                    {court.name}
+                  </span>
+                )}
+
+                {/* Duration chip */}
+                {hour != null && step !== 'date' && step !== 'time' && (
+                  <span className="inline-flex items-center rounded-xl bg-emerald-100/90 px-2 py-1 text-[11px] font-sport font-black uppercase tracking-wider text-[#15803D] border border-emerald-200/70">
+                    {hours} hr{hours > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+
+              {/* Total cost badge */}
+              {court && hour != null && step !== 'date' && step !== 'time' && (
+                <div className="flex items-baseline gap-1 shrink-0 pl-1">
+                  <span className="text-[10px] font-sport font-extrabold uppercase tracking-widest text-zinc-400">Total</span>
+                  <span className="font-heading font-black text-sm sm:text-base text-zinc-950 tracking-tight text-[#15803D]">
+                    {peso(total)}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-          <PrimaryButton className="w-full" disabled={!canContinue} loading={submitting} onClick={next}>
+
+          <PrimaryButton className="w-full shadow-md shadow-emerald-950/10 text-sm font-heading font-extrabold uppercase tracking-wider" disabled={!canContinue} loading={submitting} onClick={next}>
             {step === 'review' ? `Confirm & hold for ${config?.holdMinutes ?? 15} min` : 'Continue'}
             {step !== 'review' && <ChevronRight className="h-4 w-4" />}
           </PrimaryButton>
@@ -835,11 +870,23 @@ function ReviewStep(props: {
         </p>
       </div>
 
+      <div className="rounded-2xl border border-emerald-200/90 bg-emerald-50/60 p-4 text-xs text-emerald-950 space-y-1.5">
+        <div className="flex items-center gap-1.5 font-heading font-black uppercase text-emerald-900 tracking-wider">
+          <ShieldCheck className="h-4 w-4 text-[#15803D] shrink-0" />
+          <span>House Rules Quick Notice</span>
+        </div>
+        <ul className="space-y-1 text-emerald-950/90 pl-4 list-disc font-medium text-[11px] sm:text-xs">
+          <li><strong>20-Min No-Show Rule:</strong> Arrive on time. Slots with no check-in after 20 minutes are forfeited to walk-ins with no refund.</li>
+          <li><strong>Footwear:</strong> Non-marking athletic court shoes strictly required (no flip-flops/bare feet).</li>
+          <li><strong>CLAYGO:</strong> Water bottles only bench-side; dispose of trash in bins.</li>
+        </ul>
+      </div>
+
       <div className="space-y-3">
         <label className="flex cursor-pointer gap-3 rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">
           <input type="checkbox" checked={props.consent} onChange={(e) => props.onConsent(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[#15803D]" />
           <span>
-            I agree that HousePickle Club stores my name, mobile number and payment proof to process and verify this booking, as described in the{' '}
+            I agree to the House Rules, and that HousePickle Club stores my name, mobile number and payment proof to process this booking, as described in the{' '}
             <button type="button" onClick={(e) => { e.preventDefault(); props.onPrivacy(); }} className="font-semibold text-[#15803D] underline underline-offset-2 cursor-pointer">
               Privacy Notice
             </button>

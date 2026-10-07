@@ -45,8 +45,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenDirectBooking }) => {
             <a href="#courts" className="hover:text-[#15803D] transition-colors whitespace-nowrap">
               Courts & Rates
             </a>
-            <a href="#blueprint" className="hover:text-[#15803D] transition-colors whitespace-nowrap">
-              Court Layout
+            <a href="#rules" className="hover:text-[#15803D] transition-colors whitespace-nowrap">
+              House Rules
             </a>
             <a href="#location" className="hover:text-[#15803D] transition-colors whitespace-nowrap">
               Location
