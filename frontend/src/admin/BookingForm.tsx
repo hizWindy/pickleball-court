@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Minus, Plus } from 'lucide-react';
+import { AlertCircle, Lock, Minus, Plus } from 'lucide-react';
 import { errorMessage } from '../lib/api';
 import { normalizePhone } from '../lib/phone';
 import { addDays, fmtDate, hourLabel, peso } from '../lib/time';
@@ -76,18 +76,27 @@ const FormBody: React.FC<{
 
   // Who is already on the courts that day, so a clash shows before saving.
   const { data: day } = useRemote(`form-day-${date}`, () => adminApi.schedule(date));
-  const clash = useMemo(() => {
-    if (!day) return null;
+  const { clash, nextHourClash } = useMemo(() => {
+    if (!day) return { clash: null, nextHourClash: null };
     const taken = new Map<string, string>();
     for (const b of day.bookings) {
       if (b.code === existing?.code) continue;
       for (let i = 0; i < b.hours; i++) taken.set(`${b.courtId}|${Date.parse(b.startAt) + i * 3_600_000}`, b.source === 'blocked' ? `blocked (${b.customerName})` : b.customerName);
     }
+    let currentClash: string | null = null;
     for (let i = 0; i < hours; i++) {
       const who = taken.get(`${courtId}|${slotMs(date, hour) + i * 3_600_000}`);
-      if (who) return `${config.courts.find((c) => c.id === courtId)?.name} at ${hourLabel((hour + i) % 24)} is already taken by ${who}.`;
+      if (who) {
+        currentClash = `${config.courts.find((c) => c.id === courtId)?.name} at ${hourLabel((hour + i) % 24)} is already taken by ${who}.`;
+        break;
+      }
     }
-    return null;
+    const nextWho = taken.get(`${courtId}|${slotMs(date, hour) + hours * 3_600_000}`);
+    const nextClash = nextWho
+      ? `Cannot add another hour: ${config.courts.find((c) => c.id === courtId)?.name} at ${hourLabel((hour + hours) % 24)} is already booked by ${nextWho}.`
+      : null;
+
+    return { clash: currentClash, nextHourClash: nextClash };
   }, [day, courtId, date, hour, hours, existing?.code, config.courts]);
 
   const nameError = tried && name.trim().length < 2 ? (block ? 'Say what the block is for.' : 'Enter the player’s name.') : null;
@@ -168,7 +177,7 @@ const FormBody: React.FC<{
           <Segmented
             label="Type"
             value={kind}
-            onChange={setKind}
+            onChange={(v) => setKind(v as 'walk_in' | 'block')}
             options={[
               { value: 'walk_in', label: 'Walk-in or call' },
               { value: 'block', label: 'Block a court' },
@@ -185,7 +194,7 @@ const FormBody: React.FC<{
               <Segmented
                 label="Court"
                 value={courtId}
-                onChange={setCourtId}
+                onChange={(v) => setCourtId(String(v))}
                 options={config.courts.map((c) => ({ value: c.id, label: c.name }))}
               />
             )}
@@ -210,7 +219,10 @@ const FormBody: React.FC<{
 
           <div>
             <Label>How long</Label>
-            <div className="mt-1.5 flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-1.5">
+            <div className={cx(
+              "mt-1.5 flex items-center justify-between gap-3 rounded-xl border p-1.5 transition",
+              clash ? "border-rose-300 bg-rose-50/60" : "border-zinc-200 bg-white"
+            )}>
               <button
                 type="button"
                 aria-label="One hour less"
@@ -221,24 +233,45 @@ const FormBody: React.FC<{
                 <Minus className="h-5 w-5" />
               </button>
               <div className="text-center" aria-live="polite">
-                <div className="font-heading text-lg font-bold leading-tight text-zinc-950">
+                <div className={cx("font-heading text-lg font-bold leading-tight", clash ? "text-rose-950" : "text-zinc-950")}>
                   {hours} hour{hours > 1 ? 's' : ''}
                 </div>
-                <div className="text-xs text-zinc-500">{hourSpan(hour, hours)}</div>
+                <div className={cx("text-xs", clash ? "text-rose-700 font-semibold" : "text-zinc-500")}>{hourSpan(hour, hours)}</div>
               </div>
               <button
                 type="button"
                 aria-label="One hour more"
-                disabled={hours >= 12}
+                disabled={hours >= 12 || !!nextHourClash}
+                title={nextHourClash ?? undefined}
                 onClick={() => setHours((h) => Math.min(12, h + 1))}
-                className="flex h-11 w-11 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 hover:bg-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                className={cx(
+                  "flex h-11 w-11 items-center justify-center rounded-lg transition cursor-pointer disabled:cursor-not-allowed",
+                  nextHourClash
+                    ? "border border-rose-300 bg-rose-100 text-rose-700 hover:bg-rose-200"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 disabled:opacity-40"
+                )}
               >
-                <Plus className="h-5 w-5" />
+                {nextHourClash ? <Lock className="h-4 w-4 text-rose-600" /> : <Plus className="h-5 w-5" />}
               </button>
             </div>
+
+            {nextHourClash && !clash && (
+              <div className="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-950 flex items-start gap-2 shadow-2xs">
+                <Lock className="h-4 w-4 shrink-0 text-amber-700 mt-0.5" />
+                <span>{nextHourClash}</span>
+              </div>
+            )}
           </div>
 
-          {clash && <ErrorNote>{clash} Pick another time or court.</ErrorNote>}
+          {clash && (
+            <div className="mt-2.5 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs text-rose-950 flex items-start gap-2.5 shadow-2xs">
+              <AlertCircle className="h-4.5 w-4.5 shrink-0 text-rose-600 mt-0.5" />
+              <div>
+                <p className="font-bold text-rose-950">Schedule Collision</p>
+                <p className="mt-0.5 text-rose-800">{clash} Reduce hours or pick another court before saving.</p>
+              </div>
+            </div>
+          )}
         </section>
 
         {block ? (
@@ -272,7 +305,7 @@ const FormBody: React.FC<{
                 <Segmented
                   label="Payment method"
                   value={method}
-                  onChange={setMethod}
+                  onChange={(v) => setMethod(v as AdminPayment)}
                   options={[
                     { value: 'cash', label: 'Cash' },
                     { value: 'gcash', label: 'GCash' },

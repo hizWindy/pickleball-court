@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Calendar, Check, ChevronLeft, ChevronRight, Clock, Moon, Pencil, ShieldCheck, Sun, Sunrise, Sunset, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Calendar, Check, ChevronLeft, ChevronRight, Clock, Lock, Moon, Pencil, ShieldCheck, Sparkles, Sun, Sunrise, Sunset, X } from 'lucide-react';
 import { api, ApiError, errorMessage, serverNowMs } from '../../lib/api';
 import { device } from '../../lib/device';
 import { normalizePhone } from '../../lib/phone';
@@ -274,6 +274,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
                   courtId={courtId}
                   onCourt={setCourtId}
                   courtFreeFor={courtFreeFor}
+                  slotAt={slotAt}
                   loading={!avail}
                   paddles={paddles}
                   onPaddles={setPaddles}
@@ -530,7 +531,12 @@ function TimeStep({
             {slots.map((slot) => {
               const s = summarize(slot);
               const isSel = slot.hour === selectedHour;
-              const disabled = s.state !== 'available';
+              const isAvail = s.state === 'available';
+              const isHeld = s.state === 'held';
+              const isBooked = s.state === 'booked';
+              const isPast = s.state === 'past';
+              const disabled = !isAvail;
+
               return (
                 <button
                   key={slot.hour}
@@ -540,20 +546,54 @@ function TimeStep({
                   aria-pressed={isSel}
                   className={cx(
                     'relative rounded-2xl border px-2 py-3 text-center transition cursor-pointer',
-                    disabled && 'cursor-not-allowed border-transparent bg-zinc-100 text-zinc-400',
-                    !disabled && !isSel && 'border-zinc-200 bg-white text-zinc-900 hover:border-[#15803D]',
-                    isSel && 'border-[#15803D] bg-[#15803D] text-white shadow-md shadow-emerald-900/20'
+                    isAvail && !isSel && 'border-zinc-200 bg-white text-zinc-900 hover:border-[#15803D] hover:shadow-xs',
+                    isAvail && isSel && 'border-[#15803D] bg-[#15803D] text-white shadow-md shadow-emerald-900/20',
+                    isHeld && 'cursor-not-allowed border-amber-300 bg-amber-50/80 text-amber-950',
+                    isBooked && 'cursor-not-allowed border-rose-300 bg-rose-50/90 text-rose-950 shadow-2xs',
+                    isPast && 'cursor-not-allowed border-transparent bg-zinc-100 text-zinc-400'
                   )}
                 >
-                  <span className="block text-[15px] font-bold">{hourLabel(slot.hour)}</span>
-                  <span className={cx('block text-[11px] font-medium', isSel ? 'text-emerald-100' : s.state === 'held' ? 'text-amber-600' : '')}>
-                    {s.state === 'available'
-                      ? s.free > 1 ? `${s.free} courts` : '1 court left'
-                      : s.state === 'held' ? 'On hold' : s.state === 'past' ? 'Passed' : 'Booked'}
+                  <span className={cx(
+                    'block text-[15px] font-bold leading-tight',
+                    isBooked && 'text-rose-950',
+                    isHeld && 'text-amber-950',
+                    isPast && 'text-zinc-400'
+                  )}>
+                    {hourLabel(slot.hour)}
                   </span>
-                  {slot.rateType === 'night_owl' && s.state === 'available' && (
+                  <span className={cx(
+                    'mt-0.5 block text-[11px] font-medium leading-tight',
+                    isSel && 'text-emerald-100',
+                    isAvail && !isSel && (s.free > 1 ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'),
+                    isHeld && 'text-amber-800 font-medium inline-flex items-center justify-center gap-0.5',
+                    isBooked && 'text-rose-700 font-bold inline-flex items-center justify-center gap-0.5',
+                    isPast && 'text-zinc-400'
+                  )}>
+                    {isAvail ? (
+                      s.free > 1 ? `${s.free} courts open` : '1 court left'
+                    ) : isHeld ? (
+                      <>
+                        <Clock className="h-2.5 w-2.5 inline" />
+                        <span>On hold</span>
+                      </>
+                    ) : isBooked ? (
+                      <>
+                        <Lock className="h-2.5 w-2.5 inline" />
+                        <span>Reserved</span>
+                      </>
+                    ) : (
+                      'Passed'
+                    )}
+                  </span>
+
+                  {slot.rateType === 'night_owl' && isAvail && (
                     <span className={cx('absolute right-1.5 top-1.5 rounded-full px-1.5 text-[9px] font-bold', isSel ? 'bg-[#CCFF00] text-zinc-900' : 'bg-emerald-100 text-emerald-800')}>
                       PROMO
+                    </span>
+                  )}
+                  {isBooked && (
+                    <span className="absolute right-1.5 top-1.5 rounded-full bg-rose-200/90 px-1 py-0.5 text-[8px] font-black tracking-wider text-rose-800">
+                      RED
                     </span>
                   )}
                 </button>
@@ -574,17 +614,33 @@ function TimeStep({
 
 function Legend() {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500">
-      <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full border border-zinc-300 bg-white" /> Open</span>
-      <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-amber-300" /> On hold (may free up within 15 min)</span>
-      <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-zinc-300" /> Booked</span>
+    <div className="rounded-2xl border border-zinc-200/90 bg-white p-3 shadow-2xs">
+      <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Court Availability Legend</div>
+      <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+        <div className="flex items-center gap-2">
+          <span className="h-3 w-3 shrink-0 rounded-md border-2 border-emerald-600 bg-white" />
+          <span className="font-semibold text-zinc-800">Open (Available)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="h-3 w-3 shrink-0 rounded-md border border-amber-300 bg-amber-200" />
+          <span className="font-medium text-amber-900">On Hold (15m)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="h-3 w-3 shrink-0 rounded-md border border-rose-300 bg-rose-200" />
+          <span className="font-bold text-rose-900">Reserved (Red)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="h-3 w-3 shrink-0 rounded-md bg-zinc-200" />
+          <span className="text-zinc-400">Passed</span>
+        </div>
+      </div>
     </div>
   );
 }
 
 // ── Step 3: Court & duration ──────────────────────────────────────────────────
 function CourtStep({
-  config, date, hour, hours, onHours, courtId, onCourt, courtFreeFor, loading, paddles, onPaddles, lineItems,
+  config, date, hour, hours, onHours, courtId, onCourt, courtFreeFor, slotAt, loading, paddles, onPaddles, lineItems,
 }: {
   config: AppConfig;
   date: string;
@@ -594,6 +650,7 @@ function CourtStep({
   courtId: string | null;
   onCourt: (id: string) => void;
   courtFreeFor: (id: string, n: number) => boolean;
+  slotAt: (offset: number) => SlotAvailability | undefined;
   loading: boolean;
   paddles: boolean;
   onPaddles: (v: boolean) => void;
@@ -601,6 +658,33 @@ function CourtStep({
 }) {
   const endHour = (hour + hours) % 24;
   const note = afterMidnightNote(date, hour);
+
+  // Maximum continuous hours available starting from this hour across all courts
+  const maxContinuousOverall = Math.max(
+    0,
+    ...config.courts.map(
+      (c) =>
+        Array.from({ length: config.maxHours }, (_, i) => i + 1)
+          .filter((n) => courtFreeFor(c.id, n))
+          .pop() ?? 0
+    )
+  );
+
+  // Is another court available for all requested hours?
+  const altCourt =
+    courtId && !courtFreeFor(courtId, hours)
+      ? config.courts.find((c) => c.id !== courtId && courtFreeFor(c.id, hours))
+      : null;
+
+  // Selected court conflict details (if any)
+  const currentCourt = config.courts.find((c) => c.id === courtId);
+  const currentCourtFree = courtId ? courtFreeFor(courtId, hours) : false;
+  const currentConflictOffset =
+    courtId && !currentCourtFree
+      ? Array.from({ length: hours }, (_, i) => i).find((i) => slotAt(i)?.courts[courtId] !== 'available')
+      : null;
+  const currentConflictHour = currentConflictOffset != null ? (hour + currentConflictOffset) % 24 : null;
+
   return (
     <div className="space-y-6">
       <StepTitle
@@ -609,28 +693,83 @@ function CourtStep({
       />
 
       <section>
-        <Label>How long?</Label>
+        <div className="flex items-center justify-between mb-1.5">
+          <Label>How long?</Label>
+          {maxContinuousOverall < config.maxHours && maxContinuousOverall > 0 && (
+            <span className="text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+              Max {maxContinuousOverall} hr{maxContinuousOverall > 1 ? 's' : ''} available
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-3 gap-2">
           {Array.from({ length: config.maxHours }, (_, i) => i + 1).map((n) => {
             const anyFree = config.courts.some((c) => courtFreeFor(c.id, n));
+            const isBlocked = !loading && !anyFree;
             return (
               <button
                 key={n}
                 type="button"
                 onClick={() => onHours(n)}
-                disabled={!loading && !anyFree}
+                disabled={isBlocked}
                 aria-pressed={hours === n}
                 className={cx(
-                  'rounded-2xl border py-3 text-center transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-40',
-                  hours === n ? 'border-[#15803D] bg-emerald-50 ring-2 ring-emerald-200' : 'border-zinc-200 bg-white hover:border-emerald-300'
+                  'rounded-2xl border py-3 text-center transition cursor-pointer disabled:cursor-not-allowed',
+                  hours === n && !isBlocked
+                    ? 'border-[#15803D] bg-emerald-50 ring-2 ring-emerald-200'
+                    : isBlocked
+                    ? 'border-rose-200 bg-rose-50/40 text-rose-900/60 opacity-60'
+                    : 'border-zinc-200 bg-white hover:border-emerald-300'
                 )}
               >
-                <span className="block text-[15px] font-bold text-zinc-950">{n} hr{n > 1 ? 's' : ''}</span>
-                <span className="text-[11px] text-zinc-500">until {hourLabel((hour + n) % 24)}</span>
+                <div className="flex items-center justify-center gap-1">
+                  <span className={cx('block text-[15px] font-bold', isBlocked ? 'text-rose-950/70 line-through' : 'text-zinc-950')}>
+                    {n} hr{n > 1 ? 's' : ''}
+                  </span>
+                  {isBlocked && <Lock className="h-3 w-3 text-rose-600" />}
+                </div>
+                <span className={cx('text-[11px]', isBlocked ? 'text-rose-700/80 font-medium' : 'text-zinc-500')}>
+                  {isBlocked ? 'Blocked' : `until ${hourLabel((hour + n) % 24)}`}
+                </span>
               </button>
             );
           })}
         </div>
+
+        {/* Smart Alternatives & Conflict Explanations */}
+        {altCourt && (
+          <div className="mt-3 rounded-2xl border border-emerald-300 bg-emerald-50/95 p-3.5 text-xs text-emerald-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-2xs">
+            <div className="flex items-start gap-2.5">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white font-bold text-xs mt-0.5">
+                <Sparkles className="h-3.5 w-3.5" />
+              </span>
+              <div>
+                <p className="font-bold text-emerald-900">{altCourt.name} is open for all {hours} hours!</p>
+                <p className="text-[11px] text-emerald-700">
+                  {currentCourt?.name ?? 'Selected court'} is reserved at later hours, but {altCourt.name} can accommodate your full session.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onCourt(altCourt.id)}
+              className="self-start sm:self-center shrink-0 rounded-xl bg-emerald-700 px-3.5 py-1.5 font-bold text-white shadow-xs hover:bg-emerald-800 transition cursor-pointer"
+            >
+              Switch to {altCourt.name} →
+            </button>
+          </div>
+        )}
+
+        {!altCourt && !currentCourtFree && courtId && currentConflictHour != null && (
+          <div className="mt-3 rounded-2xl border border-rose-300 bg-rose-50/95 p-3.5 text-xs text-rose-950 flex items-start gap-2.5 shadow-2xs">
+            <AlertCircle className="h-5 w-5 shrink-0 text-rose-600 mt-0.5" />
+            <div>
+              <p className="font-bold text-rose-950">Schedule Collision Notice</p>
+              <p className="mt-0.5 text-rose-800">
+                {hourLabel(currentConflictHour)} is already reserved on {currentCourt?.name}. Please select a shorter duration ({maxContinuousOverall} hr max) or choose another starting time.
+              </p>
+            </div>
+          </div>
+        )}
       </section>
 
       <section>
@@ -639,6 +778,20 @@ function CourtStep({
           {config.courts.map((c) => {
             const free = courtFreeFor(c.id, hours);
             const isSel = courtId === c.id && free;
+
+            // Conflict inspection for this specific court
+            const conflictOffset = !free
+              ? Array.from({ length: hours }, (_, i) => i).find((i) => slotAt(i)?.courts[c.id] !== 'available')
+              : null;
+            const conflictHour = conflictOffset != null ? (hour + conflictOffset) % 24 : null;
+            const conflictState = conflictOffset != null ? slotAt(conflictOffset)?.courts[c.id] : null;
+
+            // Max continuous hours on this specific court
+            const maxOnThisCourt =
+              Array.from({ length: config.maxHours }, (_, i) => i + 1)
+                .filter((n) => courtFreeFor(c.id, n))
+                .pop() ?? 0;
+
             return (
               <button
                 key={c.id}
@@ -648,22 +801,50 @@ function CourtStep({
                 aria-pressed={isSel}
                 className={cx(
                   'flex w-full items-center justify-between rounded-2xl border p-4 text-left transition cursor-pointer disabled:cursor-not-allowed',
-                  isSel ? 'border-[#15803D] bg-emerald-50 ring-2 ring-emerald-200' : 'border-zinc-200 bg-white hover:border-emerald-300',
-                  !free && 'bg-zinc-50 opacity-60'
+                  isSel
+                    ? 'border-[#15803D] bg-emerald-50 ring-2 ring-emerald-200'
+                    : free
+                    ? 'border-zinc-200 bg-white hover:border-emerald-300'
+                    : 'border-rose-200 bg-rose-50/40 text-zinc-500'
                 )}
               >
                 <div className="flex items-center gap-3">
-                  <span className={cx('flex h-6 w-6 items-center justify-center rounded-full border-2', isSel ? 'border-[#15803D] bg-[#15803D] text-white' : 'border-zinc-300')}>
+                  <span className={cx(
+                    'flex h-6 w-6 items-center justify-center rounded-full border-2',
+                    isSel ? 'border-[#15803D] bg-[#15803D] text-white' : free ? 'border-zinc-300' : 'border-rose-300 bg-rose-100 text-rose-600'
+                  )}>
                     {isSel && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                    {!free && <Lock className="h-3 w-3" />}
                   </span>
                   <div>
-                    <span className="block text-[15px] font-bold text-zinc-950">{c.name}</span>
-                    <span className="text-xs text-zinc-500">Full-size · pro blue acrylic surface</span>
+                    <span className={cx('block text-[15px] font-bold', free ? 'text-zinc-950' : 'text-zinc-800')}>{c.name}</span>
+                    <span className="text-xs text-zinc-500">
+                      {free ? (
+                        'Full-size · pro blue acrylic surface'
+                      ) : maxOnThisCourt > 0 ? (
+                        <span className="font-semibold text-rose-700">Open for {maxOnThisCourt} hr only before next booking</span>
+                      ) : (
+                        <span className="font-semibold text-rose-700">Unavailable for this time</span>
+                      )}
+                    </span>
                   </div>
                 </div>
-                <span className={cx('text-xs font-semibold', free ? 'text-emerald-700' : 'text-zinc-500')}>
-                  {loading ? 'Checking…' : free ? 'Available' : 'Taken'}
-                </span>
+                <div>
+                  {loading ? (
+                    <span className="text-xs font-semibold text-zinc-400">Checking…</span>
+                  ) : free ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+                      ● Available for {hours} hr{hours > 1 ? 's' : ''}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800 border border-rose-200">
+                      <Lock className="h-3 w-3" />
+                      {conflictState === 'held'
+                        ? `On Hold at ${conflictHour != null ? hourLabel(conflictHour) : ''}`
+                        : `Reserved at ${conflictHour != null ? hourLabel(conflictHour) : ''}`}
+                    </span>
+                  )}
+                </div>
               </button>
             );
           })}
