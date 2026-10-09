@@ -8,6 +8,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, File, Form, Header, Request, UploadFile, status
 
 from app import booking_service as svc
+from app import reschedule
 from app.config import settings
 from app.db import get_conn
 from app.errors import BookingError
@@ -19,6 +20,9 @@ from app.schemas import (
     ConfigOut,
     CreateBookingIn,
     ReferenceProofIn,
+    RescheduleIn,
+    RescheduleLookupIn,
+    RescheduleLookupOut,
 )
 
 router = APIRouter(prefix="/api")
@@ -80,9 +84,33 @@ def submit_reference(
     return svc.submit_reference(conn, code, token, data)
 
 
-@router.post("/bookings/{code}/cancel", response_model=BookingOut, response_model_by_alias=True)
-def cancel(code: str, token: str | None = TOKEN_HEADER, conn: sqlite3.Connection = Conn) -> BookingOut:
-    return svc.cancel(conn, code, token)
+@router.post("/bookings/{code}/release", response_model=BookingOut, response_model_by_alias=True)
+@router.post("/bookings/{code}/cancel", response_model=BookingOut, response_model_by_alias=True, include_in_schema=False)
+def release_hold(code: str, token: str | None = TOKEN_HEADER, conn: sqlite3.Connection = Conn) -> BookingOut:
+    """Let go of an unpaid hold. A paid booking can't be cancelled (409 `bookings_final`)."""
+    return svc.release_hold(conn, code, token)
+
+
+@router.post("/bookings/{code}/arrive", response_model=BookingOut, response_model_by_alias=True)
+def check_in(code: str, request: Request, token: str | None = TOKEN_HEADER, conn: sqlite3.Connection = Conn) -> BookingOut:
+    limit(request, "arrive", max_hits=30, window_seconds=600)
+    return svc.check_in(conn, code, token)
+
+
+@router.post("/reschedule/find", response_model=RescheduleLookupOut, response_model_by_alias=True)
+def reschedule_find(
+    data: RescheduleLookupIn, request: Request, token: str | None = TOKEN_HEADER, conn: sqlite3.Connection = Conn
+) -> RescheduleLookupOut:
+    limit(request, "reschedule-find", max_hits=20, window_seconds=600)  # the code + number are the proof: no guessing
+    return reschedule.lookup(conn, data, token)
+
+
+@router.post("/reschedule", response_model=BookingOut, response_model_by_alias=True)
+def reschedule_booking(
+    data: RescheduleIn, request: Request, token: str | None = TOKEN_HEADER, conn: sqlite3.Connection = Conn
+) -> BookingOut:
+    limit(request, "reschedule", max_hits=20, window_seconds=600)
+    return reschedule.reschedule(conn, data, token)
 
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)

@@ -12,6 +12,10 @@ from app.validation import clean_name, normalize_ph_mobile
 
 AdminPayment = Literal["gcash", "gotyme", "cash", "none"]
 Source = Literal["online", "walk_in", "blocked"]
+# What the host sees on a booking. Day to day only the first four matter: Paid, Late, Done, Rain delay.
+AdminLabel = Literal[
+    "paid", "late", "done", "rain_delay", "blocked", "awaiting", "needs_check", "rejected", "expired", "cancelled"
+]
 
 
 def _optional_phone(v: str | None) -> str | None:
@@ -59,6 +63,7 @@ class EventOut(ApiModel):
 class AdminBookingOut(ApiModel):
     code: str
     status: BookingStatus
+    label: AdminLabel
     source: Source
     court_id: str
     court_name: str
@@ -90,6 +95,13 @@ class AdminBookingOut(ApiModel):
     checked_at: str | None
     review_flags: list[FlagOut]
     needs_review: bool  # paid online, confirmed automatically, not looked at yet
+    arrived_at: str | None
+    late_at: str | None
+    weather_hold_at: str | None
+    reschedule_count: int
+    restorable: bool  # Late (inside the host's short grace) or rain-delayed: the host can put it back
+    restore_until: str | None  # end of that grace for a Late booking; guests are never told about it
+    can_mark_arrived: bool
 
 
 class AdminBookingDetail(AdminBookingOut):
@@ -108,6 +120,11 @@ class StatusCounts(ApiModel):
     cancelled: int
     to_review: int
     flagged: int
+    # The host's own words (see AdminLabel): confirmed bookings split by what happened to them
+    paid: int
+    late: int
+    done: int
+    rain_delay: int
 
 
 class AdminBookingList(ApiModel):
@@ -122,6 +139,8 @@ class NavCounts(ApiModel):
     to_review: int
     flagged: int
     held: int
+    late: int  # Late bookings the host can still restore
+    rain_delay: int  # guests waiting to pick a new time
 
 
 class AdminCreateIn(ApiModel):
@@ -175,6 +194,53 @@ class AdminUpdateIn(ApiModel):
 
 class ReasonIn(ApiModel):
     reason: str | None = Field(default=None, max_length=200)
+
+
+class NoteIn(ApiModel):
+    note: str | None = Field(default=None, max_length=200)
+
+
+# ── Weather and rain delays ───────────────────────────────────────────────────
+class HourForecastOut(ApiModel):
+    at: str  # start of the hour, UTC
+    probability: int  # chance of rain, 0-100
+    mm: float
+
+
+class RainRiskOut(ApiModel):
+    """An upcoming paid booking that falls in forecast rain."""
+
+    booking: AdminBookingOut
+    peak: int
+
+
+class WeatherOut(ApiModel):
+    available: bool
+    updated_at: str | None
+    warn_percent: int
+    hours: list[HourForecastOut]
+    at_risk: list[RainRiskOut]
+
+
+class RainDelayIn(ApiModel):
+    """A window of the play day, e.g. 2 PM for 5 hours on Saturday. Everyone playing in it is rain-delayed
+    unless `codes` narrows it down."""
+
+    date: Day
+    from_hour: int = Field(ge=0, le=23)
+    hours: int = Field(ge=1, le=24)
+    codes: list[str] | None = Field(default=None, max_length=200)
+    note: str | None = Field(default=None, max_length=200)
+
+
+class RainDelayPreview(ApiModel):
+    window_start: str
+    window_end: str
+    bookings: list[AdminBookingOut]
+
+
+class RainDelayResult(ApiModel):
+    moved: list[AdminBookingOut]
 
 
 # ── Schedule ──────────────────────────────────────────────────────────────────

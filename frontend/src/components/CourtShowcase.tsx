@@ -65,8 +65,8 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
 
             {/* Top Tag */}
             <div className="absolute top-4 left-4 sm:top-6 sm:left-6 flex items-center gap-2">
-              <span className="px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-[#CCFF00] font-sport font-extrabold text-[10px] sm:text-xs uppercase tracking-wider border border-white/20 flex items-center gap-2 shadow-md">
-                <span className="w-2 h-2 rounded-full bg-[#CCFF00] animate-pulse" />
+              <span className="px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-[#D2EE5E] font-sport font-extrabold text-[10px] sm:text-xs uppercase tracking-wider border border-white/20 flex items-center gap-2 shadow-md">
+                <span className="w-2 h-2 rounded-full bg-[#D2EE5E] animate-pulse" />
                 OFFICIAL 2-COURT VENUE DESIGN
               </span>
             </div>
@@ -156,7 +156,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
 
                     {/* Status Pill */}
                     <div className="absolute top-3 sm:top-4 left-3 sm:left-4 flex items-center gap-2">
-                      <span className="px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-[#CCFF00] font-sport font-extrabold text-xs uppercase tracking-wider border border-white/20">
+                      <span className="px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-[#D2EE5E] font-sport font-extrabold text-xs uppercase tracking-wider border border-white/20">
                         {court.name}
                       </span>
                     </div>

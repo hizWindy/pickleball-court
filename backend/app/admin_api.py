@@ -17,9 +17,14 @@ from app.admin_schemas import (
     AdminUpdateIn,
     LoginIn,
     NavCounts,
+    NoteIn,
     OverviewOut,
+    RainDelayIn,
+    RainDelayPreview,
+    RainDelayResult,
     ReasonIn,
     SessionOut,
+    WeatherOut,
 )
 from app.db import get_conn
 from app.errors import BookingError
@@ -74,12 +79,34 @@ def schedule(date: date, conn: sqlite3.Connection = Conn) -> AdminSchedule:
     return svc.schedule(conn, date)
 
 
+# ── Weather and rain delays ───────────────────────────────────────────────────
+@router.get("/weather", response_model=WeatherOut, dependencies=Guard, **OUT)
+def weather(conn: sqlite3.Connection = Conn) -> WeatherOut:
+    return svc.weather_report(conn)
+
+
+@router.get("/rain-delay", response_model=RainDelayPreview, dependencies=Guard, **OUT)
+def rain_delay_preview(
+    date: date,
+    from_hour: int = Query(alias="fromHour", ge=0, le=23),
+    hours: int = Query(ge=1, le=24),
+    conn: sqlite3.Connection = Conn,
+) -> RainDelayPreview:
+    return svc.rain_delay_preview(conn, date, from_hour, hours)
+
+
+@router.post("/rain-delay", response_model=RainDelayResult, dependencies=Guard, **OUT)
+def rain_delay(data: RainDelayIn, conn: sqlite3.Connection = Conn) -> RainDelayResult:
+    return svc.rain_delay(conn, data)
+
+
 # ── Bookings ──────────────────────────────────────────────────────────────────
 @router.get("/bookings", response_model=AdminBookingList, dependencies=Guard, **OUT)
 def list_bookings(
     q: str | None = None,
     status: str | None = None,
     review: str | None = None,
+    label: str | None = None,
     date_from: date | None = Query(default=None, alias="dateFrom"),
     date_to: date | None = Query(default=None, alias="dateTo"),
     court_id: str | None = Query(default=None, alias="courtId"),
@@ -89,7 +116,7 @@ def list_bookings(
     conn: sqlite3.Connection = Conn,
 ) -> AdminBookingList:
     return svc.list_bookings(
-        conn, q=q, status=status, review=review, date_from=date_from, date_to=date_to,
+        conn, q=q, status=status, review=review, label=label, date_from=date_from, date_to=date_to,
         court_id=court_id, sort=sort, page=page, page_size=page_size,
     )
 
@@ -117,6 +144,16 @@ def confirm_booking(code: str, conn: sqlite3.Connection = Conn) -> AdminBookingD
 @router.post("/bookings/{code}/check", response_model=AdminBookingDetail, dependencies=Guard, **OUT)
 def check_booking(code: str, conn: sqlite3.Connection = Conn) -> AdminBookingDetail:
     return svc.mark_checked(conn, code)
+
+
+@router.post("/bookings/{code}/arrived", response_model=AdminBookingDetail, dependencies=Guard, **OUT)
+def mark_arrived(code: str, conn: sqlite3.Connection = Conn) -> AdminBookingDetail:
+    return svc.mark_arrived(conn, code)
+
+
+@router.post("/bookings/{code}/restore", response_model=AdminBookingDetail, dependencies=Guard, **OUT)
+def restore_booking(code: str, data: NoteIn | None = None, conn: sqlite3.Connection = Conn) -> AdminBookingDetail:
+    return svc.restore(conn, code, data.note if data else None)
 
 
 @router.post("/bookings/{code}/reject", response_model=AdminBookingDetail, dependencies=Guard, **OUT)

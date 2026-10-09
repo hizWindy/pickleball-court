@@ -5,7 +5,7 @@ import { api, ApiError, errorMessage } from '../../lib/api';
 import { prepareReceipt } from '../../lib/image';
 import { fmtCountdown, fmtSchedule, fmtTime, pesoExact } from '../../lib/time';
 import { useConfig, useCountdown } from '../../hooks/useBookingData';
-import { HOUSE_RULES } from '../../data/houseRules';
+import { HOUSE_RULES, policiesFor, type HouseRule } from '../../data/houseRules';
 import type { Booking } from '../../types';
 import { CopyButton, cx, InlineError, PrimaryButton, SecondaryButton, useBodyScrollLock } from './ui';
 
@@ -18,7 +18,7 @@ interface Props {
 }
 
 /**
- * The 15-minute payment window. It covers the whole screen and the page behind it
+ * The payment window (`config.holdMinutes`). It covers the whole screen and the page behind it
  * is made `inert` by App, so taps can't leak through. The deadline comes from the
  * server; refreshing the page brings the player straight back here.
  */
@@ -36,13 +36,16 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   const [payerName, setPayerName] = useState(initial?.customerName ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmRelease, setConfirmRelease] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const left = useCountdown(booking?.holdExpiresAt ?? null);
-  const totalMs = (config?.holdMinutes ?? 15) * 60_000;
+  const holdMinutes = config?.holdMinutes ?? 10;
+  const lateMinutes = config?.lateAfterMinutes ?? 15;
+  const policies = policiesFor(config);
+  const totalMs = holdMinutes * 60_000;
   const timeUp = booking != null && left <= 0 && !busy;
 
   const sync = useCallback(async () => {
@@ -122,10 +125,11 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
     }
   };
 
-  const cancel = async () => {
+  // Letting go of an unpaid hold is not a cancellation: nothing was charged. Paid bookings can't be released.
+  const release = async () => {
     setBusy(true);
     try {
-      const b = await api.cancel(code, token);
+      const b = await api.release(code, token);
       onClosed(b, 'cancelled');
     } catch (e) {
       setError(errorMessage(e));
@@ -142,14 +146,14 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
       <motion.div
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#FBFCFB] sm:h-auto sm:max-h-[92dvh] sm:max-w-lg sm:rounded-[28px] sm:shadow-2xl"
+        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#F9F8F4] sm:h-auto sm:max-h-[92dvh] sm:max-w-lg sm:rounded-[28px] sm:shadow-2xl"
       >
         {/* Timer header */}
         <header className="shrink-0 bg-gradient-to-br from-[#15803D] to-[#0B3D1C] px-5 pb-5 pt-[max(1rem,env(safe-area-inset-top))] text-white">
           <div className="flex items-center gap-4">
             <TimerRing left={left} total={totalMs} />
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#CCFF00]">Slot on hold</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#D2EE5E]">Slot on hold</p>
               <h2 id="pay-title" className="text-lg font-bold leading-tight">Complete your payment</h2>
               {booking && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
@@ -193,7 +197,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
               <div>
                 <h3 className="text-lg font-bold text-zinc-950">Time's up</h3>
                 <p className="mt-1 text-sm text-zinc-600">
-                  The {config?.holdMinutes ?? 15}-minute window ended, so the slot was released. If you already sent money, contact the host
+                  The {holdMinutes}-minute window ended, so the slot was released. If you already sent money, contact the host
                   with your receipt.
                 </p>
               </div>
@@ -240,6 +244,9 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                     <Row label="Account number" value={account.accountHint} mono />
                   ) : null}
                   <Row label="Exact amount" value={pesoExact(booking.total)} strong copy={booking.total.toFixed(2)} />
+                  <p className="rounded-2xl bg-amber-50 px-3 py-2.5 text-xs font-medium leading-relaxed text-amber-950 ring-1 ring-amber-100">
+                    Send the full amount. A receipt that is short is held for the host, and your booking isn't confirmed until it's paid in full.
+                  </p>
                   <p className="rounded-2xl bg-zinc-50 px-3 py-2.5 text-xs leading-relaxed text-zinc-600">
                     {account?.qrImage ? (
                       <>
@@ -294,11 +301,11 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                         Critical Rule
                       </span>
                       <h4 className="font-heading font-black text-xs sm:text-sm uppercase tracking-tight text-amber-950">
-                        20-Minute No-Show & Forfeiture Policy
+                        {lateMinutes}-Minute Late Rule
                       </h4>
                     </div>
                     <p className="mt-1.5 text-xs text-amber-950/90 font-medium leading-relaxed">
-                      Please arrive on time. If your group does not check in on the court within <strong>20 minutes</strong> of your start time, the reservation is officially labeled a <strong>No-Show</strong>, released to walk-in players, and forfeited with no refund.
+                      Be on court within <strong>{lateMinutes} minutes</strong> of your start time. After that the booking is marked <strong>Late</strong>, the court is released to other players, and it is non-refundable.
                     </p>
 
                     <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] font-medium text-amber-900">
@@ -311,6 +318,9 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                       <span className="inline-flex items-center gap-1 bg-amber-100/90 border border-amber-200 px-2 py-0.5 rounded-lg">
                         ⏱️ Firm turnover at :58
                       </span>
+                      <span className="inline-flex items-center gap-1 bg-amber-100/90 border border-amber-200 px-2 py-0.5 rounded-lg">
+                        🔒 No cancellations or refunds
+                      </span>
                     </div>
 
                     <div className="mt-3 pt-2.5 border-t border-amber-200/70">
@@ -320,7 +330,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                         className="inline-flex items-center gap-1.5 text-xs font-heading font-extrabold uppercase tracking-wider text-[#15803D] hover:text-[#166534] cursor-pointer"
                       >
                         <BookOpen className="h-3.5 w-3.5 text-[#15803D]" />
-                        {rulesOpen ? 'Hide Full Rules' : 'Read Full House Rules (7 items) ▾'}
+                        {rulesOpen ? 'Hide Rules' : `Read the House Rules (${policies.length + HOUSE_RULES.length} items) ▾`}
                       </button>
 
                       <AnimatePresence>
@@ -331,19 +341,8 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                             exit={{ opacity: 0, height: 0 }}
                             className="mt-3 space-y-2.5 overflow-hidden"
                           >
-                            {HOUSE_RULES.map((rule) => (
-                              <div key={rule.id} className="rounded-xl bg-white p-3 border border-amber-200/80 text-xs">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-sport font-black text-amber-700">{rule.number}.</span>
-                                  <span className="font-heading font-black uppercase text-zinc-900 text-[11px] sm:text-xs">
-                                    {rule.title}
-                                  </span>
-                                </div>
-                                <p className="mt-1 text-[11px] text-zinc-600 leading-relaxed font-medium">
-                                  {rule.details}
-                                </p>
-                              </div>
-                            ))}
+                            <RuleGroup title="Booking & Court Policies" rules={policies} />
+                            <RuleGroup title="Court Etiquette" rules={HOUSE_RULES} />
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -470,26 +469,26 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                 )}
               </section>
 
-              {/* Cancel */}
+              {/* Release: only for an unpaid hold, so it never costs anything */}
               <section className="border-t border-zinc-100 pt-4 text-center">
-                {confirmCancel ? (
+                {confirmRelease ? (
                   <div className="space-y-3 rounded-2xl bg-zinc-50 p-4">
-                    <p className="text-sm text-zinc-700">Cancel this booking and release the slot?</p>
+                    <p className="text-sm text-zinc-700">Let go of this slot? You haven't paid, so nothing is charged. Someone else can book it.</p>
                     <div className="flex gap-2">
-                      <SecondaryButton className="flex-1" onClick={() => setConfirmCancel(false)} disabled={busy}>Keep it</SecondaryButton>
+                      <SecondaryButton className="flex-1" onClick={() => setConfirmRelease(false)} disabled={busy}>Keep it</SecondaryButton>
                       <button
                         type="button"
-                        onClick={cancel}
+                        onClick={release}
                         disabled={busy}
-                        className="flex-1 rounded-2xl bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer"
+                        className="min-h-11 flex-1 rounded-2xl bg-zinc-800 px-4 text-sm font-semibold text-white hover:bg-zinc-900 disabled:opacity-50 cursor-pointer"
                       >
-                        Yes, cancel
+                        Release slot
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => setConfirmCancel(true)} className="text-sm font-medium text-zinc-500 underline-offset-2 hover:text-red-600 hover:underline cursor-pointer">
-                    Cancel booking
+                  <button type="button" onClick={() => setConfirmRelease(true)} className="min-h-11 px-3 text-sm font-medium text-zinc-500 underline-offset-2 hover:text-zinc-800 hover:underline cursor-pointer">
+                    Release this slot
                   </button>
                 )}
               </section>
@@ -501,11 +500,28 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   );
 };
 
+function RuleGroup({ title, rules }: { title: string; rules: HouseRule[] }) {
+  return (
+    <div className="space-y-2">
+      <p className="font-heading text-[10px] font-black uppercase tracking-wider text-amber-800">{title}</p>
+      {rules.map((rule) => (
+        <div key={rule.id} className="rounded-xl bg-white p-3 border border-amber-200/80 text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="font-sport font-black text-amber-700">{rule.number}.</span>
+            <span className="font-heading font-black uppercase text-zinc-900 text-[11px] sm:text-xs">{rule.title}</span>
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-600 leading-relaxed font-medium">{rule.summary}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TimerRing({ left, total }: { left: number; total: number }) {
   const r = 26;
   const c = 2 * Math.PI * r;
   const frac = Math.max(0, Math.min(1, left / total));
-  const color = left < 60_000 ? '#F87171' : left < 180_000 ? '#FBBF24' : '#CCFF00';
+  const color = left < 60_000 ? '#F87171' : left < 180_000 ? '#FBBF24' : '#D2EE5E';
   return (
     <div className="relative h-16 w-16 shrink-0" role="timer" aria-label={`${fmtCountdown(left)} left to pay`}>
       <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">

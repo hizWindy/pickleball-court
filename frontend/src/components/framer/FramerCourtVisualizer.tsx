@@ -22,7 +22,7 @@ const HOTSPOTS: Hotspot[] = [
     x: 50,
     y: 42,
     tag: 'Easy Rule',
-    badgeColor: 'bg-[#CCFF00] text-zinc-950'
+    badgeColor: 'bg-[#D2EE5E] text-zinc-950'
   },
   {
     id: 'net',
@@ -78,9 +78,9 @@ export const FramerCourtVisualizer: React.FC = () => {
         {/* Header Bar */}
         <div className="bg-gradient-to-r from-[#15803D] via-[#166534] to-[#093b1b] px-5 py-3.5 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#CCFF00] animate-pulse" />
+            <div className="w-2.5 h-2.5 rounded-full bg-[#D2EE5E] animate-pulse" />
             <span className="font-heading font-black text-xs uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-[#CCFF00]" />
+              <Layers className="w-3.5 h-3.5 text-[#D2EE5E]" />
               Court Layout & Simple Rules Guide
             </span>
           </div>
@@ -92,7 +92,7 @@ export const FramerCourtVisualizer: React.FC = () => {
               onClick={() => setIsSimulating(!isSimulating)}
               className="text-[11px] font-sport font-extrabold uppercase tracking-wider px-3 py-1 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors cursor-pointer flex items-center gap-1.5 border border-white/20"
             >
-              {isSimulating ? <Pause className="w-3 h-3 text-[#CCFF00]" /> : <Play className="w-3 h-3 text-[#CCFF00]" />}
+              {isSimulating ? <Pause className="w-3 h-3 text-[#D2EE5E]" /> : <Play className="w-3 h-3 text-[#D2EE5E]" />}
               <span>{isSimulating ? 'Pause Ball Rally' : 'Simulate Rally'}</span>
             </motion.button>
           </div>
@@ -105,7 +105,7 @@ export const FramerCourtVisualizer: React.FC = () => {
             <div className="relative aspect-[16/9] w-full bg-zinc-950 rounded-2xl p-3 sm:p-4 border-2 border-zinc-800 shadow-2xl overflow-hidden flex items-center justify-center select-none">
               {/* Outer Runoff Texture with Stadium Lighting Glow */}
               <div className="absolute inset-0 bg-gradient-to-b from-zinc-900 via-zinc-950 to-zinc-900 opacity-95" />
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-28 bg-[#CCFF00]/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-28 bg-[#D2EE5E]/10 rounded-full blur-2xl pointer-events-none" />
 
               {/* Court Boundary (White Lines) */}
               <div className="relative w-[92%] h-[85%] bg-[#DC2626] border-[3px] border-white rounded-xs shadow-2xl overflow-hidden flex flex-col">
@@ -141,7 +141,7 @@ export const FramerCourtVisualizer: React.FC = () => {
 
                 {/* Regulation Center Net Line */}
                 <div className="relative h-2 bg-white shadow-md z-10 flex items-center justify-center">
-                  <div className="absolute w-10 h-4 bg-zinc-950 border border-white rounded-xs text-[7px] text-[#CCFF00] flex items-center justify-center font-black tracking-widest">
+                  <div className="absolute w-10 h-4 bg-zinc-950 border border-white rounded-xs text-[7px] text-[#D2EE5E] flex items-center justify-center font-black tracking-widest">
                     NET
                   </div>
                 </div>
@@ -179,7 +179,7 @@ export const FramerCourtVisualizer: React.FC = () => {
                 {/* Animated Pickleball Rally Simulation with Impact Glow (Only animates while on-screen) */}
                 {isSimulating && isInView && (
                   <motion.div
-                    className="absolute z-20 w-5 h-5 rounded-full bg-[#CCFF00] border-2 border-zinc-950 shadow-lg shadow-[#CCFF00]/50"
+                    className="absolute z-20 w-5 h-5 rounded-full bg-[#D2EE5E] border-2 border-zinc-950 shadow-lg shadow-[#D2EE5E]/50"
                     style={{ willChange: 'left, top, transform' }}
                     animate={{
                       left: ['26%', '70%', '32%', '66%', '26%'],
@@ -215,13 +215,13 @@ export const FramerCourtVisualizer: React.FC = () => {
                       <span className="relative flex h-6 w-6 items-center justify-center">
                         <span
                           className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                            isSelected ? 'bg-[#CCFF00]' : 'bg-white'
+                            isSelected ? 'bg-[#D2EE5E]' : 'bg-white'
                           }`}
                         />
                         <span
                           className={`relative inline-flex rounded-full h-5 w-5 border-2 border-white items-center justify-center text-[9px] font-black ${
                             isSelected
-                              ? 'bg-[#CCFF00] text-zinc-950 shadow-md scale-110'
+                              ? 'bg-[#D2EE5E] text-zinc-950 shadow-md scale-110'
                               : 'bg-[#15803D] text-white hover:bg-[#166534]'
                           }`}
                         >

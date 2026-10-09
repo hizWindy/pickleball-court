@@ -72,3 +72,12 @@ export function fmtCountdown(ms: number): string {
 
 export const peso = (n: number) => `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 export const pesoExact = (n: number) => `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** "₱500" for whole pesos, "₱500.50" when there are centavos (receipt amounts can have them). */
+export const pesoAuto = (n: number) => (Number.isInteger(n) ? peso(n) : pesoExact(n));
+
+/** 10 PM - 5:59 AM is the night-owl rate. */
+export const isNightHour = (hour: number) => hour >= 22 || hour < 6;
+
+/** "1 hr", "2 hrs" */
+export const hrsLabel = (n: number) => `${n} hr${n === 1 ? '' : 's'}`;

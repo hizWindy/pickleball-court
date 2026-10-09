@@ -1,23 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import { Check, Copy, Loader2 } from 'lucide-react';
-import type { BookingStatus } from '../../types';
-import { STATUS_COPY } from '../../lib/pass';
+import type { PassState, PassTone } from '../../lib/pass';
 
 export const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(' ');
 
-const TONE_CLASSES = {
+const TONE_CLASSES: Record<PassTone, string> = {
   green: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
   amber: 'bg-amber-100 text-amber-900 ring-amber-200',
   red: 'bg-red-100 text-red-800 ring-red-200',
+  blue: 'bg-sky-100 text-sky-900 ring-sky-200',
   zinc: 'bg-zinc-100 text-zinc-600 ring-zinc-200',
 };
 
-export function StatusBadge({ status, className }: { status: BookingStatus; className?: string }) {
-  const s = STATUS_COPY[status];
+const DOT_CLASSES: Record<PassTone, string> = {
+  green: 'bg-emerald-600',
+  amber: 'bg-amber-500',
+  red: 'bg-red-500',
+  blue: 'bg-sky-500',
+  zinc: 'bg-zinc-400',
+};
+
+/** Pass the result of `passState(booking)`: it already knows about Late, Rain delay and Checked in. */
+export function StatusBadge({ state, className }: { state: Pick<PassState, 'label' | 'tone'>; className?: string }) {
   return (
-    <span className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1', TONE_CLASSES[s.tone], className)}>
-      <span className={cx('h-1.5 w-1.5 rounded-full', s.tone === 'green' ? 'bg-emerald-600' : s.tone === 'amber' ? 'bg-amber-500' : s.tone === 'red' ? 'bg-red-500' : 'bg-zinc-400')} />
-      {s.label}
+    <span className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1', TONE_CLASSES[state.tone], className)}>
+      <span className={cx('h-1.5 w-1.5 rounded-full', DOT_CLASSES[state.tone])} />
+      {state.label}
     </span>
   );
 }

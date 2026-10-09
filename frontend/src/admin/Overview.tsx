@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, CheckCircle2, Phone } from 'lucide-react';
-import { fmtDate, peso } from '../lib/time';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, CheckCircle2, CloudRain, Clock, Phone } from 'lucide-react';
+import { fmtDate, fmtTime, peso } from '../lib/time';
 import { adminApi } from './api';
 import { ColumnChart, HourGrid, LabelledColumns, RankBars, StackedBar } from './charts';
 import { useDesk } from './desk';
-import { compactPeso, delta, hourSpan, METHOD_LABEL, startsIn, WEEKDAYS } from './format';
+import { compactPeso, delta, hourSpan, METHOD_LABEL, restoreLeft, startsIn, WEEKDAYS } from './format';
 import { useNow, useRemote } from './hooks';
-import { Btn, Card, cx, Label, Num, Segmented, StatusPill } from './ui';
+import { summarizeRain } from './forecast';
+import { RowActions } from './QuickActions';
+import { RainBars } from './rain';
+import { Btn, Card, cx, Label, LabelBadge, Num, Segmented } from './ui';
+import { useQuickActions } from './useQuickActions';
 import type { Overview } from './types';
 
 const RANGES = [
@@ -22,7 +26,7 @@ const Delta: React.FC<{ cur: number; prev: number; days: number; dark?: boolean 
   if (!d) return <span className={cx('text-xs font-medium', dark ? 'text-zinc-500' : 'text-zinc-400')}>nothing to compare with yet</span>;
   const Icon = d.up ? ArrowUpRight : ArrowDownRight;
   return (
-    <span className={cx('inline-flex items-center gap-1 text-xs font-semibold', d.up ? (dark ? 'text-[#CCFF00]' : 'text-[#15803D]') : 'text-red-500')}>
+    <span className={cx('inline-flex items-center gap-1 text-xs font-semibold', d.up ? (dark ? 'text-[#D2EE5E]' : 'text-[#15803D]') : 'text-red-500')}>
       <Icon className="h-3.5 w-3.5" />
       {d.pct}% {d.up ? 'up' : 'down'} <span className={cx('font-medium', dark ? 'text-zinc-500' : 'text-zinc-400')}>on the previous {days} days</span>
     </span>
@@ -49,6 +53,138 @@ const Section: React.FC<{ title: string; note?: string; children: React.ReactNod
   </Card>
 );
 
+/**
+ * What can't wait: a Late booking the host can still restore, guests waiting to pick a new time after rain,
+ * and payments to look at. Loads on its own, so it shows even if the analytics below are slow.
+ */
+const NeedsYou: React.FC<{ o: Overview | null }> = ({ o }) => {
+  const desk = useDesk();
+  const { q, problemDialog } = useQuickActions();
+  const counts = desk.counts;
+  const lateCount = counts?.late ?? 0;
+  const now = useNow(lateCount > 0 ? 1000 : 30000); // the restore countdown ticks every second
+  const { data: late } = useRemote('late-now', () => adminApi.list({ label: 'late', sort: 'start_desc', pageSize: 12 }), {
+    enabled: lateCount > 0,
+    intervalMs: 20000,
+    version: desk.refreshKey,
+  });
+  const lateNow = lateCount > 0 && late ? late.items.filter((b) => restoreLeft(b, now) !== null) : [];
+
+  const rainWaiting = counts?.rainDelay ?? 0;
+  const payments = o?.pending.count ?? counts?.toReview ?? 0;
+  const flagged = o?.pending.flagged ?? counts?.flagged ?? 0;
+
+  if (!counts && !o) return null;
+  if (lateNow.length === 0 && rainWaiting === 0 && payments === 0) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm font-medium text-emerald-900">
+        <CheckCircle2 className="h-5 w-5 shrink-0 text-[#15803D]" /> You're all caught up. Nothing needs you right now.
+      </div>
+    );
+  }
+
+  return (
+    <section aria-label="Needs you now" className="space-y-2.5">
+      <Label>Needs you now</Label>
+
+      {lateNow.map((b) => (
+        <div key={b.code} className="rounded-2xl border-2 border-dashed border-amber-400 bg-amber-50 p-4">
+          <button
+            type="button"
+            onClick={() => desk.openBooking(b.code)}
+            className="flex w-full items-center gap-3 rounded-lg text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white">
+              <Clock className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-heading text-base font-bold text-amber-950">{b.customerName} is Late</span>
+              <span className="block text-sm text-amber-900/80">
+                {b.courtName} · {hourSpan(b.hour, b.hours)}
+                {b.lateAt ? ` · went Late at ${fmtTime(b.lateAt)}` : ''}
+              </span>
+            </span>
+          </button>
+          <RowActions b={b} q={q} now={now} className="mt-3" />
+        </div>
+      ))}
+
+      {rainWaiting > 0 && (
+        <button
+          type="button"
+          onClick={() => desk.goto('weather')}
+          className="group flex w-full items-center gap-4 rounded-2xl border border-sky-300 bg-sky-50 p-4 text-left transition hover:bg-sky-100/70 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sky-600 font-heading text-lg font-bold text-white">{rainWaiting}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-heading text-base font-bold text-sky-950">
+              {rainWaiting === 1 ? '1 guest is waiting to rebook after rain' : `${rainWaiting} guests are waiting to rebook after rain`}
+            </span>
+            <span className="block text-sm text-sky-900/80">Send them their link.</span>
+          </span>
+          <ArrowRight className="h-5 w-5 shrink-0 text-sky-800 transition-transform group-hover:translate-x-0.5" />
+        </button>
+      )}
+
+      {payments > 0 && (
+        <button
+          type="button"
+          onClick={() => desk.goto('bookings', { status: 'needs_check' })}
+          className="group flex w-full items-center gap-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-left transition hover:bg-amber-100/70 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-500 font-heading text-lg font-bold text-white">{payments}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-heading text-base font-bold text-amber-950">{payments === 1 ? '1 payment to check' : `${payments} payments to check`}</span>
+            <span className="block text-sm text-amber-900/80">
+              {flagged
+                ? `${flagged} ${flagged === 1 ? 'looks' : 'look'} off`
+                : o
+                  ? `${peso(o.pending.amount)} in total · all receipts matched the bookings`
+                  : 'All receipts matched the bookings'}
+            </span>
+          </span>
+          <ArrowRight className="h-5 w-5 shrink-0 text-amber-800 transition-transform group-hover:translate-x-0.5" />
+        </button>
+      )}
+      {problemDialog}
+    </section>
+  );
+};
+
+/** Next 12 hours of rain chance in one glance, and how many paid bookings it touches. */
+const WeatherCard: React.FC = () => {
+  const desk = useDesk();
+  const now = useNow(60000);
+  const { report, loading } = desk.weather;
+  if (loading) return <Skeleton className="h-24" />;
+  const summary = summarizeRain(report, now);
+  const rainy = summary.kind === 'rain';
+  return (
+    <button
+      type="button"
+      onClick={() => desk.goto('weather')}
+      className={cx(
+        'group block w-full rounded-2xl border bg-white p-4 text-left transition hover:bg-zinc-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15803D]',
+        rainy ? 'border-sky-300' : 'border-zinc-200'
+      )}
+    >
+      <span className="flex items-start gap-3">
+        <span className={cx('flex h-10 w-10 shrink-0 items-center justify-center rounded-full', rainy ? 'bg-sky-100 text-sky-700' : 'bg-zinc-100 text-zinc-500')}>
+          <CloudRain className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <Label>Weather</Label>
+          <span className={cx('mt-0.5 block text-sm font-semibold', summary.kind === 'unavailable' ? 'text-zinc-500' : 'text-zinc-900')}>{summary.text}</span>
+        </span>
+        <span className="inline-flex shrink-0 items-center gap-1 pt-0.5 text-xs font-semibold text-[#15803D]">
+          Open Weather <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+        </span>
+      </span>
+      {report?.available && <RainBars report={report} nowMs={now} className="mt-3" />}
+    </button>
+  );
+};
+
 export const OverviewPage: React.FC = () => {
   const desk = useDesk();
   const [days, setDays] = useState(30);
@@ -65,6 +201,9 @@ export const OverviewPage: React.FC = () => {
         <Segmented className="w-full sm:w-64" label="Time range" value={days} onChange={setDays} options={RANGES} />
       </div>
 
+      <NeedsYou o={o} />
+      <WeatherCard />
+
       {error && !o && (
         <Card className="p-5 text-sm text-zinc-600">
           {error.message} <Btn size="sm" className="ml-2" onClick={() => desk.refresh()}>Try again</Btn>
@@ -73,7 +212,6 @@ export const OverviewPage: React.FC = () => {
 
       {!o && !error && (
         <div className="space-y-4">
-          <Skeleton className="h-16" />
           <Skeleton className="h-80" />
           <div className="grid grid-cols-2 gap-3">
             <Skeleton className="h-28" />
@@ -100,40 +238,14 @@ const OverviewBody: React.FC<{ o: Overview; days: number; now: number }> = ({ o,
 
   return (
     <>
-      {/* The one thing that can't wait */}
-      {o.pending.count > 0 ? (
-        <button
-          type="button"
-          onClick={() => desk.goto('bookings', { status: o.pending.flagged ? 'flagged' : 'to_review' })}
-          className="group flex w-full items-center gap-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-left transition hover:bg-amber-100/70 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-        >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-500 font-heading text-lg font-bold text-white">{o.pending.count}</span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-heading text-base font-bold text-amber-950">
-              {o.pending.count === 1 ? '1 new payment to look at' : `${o.pending.count} new payments to look at`}
-            </span>
-            <span className="block text-sm text-amber-900/80">
-              {o.pending.flagged
-                ? `${o.pending.flagged} ${o.pending.flagged === 1 ? 'looks' : 'look'} off · already confirmed, reject any that aren't real`
-                : `${peso(o.pending.amount)} in total · all receipts matched the bookings`}
-            </span>
-          </span>
-          <ArrowRight className="h-5 w-5 shrink-0 text-amber-800 transition-transform group-hover:translate-x-0.5" />
-        </button>
-      ) : (
-        <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm font-medium text-emerald-900">
-          <CheckCircle2 className="h-5 w-5 text-[#15803D]" /> You're all caught up. Every payment has been looked at.
-        </div>
-      )}
-
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] sm:gap-5">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <section className="flex flex-col rounded-3xl bg-zinc-950 p-5 text-white sm:p-6" aria-label="Revenue">
           <Label className="text-zinc-400">Revenue · last {days} days</Label>
           <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <Num className="text-[2.6rem] leading-none text-[#CCFF00] sm:text-5xl">{peso(k.revenue)}</Num>
+            <Num className="text-[2.6rem] leading-none text-[#D2EE5E] sm:text-5xl">{peso(k.revenue)}</Num>
             <Delta cur={k.revenue} prev={k.revenuePrev} days={days} dark />
           </div>
-          <p className="mt-1.5 text-xs text-zinc-500">Confirmed bookings, counted on the day they're played.</p>
+          <p className="mt-1.5 text-xs text-zinc-500">Paid bookings, counted on the day they're played.</p>
           <div className="mt-6 flex-1">
             <ColumnChart
               tone="dark"
@@ -174,7 +286,7 @@ const OverviewBody: React.FC<{ o: Overview; days: number; now: number }> = ({ o,
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2 sm:gap-5">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
         <Section
           title="When people play"
           note={k.hours ? `Most hours start at ${peak === 0 ? '12 AM' : peak <= 12 ? `${peak} ${peak < 12 ? 'AM' : 'PM'}` : `${peak - 12} PM`}. Darker means busier.` : 'Booked hours by start time.'}
@@ -189,7 +301,7 @@ const OverviewBody: React.FC<{ o: Overview; days: number; now: number }> = ({ o,
         </Section>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3 sm:gap-5">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
         <Section title="By court">
           <RankBars
             rows={o.byCourt.map((c) => ({ label: c.name, sub: `${c.hours} h`, value: c.revenue, display: peso(c.revenue) }))}
@@ -221,17 +333,17 @@ const OverviewBody: React.FC<{ o: Overview; days: number; now: number }> = ({ o,
       >
         <StackedBar
           parts={[
-            { label: 'Confirmed', value: f.confirmed, className: 'bg-[#15803D]' },
+            { label: 'Paid', value: f.confirmed, className: 'bg-[#15803D]' },
             { label: 'Needs check', value: f.pendingVerification, className: 'bg-amber-400' },
             { label: 'Paying now', value: f.held, className: 'bg-sky-400' },
             { label: 'Expired', value: f.expired, className: 'bg-zinc-300' },
-            { label: 'Cancelled', value: f.cancelled, className: 'bg-zinc-400' },
+            { label: 'Released or voided', value: f.cancelled, className: 'bg-zinc-400' },
             { label: 'Rejected', value: f.rejected, className: 'bg-red-400' },
           ]}
         />
       </Section>
 
-      <div className="grid gap-4 lg:grid-cols-2 sm:gap-5">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
         <Section title="Up next" note="Sessions that haven't finished yet.">
           {o.upNext.length === 0 ? (
             <p className="text-sm text-zinc-400">Nothing scheduled right now.</p>
@@ -254,7 +366,7 @@ const OverviewBody: React.FC<{ o: Overview; days: number; now: number }> = ({ o,
                         {b.courtName} · {fmtDate(b.playDate, { weekday: 'short', month: 'short', day: 'numeric' })}
                       </span>
                     </span>
-                    {b.status !== 'confirmed' && <StatusPill status={b.status} />}
+                    {b.label !== 'paid' && <LabelBadge label={b.label} />}
                   </button>
                 </li>
               ))}
@@ -264,7 +376,7 @@ const OverviewBody: React.FC<{ o: Overview; days: number; now: number }> = ({ o,
 
         <Section title="Regulars" note="Who spent the most in this period.">
           {o.topCustomers.length === 0 ? (
-            <p className="text-sm text-zinc-400">Players show up here after their first confirmed booking.</p>
+            <p className="text-sm text-zinc-400">Players show up here after their first paid booking.</p>
           ) : (
             <ol className="space-y-3">
               {o.topCustomers.map((c, i) => (

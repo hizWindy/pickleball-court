@@ -12,15 +12,18 @@ import { Footer } from './components/Footer';
 import { Toast } from './components/booking/Toast';
 import { ConfigContext, useConfigLoader } from './hooks/useBookingData';
 import { device } from './lib/device';
+import type { RescheduleSeed } from './components/booking/RescheduleSheet'; // type only: the sheet itself stays lazy
 import type { Booking, BookingDraftSeed, BookingWithToken, Court } from './types';
 
 // Booking screens are code-split; they're prefetched while the browser is idle.
 const loadSheet = () => import('./components/booking/BookingSheet');
 const loadLock = () => import('./components/booking/PaymentLock');
 const loadPass = () => import('./components/booking/PassView');
+const loadReschedule = () => import('./components/booking/RescheduleSheet');
 const BookingSheet = lazy(() => loadSheet().then((m) => ({ default: m.BookingSheet })));
 const PaymentLock = lazy(() => loadLock().then((m) => ({ default: m.PaymentLock })));
 const PassView = lazy(() => loadPass().then((m) => ({ default: m.PassView })));
+const RescheduleSheet = lazy(() => loadReschedule().then((m) => ({ default: m.RescheduleSheet })));
 
 type Access = { code: string; token: string; booking?: Booking };
 
@@ -31,6 +34,7 @@ export function App() {
   // A hold survives refreshes: the device remembers it and the lock reopens on load.
   const [lock, setLock] = useState<Access | null>(() => device.activeHold());
   const [pass, setPass] = useState<(Access & { autoDownload?: boolean }) | null>(null);
+  const [reschedule, setReschedule] = useState<RescheduleSeed | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const lockRef = useRef(lock);
   lockRef.current = lock;
@@ -38,23 +42,28 @@ export function App() {
   useEffect(() => {
     device.dropLegacyData();
 
-    const prefetch = () => [loadSheet, loadLock, loadPass].forEach((l) => l());
+    const prefetch = () => [loadSheet, loadLock, loadPass, loadReschedule].forEach((l) => l());
     if ('requestIdleCallback' in window) {
       (window as Window & { requestIdleCallback: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback(prefetch, { timeout: 2500 });
     } else {
       setTimeout(prefetch, 1500);
     }
 
-    // Deep links: /?book=1 (PWA shortcut) and /?pass=CODE (QR on the pass; opens only on the device that booked)
+    // Deep links: /?book=1 (PWA shortcut), /?pass=CODE (QR on the pass; opens only on the device that booked)
+    // and /?reschedule=CODE (texted by the host, e.g. after a rain delay)
     const params = new URLSearchParams(window.location.search);
     const passCode = params.get('pass');
+    const rescheduleCode = params.get('reschedule');
     if (passCode) {
       const token = device.tokenFor(passCode);
       if (token) setPass({ code: passCode, token });
+    } else if (rescheduleCode) {
+      // On the phone that booked, the saved token means no typing; otherwise the code is pre-filled for the form.
+      setReschedule({ code: rescheduleCode, token: device.tokenFor(rescheduleCode) });
     } else if (params.has('book') && !device.activeHold()) {
       setSheet({});
     }
-    if (passCode || params.has('book')) {
+    if (passCode || rescheduleCode || params.has('book')) {
       window.history.replaceState(null, '', window.location.pathname + window.location.hash);
     }
   }, []);
@@ -88,7 +97,7 @@ export function App() {
       setToast('Your hold expired, so the slot was released. Pick a time to book again.');
       setSheet({ date: booking?.playDate });
     } else if (reason === 'cancelled') {
-      setToast(booking?.status === 'cancelled' ? 'Booking cancelled. The slot is free again.' : 'This booking is closed.');
+      setToast(booking?.status === 'cancelled' ? 'Slot released.' : 'This booking is closed.');
     }
   }, []);
 
@@ -104,10 +113,22 @@ export function App() {
     }
   }, []);
 
+  const startReschedule = useCallback((seed: RescheduleSeed = {}) => {
+    if (lockRef.current) return; // finish the current payment first
+    setPass(null);
+    setReschedule(seed);
+  }, []);
+
+  const handleRescheduled = useCallback((booking: Booking, token: string) => {
+    device.savePass(booking.code, token);
+    setReschedule(null);
+    setPass({ code: booking.code, token, booking });
+  }, []);
+
   const handleBookSpecificCourt = (court: Court) => openBooking({ courtId: court.id });
   // Any open layer makes the page behind it inert (no taps, no focus, hidden from screen readers).
   // For the payment window this is the "focus lock" from the payment rules.
-  const behindLayer = !!(lock || sheet || pass);
+  const behindLayer = !!(lock || sheet || pass || reschedule);
 
   return (
     <ConfigContext.Provider value={configState}>
@@ -126,11 +147,11 @@ export function App() {
           <NextOpenSlots onBook={openBooking} />
           <FramerBentoFeatures />
           <CourtShowcase onBookCourt={handleBookSpecificCourt} />
-          <FramerRulesAccordion />
+          <FramerRulesAccordion onReschedule={() => startReschedule()} />
           <LocationDetails />
         </main>
 
-        <Footer />
+        <Footer onReschedule={() => startReschedule()} />
       </div>
 
       <Suspense fallback={null}>
@@ -144,7 +165,11 @@ export function App() {
             autoDownload={pass.autoDownload}
             onClose={() => setPass(null)}
             onResumePayment={resumePayment}
+            onReschedule={(b) => startReschedule({ code: b.code, token: pass.token })}
           />
+        )}
+        {reschedule && !lock && (
+          <RescheduleSheet seed={reschedule} onClose={() => setReschedule(null)} onDone={handleRescheduled} />
         )}
         {lock && (
           <PaymentLock key={lock.code} code={lock.code} token={lock.token} initial={lock.booking} onSubmitted={handleSubmitted} onClosed={handleLockClosed} />

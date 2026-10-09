@@ -266,18 +266,37 @@ def _when(dt: datetime) -> str:
     return local.strftime("%b %d, %I:%M %p").replace(" 0", " ")
 
 
-def assess(reading: Reading | None, exp: Expected) -> list[Flag]:
-    """Everything about this receipt that doesn't look like a payment for this booking."""
+# A receipt with one of these flags never confirms a booking by itself: the slot stays reserved and the host
+# decides. (Full payment is what confirms a booking, so a short or unreadable amount can't pass on its own.)
+HOLD_FOR_HOST = ("amount_short", "amount_missing")
+
+
+def assess(reading: Reading | None, exp: Expected, engine_ran: bool = False) -> list[Flag]:
+    """Everything about this receipt that doesn't look like a payment for this booking.
+
+    `engine_ran` says the OCR worked. If it wasn't available (off, missing, crashed) a receipt can't be
+    judged and is only flagged `unreadable`; if it worked but found no text, the image isn't a receipt."""
     if reading is None:
+        if engine_ran:
+            return [Flag("amount_missing", "Nothing could be read on this image. Check that it is the payment receipt.")]
         return [Flag("unreadable", "The receipt couldn't be read automatically. Check the image.")]
     flags: list[Flag] = []
     if reading.success is False:
         flags.append(Flag("not_successful", "The receipt doesn't say the transfer was successful."))
 
+    total = exp.total * 100
     if reading.amount_centavos is None:
         flags.append(Flag("amount_missing", "No amount could be read."))
-    elif reading.amount_centavos != exp.total * 100:
-        flags.append(Flag("amount_mismatch", f"Receipt shows {_peso(reading.amount_centavos)}, the booking is ₱{exp.total:,}."))
+    elif reading.amount_centavos < total:
+        flags.append(Flag(
+            "amount_short",
+            f"Receipt shows {_peso(reading.amount_centavos)}, {_peso(total - reading.amount_centavos)} short of the ₱{exp.total:,} total.",
+        ))
+    elif reading.amount_centavos > total:
+        flags.append(Flag(
+            "amount_over",
+            f"Receipt shows {_peso(reading.amount_centavos)}, {_peso(reading.amount_centavos - total)} more than the ₱{exp.total:,} total.",
+        ))
 
     if not reading.reference:
         flags.append(Flag("reference_missing", "No reference number could be read."))

@@ -53,10 +53,31 @@ class PaymentAccount:
 class Settings:
     data_dir: Path = field(default_factory=lambda: Path(_env("DATA_DIR", str(BASE_DIR / "data"))))
     # Rules from the business process
-    hold_minutes: int = field(default_factory=lambda: _env_int("HOLD_MINUTES", 15))
-    # Silent server-side tolerance so a proof sent at 14:59 isn't lost to network latency
-    hold_grace_seconds: int = field(default_factory=lambda: _env_int("HOLD_GRACE_SECONDS", 30))
-    max_hours: int = field(default_factory=lambda: _env_int("MAX_HOURS", 3))
+    # Unpaid slots are freed quickly: nobody sits on a court without paying.
+    hold_minutes: int = field(default_factory=lambda: _env_int("HOLD_MINUTES", 10))
+    # Silent server-side tolerance so a proof sent a second before the deadline isn't lost to network latency
+    hold_grace_seconds: int = field(default_factory=lambda: _env_int("HOLD_GRACE_SECONDS", 10))
+    max_hours: int = field(default_factory=lambda: _env_int("MAX_HOURS", 5))
+    # House rule: a group that hasn't arrived this long after its start is Late and the slot is released.
+    late_after_minutes: int = field(default_factory=lambda: _env_int("LATE_AFTER_MINUTES", 15))
+    # Host-only grace after a booking turns Late: the host may still restore it for a guest who pleads.
+    # Guests are never told about it (the published rule is just `late_after_minutes`).
+    restore_window_minutes: int = field(default_factory=lambda: _env_int("RESTORE_WINDOW_MINUTES", 5))
+    # A guest may check in from this long before the start (so the host doesn't have to tap for everyone).
+    checkin_opens_minutes: int = field(default_factory=lambda: _env_int("CHECKIN_OPENS_MINUTES", 30))
+    # Rescheduling: once per booking, at least this long before the start; the new date must be within
+    # `reschedule_window_days` of the original one. Weather delays are exempt from the once-only rule.
+    reschedule_min_hours: int = field(default_factory=lambda: _env_int("RESCHEDULE_MIN_HOURS", 48))
+    reschedule_window_days: int = field(default_factory=lambda: _env_int("RESCHEDULE_WINDOW_DAYS", 30))
+    # Weather for the admin desk (Open-Meteo: free, no key). Defaults to Koronadal City.
+    weather_enabled: bool = field(default_factory=lambda: _env("WEATHER_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off"))
+    weather_latitude: float = field(default_factory=lambda: float(_env("WEATHER_LATITUDE", "6.5031")))
+    weather_longitude: float = field(default_factory=lambda: float(_env("WEATHER_LONGITUDE", "124.8469")))
+    # Rain chance (%) from which the desk warns about a booking.
+    rain_warn_percent: int = field(default_factory=lambda: _env_int("RAIN_WARN_PERCENT", 60))
+    # Optional Telegram alerts to the host (create a bot with @BotFather, send it a message, use your chat id).
+    telegram_bot_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN", ""))
+    telegram_chat_id: str = field(default_factory=lambda: _env("TELEGRAM_CHAT_ID", ""))
     booking_window_days: int = field(default_factory=lambda: _env_int("BOOKING_WINDOW_DAYS", 30))
     max_active_holds_per_phone: int = field(default_factory=lambda: _env_int("MAX_HOLDS_PER_PHONE", 1))
     max_active_holds_per_ip: int = field(default_factory=lambda: _env_int("MAX_HOLDS_PER_IP", 2))

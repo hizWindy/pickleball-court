@@ -3,7 +3,17 @@ import type { Booking, BookingStatus } from '../types';
 import { COURT_DETAILS } from '../data/mockData';
 import { fmtSchedule, peso } from './time';
 
-export const STATUS_COPY: Record<BookingStatus, { label: string; tone: 'green' | 'amber' | 'red' | 'zinc'; hint: string }> = {
+export type PassTone = 'green' | 'amber' | 'red' | 'blue' | 'zinc';
+
+export interface PassState {
+  /** Short key for the situation, handy for tests and styling. */
+  key: BookingStatus | 'late' | 'rain' | 'arrived';
+  label: string;
+  tone: PassTone;
+  hint: string;
+}
+
+export const STATUS_COPY: Record<BookingStatus, Omit<PassState, 'key'>> = {
   held: { label: 'Awaiting payment', tone: 'amber', hint: 'Finish payment to keep this slot.' },
   pending_verification: {
     label: 'Payment under review',
@@ -13,8 +23,33 @@ export const STATUS_COPY: Record<BookingStatus, { label: string; tone: 'green' |
   confirmed: { label: 'Confirmed', tone: 'green', hint: 'All set. Show this pass when you arrive.' },
   rejected: { label: 'Payment not verified', tone: 'red', hint: 'Please contact the host about this booking.' },
   expired: { label: 'Expired', tone: 'zinc', hint: 'The payment window ran out and the slot was released.' },
-  cancelled: { label: 'Cancelled', tone: 'zinc', hint: 'This booking was cancelled.' },
+  cancelled: { label: 'Cancelled', tone: 'zinc', hint: 'This booking is closed and the slot is free again.' },
 };
+
+/**
+ * What the pass should say right now. A paid booking can be Late (the court was released),
+ * Rain delay (the host moved everyone) or Checked in, and none of those may read "Confirmed".
+ */
+export function passState(booking: Booking): PassState {
+  if (booking.status === 'confirmed') {
+    if (booking.weatherHold) {
+      return { key: 'rain', label: 'Rain delay', tone: 'blue', hint: 'The courts were closed for rain. Pick a new time.' };
+    }
+    if (booking.late) {
+      return { key: 'late', label: 'Late', tone: 'zinc', hint: 'The court was released. Please contact the host.' };
+    }
+    if (booking.arrived) {
+      return { key: 'arrived', label: 'Checked in', tone: 'green', hint: "You're checked in. Have a great game!" };
+    }
+  }
+  if (booking.status === 'pending_verification' && booking.pendingReason === 'amount_short') {
+    return { key: booking.status, label: 'Payment short', tone: 'amber', hint: 'Your receipt looks short. The host is checking it.' };
+  }
+  if (booking.status === 'pending_verification' && booking.pendingReason === 'amount_unreadable') {
+    return { key: booking.status, label: 'Payment under review', tone: 'amber', hint: 'The host is reading your receipt.' };
+  }
+  return { key: booking.status, ...STATUS_COPY[booking.status] };
+}
 
 /** The QR opens this booking on the site, so staff always see the live status, never a stale image. */
 export const passUrl = (code: string) => `${window.location.origin}/?pass=${encodeURIComponent(code)}`;
@@ -25,7 +60,7 @@ export const qrDataUrl = (code: string, size = 320) =>
 const W = 1080;
 const H = 1640;
 const GREEN = '#15803D';
-const LIME = '#CCFF00';
+const LIME = '#D2EE5E';
 const INK = '#0B1F12';
 const MUTED = '#5B6B60';
 
@@ -64,7 +99,7 @@ export async function renderPassPng(booking: Booking): Promise<Blob> {
   const ctx = canvas.getContext('2d')!;
   const heading = "'Space Grotesk', 'Segoe UI', sans-serif";
   const body = "'Plus Jakarta Sans', 'Segoe UI', sans-serif";
-  const status = STATUS_COPY[booking.status];
+  const status = passState(booking);
 
   // Background + card
   ctx.fillStyle = '#EEF6EF';
@@ -100,7 +135,13 @@ export async function renderPassPng(booking: Booking): Promise<Blob> {
   ctx.fillText('Play • Connect • Repeat', 120, 295);
 
   // Status pill
-  const tones = { green: ['#DCFCE7', '#166534'], amber: ['#FEF3C7', '#92400E'], red: ['#FEE2E2', '#991B1B'], zinc: ['#F4F4F5', '#3F3F46'] };
+  const tones: Record<PassTone, [string, string]> = {
+    green: ['#DCFCE7', '#166534'],
+    amber: ['#FEF3C7', '#92400E'],
+    red: ['#FEE2E2', '#991B1B'],
+    blue: ['#E0F2FE', '#075985'],
+    zinc: ['#F4F4F5', '#3F3F46'],
+  };
   const [pillBg, pillInk] = tones[status.tone];
   ctx.font = `700 32px ${body}`;
   const pillW = ctx.measureText(status.label).width + 72;

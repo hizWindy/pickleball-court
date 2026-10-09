@@ -1,7 +1,7 @@
 import React from 'react';
 import { COURT_DETAILS } from '../data/mockData';
 
-export const Footer: React.FC = () => {
+export const Footer: React.FC<{ onReschedule: () => void }> = ({ onReschedule }) => {
   return (
     <footer className="bg-white border-t border-emerald-100 py-10 text-xs text-zinc-500">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-6">
@@ -49,6 +49,10 @@ export const Footer: React.FC = () => {
         <a href="/admin" rel="nofollow" className="px-1 py-2 hover:text-zinc-600 focus-visible:text-zinc-700">
           Staff
         </a>
+        <span aria-hidden>·</span>
+        <button type="button" onClick={onReschedule} className="px-1 py-2 hover:text-zinc-600 focus-visible:text-zinc-700 cursor-pointer">
+          Reschedule my booking
+        </button>
       </div>
     </footer>
   );

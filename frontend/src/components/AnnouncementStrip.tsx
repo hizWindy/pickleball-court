@@ -150,7 +150,7 @@ export const AnnouncementStrip: React.FC<AnnouncementStripProps> = ({ onBook }) 
         <button
           type="button"
           onClick={() => onBook(current.seed ?? {})}
-          className="group flex min-w-0 flex-1 items-center text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CCFF00] rounded-md"
+          className="group flex min-w-0 flex-1 items-center text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2EE5E] rounded-md"
         >
           <AnimatePresence mode="wait" initial={false}>
             <motion.span
@@ -161,11 +161,11 @@ export const AnnouncementStrip: React.FC<AnnouncementStripProps> = ({ onBook }) 
               transition={{ duration: 0.22 }}
               className="flex min-w-0 items-center gap-2"
             >
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#CCFF00] px-2 py-0.5 text-[10px] font-sport font-extrabold uppercase tracking-wider text-zinc-950">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#D2EE5E] px-2 py-0.5 text-[10px] font-sport font-extrabold uppercase tracking-wider text-zinc-950">
                 <current.Icon className="h-3 w-3" /> {current.tag}
               </span>
               <span className="truncate text-xs font-medium sm:text-sm">{current.text}</span>
-              <span className="hidden shrink-0 items-center gap-0.5 text-xs font-bold text-[#CCFF00] sm:inline-flex">
+              <span className="hidden shrink-0 items-center gap-0.5 text-xs font-bold text-[#D2EE5E] sm:inline-flex">
                 {current.seed ? 'Book it' : 'Book now'} <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
               </span>
             </motion.span>
@@ -184,7 +184,7 @@ export const AnnouncementStrip: React.FC<AnnouncementStripProps> = ({ onBook }) 
                 onClick={() => setIndex(i)}
                 className="flex h-8 w-4 items-center justify-center cursor-pointer"
               >
-                <span className={`h-1.5 rounded-full transition-all ${i === index % messages.length ? 'w-4 bg-[#CCFF00]' : 'w-1.5 bg-white/30'}`} />
+                <span className={`h-1.5 rounded-full transition-all ${i === index % messages.length ? 'w-4 bg-[#D2EE5E]' : 'w-1.5 bg-white/30'}`} />
               </button>
             ))}
           </div>

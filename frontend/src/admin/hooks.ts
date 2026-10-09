@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError } from '../lib/api';
+import { ApiError, serverNowMs } from '../lib/api';
 
 /**
  * Load data for a key and keep it fresh while the tab is visible.
@@ -56,13 +56,19 @@ export function useRemote<T>(key: string, load: () => Promise<T>, { intervalMs =
   return { data, error, loading, refresh, setData };
 }
 
-export type Tab = 'overview' | 'bookings' | 'schedule';
-const TAB_PATH: Record<Tab, string> = { overview: '/admin', bookings: '/admin/bookings', schedule: '/admin/schedule' };
+export type Tab = 'overview' | 'bookings' | 'schedule' | 'weather';
+const TAB_PATH: Record<Tab, string> = { overview: '/admin', bookings: '/admin/bookings', schedule: '/admin/schedule', weather: '/admin/weather' };
 
 const tabFromPath = (path: string): Tab =>
-  path.startsWith('/admin/bookings') ? 'bookings' : path.startsWith('/admin/schedule') ? 'schedule' : 'overview';
+  path.startsWith('/admin/bookings')
+    ? 'bookings'
+    : path.startsWith('/admin/schedule')
+      ? 'schedule'
+      : path.startsWith('/admin/weather')
+        ? 'weather'
+        : 'overview';
 
-/** Three tabs on real URLs, so the back button and reloads behave. */
+/** Four tabs on real URLs, so the back button and reloads behave. */
 export function useTab(): [Tab, (tab: Tab) => void] {
   const [tab, setTab] = useState<Tab>(() => tabFromPath(window.location.pathname));
   useEffect(() => {
@@ -78,11 +84,11 @@ export function useTab(): [Tab, (tab: Tab) => void] {
   return [tab, go];
 }
 
-/** Re-render every `ms` so "5 min ago" labels stay honest. */
+/** The server's clock (a phone's own clock can be minutes off), re-read every `ms` so "5 min ago" and countdowns stay honest. */
 export function useNow(ms = 30000): number {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => serverNowMs());
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), ms);
+    const id = window.setInterval(() => setNow(serverNowMs()), ms);
     return () => window.clearInterval(id);
   }, [ms]);
   return now;

@@ -4,6 +4,8 @@ import type {
   Booking,
   BookingWithToken,
   CreateBookingRequest,
+  RescheduleLookup,
+  RescheduleRequest,
 } from '../types';
 
 export class ApiError extends Error {
@@ -79,8 +81,20 @@ export const api = {
 
   getBooking: (code: string, token: string) => request<Booking>(`/api/bookings/${enc(code)}`, { token }),
 
-  cancel: (code: string, token: string) =>
-    request<Booking>(`/api/bookings/${enc(code)}/cancel`, { method: 'POST', token }),
+  /** Let go of an unpaid hold. Paid bookings can't be cancelled (the server answers `bookings_final`). */
+  release: (code: string, token: string) =>
+    request<Booking>(`/api/bookings/${enc(code)}/release`, { method: 'POST', token }),
+
+  /** The group is here: stops the booking from going Late. Opens 30 min before the start. */
+  checkIn: (code: string, token: string) =>
+    request<Booking>(`/api/bookings/${enc(code)}/arrive`, { method: 'POST', token }),
+
+  /** Find a booking to move by its code and the mobile number on it (or this device's token). */
+  rescheduleFind: (code: string, customerPhone?: string, token?: string) =>
+    request<RescheduleLookup>('/api/reschedule/find', { method: 'POST', json: { code, customerPhone: customerPhone || null }, token }),
+
+  reschedule: (body: RescheduleRequest, token?: string) =>
+    request<Booking>('/api/reschedule', { method: 'POST', json: body, token }),
 
   submitReference: (
     code: string,

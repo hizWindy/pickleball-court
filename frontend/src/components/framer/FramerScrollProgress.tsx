@@ -32,11 +32,11 @@ export const FramerScrollProgress: React.FC = () => {
       {/* Top Fixed Scroll Progress Glow Line */}
       <div className="fixed top-0 left-0 right-0 z-50 h-1 sm:h-1.25 bg-zinc-900/20 pointer-events-none">
         <motion.div
-          className="h-full bg-gradient-to-r from-[#15803D] via-[#22C55E] to-[#CCFF00] origin-left relative"
+          className="h-full bg-gradient-to-r from-[#15803D] via-[#22C55E] to-[#D2EE5E] origin-left relative"
           style={{ scaleX }}
         >
           {/* Luminous Leading Neon Sparkle */}
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#CCFF00] shadow-[0_0_10px_#CCFF00,0_0_20px_#22C55E] pointer-events-none" />
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#D2EE5E] shadow-[0_0_10px_#D2EE5E,0_0_20px_#22C55E] pointer-events-none" />
         </motion.div>
       </div>
 
@@ -54,7 +54,7 @@ export const FramerScrollProgress: React.FC = () => {
           title="Back to top"
           aria-label="Back to top"
         >
-          <ArrowUp className="w-4 h-4 text-[#CCFF00] group-hover:-translate-y-0.5 transition-transform" />
+          <ArrowUp className="w-4 h-4 text-[#D2EE5E] group-hover:-translate-y-0.5 transition-transform" />
         </button>
       </motion.div>
     </>

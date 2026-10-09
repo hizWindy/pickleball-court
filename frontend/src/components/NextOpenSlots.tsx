@@ -61,7 +61,7 @@ export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
   const nothingFree = !loading && tomorrowAvail && picks.length === 0;
 
   return (
-    <section id="open-slots" className="py-12 sm:py-14 bg-[#FAFCF9] border-b border-zinc-200">
+    <section id="open-slots" className="py-12 sm:py-14 bg-[#F7F6F1] border-b border-zinc-200">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -72,7 +72,7 @@ export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
         >
           <div>
             <h2 className="flex items-center gap-2 text-2xl sm:text-3xl font-heading font-black text-zinc-950 uppercase tracking-tight">
-              <Zap className="h-6 w-6 text-[#84CC16] fill-[#CCFF00]" />
+              <Zap className="h-6 w-6 text-[#84CC16] fill-[#D2EE5E]" />
               Next open slots
             </h2>
             <p className="text-sm text-zinc-500 font-medium mt-1">The soonest times you can play. Tap one to book it.</p>
@@ -121,16 +121,16 @@ function SlotCard({ pick, today, courts, onBook }: { pick: OpenPick; today: stri
       onClick={() => onBook({ date, hour: slot.hour, courtId: court.id })}
       aria-label={`Book ${dayLabel(date, today, slot.hour)} ${hourLabel(slot.hour)}, ${where}, ${peso(rate)} per hour`}
       className={`group relative flex flex-col justify-between rounded-3xl border p-4 text-left shadow-xs transition-colors cursor-pointer min-h-[150px] ${
-        night ? 'border-zinc-800 bg-zinc-950 text-white hover:border-[#CCFF00]' : 'border-emerald-200 bg-white hover:border-[#15803D]'
+        night ? 'border-zinc-800 bg-zinc-950 text-white hover:border-[#D2EE5E]' : 'border-emerald-200 bg-white hover:border-[#15803D]'
       }`}
     >
       {night && (
-        <span className="absolute right-3 top-3 rounded-full bg-[#CCFF00] px-2 py-0.5 text-[10px] font-sport font-extrabold uppercase tracking-wider text-zinc-950">
+        <span className="absolute right-3 top-3 rounded-full bg-[#D2EE5E] px-2 py-0.5 text-[10px] font-sport font-extrabold uppercase tracking-wider text-zinc-950">
           Promo
         </span>
       )}
       <div>
-        <span className={`block text-[11px] font-sport font-bold uppercase tracking-widest ${night ? 'text-[#CCFF00]' : 'text-[#15803D]'}`}>
+        <span className={`block text-[11px] font-sport font-bold uppercase tracking-widest ${night ? 'text-[#D2EE5E]' : 'text-[#15803D]'}`}>
           {dayLabel(date, today, slot.hour)}
         </span>
         <span className="block font-heading font-black text-3xl leading-none mt-1">{hourLabel(slot.hour)}</span>
@@ -144,7 +144,7 @@ function SlotCard({ pick, today, courts, onBook }: { pick: OpenPick; today: stri
         </span>
         <span
           className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-            night ? 'bg-[#CCFF00] text-zinc-950' : 'bg-[#15803D] text-white group-hover:bg-[#166534]'
+            night ? 'bg-[#D2EE5E] text-zinc-950' : 'bg-[#15803D] text-white group-hover:bg-[#166534]'
           }`}
         >
           <ArrowRight className="h-4 w-4" />

@@ -16,14 +16,14 @@ def slot_state(client, date, hour, court="court-1"):
 
 
 # ── Creating a hold ───────────────────────────────────────────────────────────
-def test_create_holds_slot_for_15_minutes(client, booking_payload):
+def test_create_holds_slot_for_10_minutes(client, booking_payload):
     res = create(client, booking_payload)
     assert res.status_code == 201, res.text
     body = res.json()
     b = body["booking"]
     assert b["status"] == "held"
     assert b["code"].startswith("HPC-") and len(b["code"]) == 13
-    assert b["holdExpiresAt"] == "2026-10-10T02:15:00Z"  # 10:15 AM Manila
+    assert b["holdExpiresAt"] == "2026-10-10T02:10:00Z"  # 10:10 AM Manila
     assert body["accessToken"]
     assert slot_state(client, "2026-10-10", 19) == "held"
 
@@ -89,7 +89,7 @@ def test_unconfigured_payment_method_is_refused(client, booking_payload):
 # ── Hold expiry ───────────────────────────────────────────────────────────────
 def test_hold_expires_and_releases_slot(client, booking_payload, fake_now):
     body = create(client, booking_payload).json()
-    fake_now.advance(minutes=15, seconds=31)  # past deadline + grace
+    fake_now.advance(minutes=10, seconds=11)  # past deadline + grace
     assert slot_state(client, "2026-10-10", 19) == "available"
     b = client.get(f"/api/bookings/{body['booking']['code']}", headers=auth(body["accessToken"])).json()
     assert b["status"] == "expired"
@@ -101,7 +101,7 @@ def test_hold_expires_and_releases_slot(client, booking_payload, fake_now):
 
 def test_booking_survives_refresh_until_deadline(client, booking_payload, fake_now):
     body = create(client, booking_payload).json()
-    fake_now.advance(minutes=14)
+    fake_now.advance(minutes=9)
     b = client.get(f"/api/bookings/{body['booking']['code']}", headers=auth(body["accessToken"])).json()
     assert b["status"] == "held"
 
@@ -114,7 +114,7 @@ def test_receipt_upload_confirms_the_booking_and_keeps_the_slot(client, booking_
     res = client.post(f"/api/bookings/{code}/receipt", headers=auth(token), files={"receipt": ("r.png", PNG)})
     assert res.status_code == 200, res.text
     assert res.json()["status"] == "confirmed"
-    fake_now.advance(hours=2)  # no longer bound by the 15-minute hold
+    fake_now.advance(hours=2)  # no longer bound by the 10-minute hold
     assert slot_state(client, "2026-10-10", 19) == "booked"
 
 
@@ -188,14 +188,25 @@ def test_proof_needs_valid_token(client, booking_payload):
     assert res.status_code == 404
 
 
-# ── Cancel ────────────────────────────────────────────────────────────────────
-def test_cancel_releases_slot(client, booking_payload):
+# ── Releasing a hold (there is no cancelling a paid booking) ─────────────────
+def test_releasing_an_unpaid_hold_frees_the_slot(client, booking_payload):
     body = create(client, booking_payload).json()
-    res = client.post(f"/api/bookings/{body['booking']['code']}/cancel", headers=auth(body["accessToken"]))
+    res = client.post(f"/api/bookings/{body['booking']['code']}/release", headers=auth(body["accessToken"]))
     assert res.json()["status"] == "cancelled"
     assert slot_state(client, "2026-10-10", 19) == "available"
     # and the phone can hold again right away
     assert create(client, booking_payload).status_code == 201
+
+
+def test_a_paid_booking_cannot_be_cancelled_or_released(client, booking_payload):
+    body = create(client, booking_payload).json()
+    code, headers = body["booking"]["code"], auth(body["accessToken"])
+    client.post(f"/api/bookings/{code}/receipt", headers=headers, files={"receipt": ("r.png", PNG)})
+    for path in ("release", "cancel"):
+        res = client.post(f"/api/bookings/{code}/{path}", headers=headers)
+        assert res.status_code == 409 and res.json()["error"]["code"] == "bookings_final"
+    assert client.get(f"/api/bookings/{code}", headers=headers).json()["status"] == "confirmed"
+    assert slot_state(client, "2026-10-10", 19) == "booked"
 
 
 def test_old_receipts_are_purged_but_still_block_reuse(client, booking_payload, fake_now):
@@ -245,7 +256,9 @@ def test_method_with_only_a_qr_image_is_offered(client, booking_payload, monkeyp
 
 def test_config_exposes_rules(client):
     cfg = client.get("/api/config").json()
-    assert cfg["holdMinutes"] == 15
+    assert cfg["holdMinutes"] == 10
+    assert cfg["maxHours"] == 5 and cfg["lateAfterMinutes"] == 15
+    assert cfg["rescheduleMinHours"] == 48 and cfg["rescheduleWindowDays"] == 30
     assert [c["id"] for c in cfg["courts"]] == ["court-1", "court-2"]
     gotyme = next(a for a in cfg["paymentAccounts"] if a["method"] == "gotyme")
     assert gotyme["enabled"] is False

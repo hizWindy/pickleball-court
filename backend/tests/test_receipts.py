@@ -107,16 +107,28 @@ def test_a_genuine_payment_has_no_flags():
 
 def test_the_sample_receipts_are_flagged_for_the_right_reasons():
     gcash = {f.code: f.message for f in rr.assess(rr.read(GCASH), expected())}
-    assert set(gcash) == {"amount_mismatch", "time_outside", "recipient_mismatch"}
-    assert gcash["amount_mismatch"] == "Receipt shows ₱10,000, the booking is ₱250."
+    assert set(gcash) == {"amount_over", "time_outside", "recipient_mismatch"}
+    assert gcash["amount_over"] == "Receipt shows ₱10,000, ₱9,750 more than the ₱250 total."
     assert "+63 962 411 5061" in gcash["recipient_mismatch"]
 
     gotyme = {f.code for f in rr.assess(rr.read(GOTYME), expected(start=datetime(2026, 10, 7, 22, 20, tzinfo=MANILA)))}
-    assert gotyme == {"amount_mismatch", "recipient_mismatch"}  # time is inside the window
+    assert gotyme == {"amount_over", "recipient_mismatch"}  # time is inside the window
 
 
 def test_unreadable_receipt_is_one_clear_flag():
-    assert [f.code for f in rr.assess(None, expected())] == ["unreadable"]
+    assert [f.code for f in rr.assess(None, expected())] == ["unreadable"]  # OCR wasn't available: can't judge
+    assert [f.code for f in rr.assess(None, expected(), engine_ran=True)] == ["amount_missing"]  # OCR worked, no text
+
+
+@pytest.mark.parametrize(
+    "amount, code",
+    [("P249.00", "amount_short"), ("P100.00", "amount_short"), ("P251.00", "amount_over"), ("P250.00", None)],
+)
+def test_the_amount_is_checked_against_the_checkout_total(amount, code):
+    lines = ["RE••••K V.", "+63 912 828 5344", "Sent via GCash", f"Total Amount Sent  {amount}", "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM"]
+    flags = [f.code for f in rr.assess(rr.read(lines), expected())]
+    assert flags == ([code] if code else [])
+    assert (code in rr.HOLD_FOR_HOST) is (code == "amount_short")  # only a short payment is held back; too much is not
 
 
 # ── The upload flow (OCR stubbed with known text) ─────────────────────────────
@@ -156,19 +168,65 @@ def test_matching_receipt_confirms_with_nothing_to_look_at(admin, booking_payloa
     assert d["referenceNumber"] == "1234567890123"
     assert d["scan"]["amount"] == 250 and d["scan"]["provider"] == "gcash" and d["scan"]["engine"] == "rapidocr"
     assert d["scan"]["recipientNumber"] == "+63 912 828 5344"
-    assert admin.get("/api/admin/counts").json() == {"toReview": 1, "flagged": 0, "held": 0}
+    assert admin.get("/api/admin/counts").json() == {"toReview": 1, "flagged": 0, "held": 0, "late": 0, "rainDelay": 0}
 
 
 def test_suspicious_receipt_still_confirms_but_is_flagged(admin, booking_payload, ocr_reads):
-    ocr_reads(GCASH)  # ₱10,000 to someone else, the day before
+    ocr_reads(GCASH)  # ₱10,000 to someone else, the day before: too much money is not a reason to hold the booking
     code, headers = _book(admin, booking_payload)
     assert _upload(admin, code, headers).json()["status"] == "confirmed"
     d = admin.get(f"/api/admin/bookings/{code}").json()
-    assert {f["code"] for f in d["reviewFlags"]} == {"amount_mismatch", "time_outside", "recipient_mismatch"}
+    assert {f["code"] for f in d["reviewFlags"]} == {"amount_over", "time_outside", "recipient_mismatch"}
     assert admin.get("/api/admin/bookings", params={"review": "flagged"}).json()["total"] == 1
 
     rejected = admin.post(f"/api/admin/bookings/{code}/reject", json={"reason": "Not paid to us"}).json()
     assert rejected["status"] == "rejected"  # host can still undo an automatic confirmation
+
+
+def _slot_state(client, hour=19, court="court-1"):
+    data = client.get("/api/availability", params={"date": "2026-10-10"}).json()
+    return next(s for s in data["slots"] if s["hour"] == hour)["courts"][court]
+
+
+def test_a_short_payment_keeps_the_slot_but_waits_for_the_host(admin, booking_payload, ocr_reads, fake_now):
+    ocr_reads([line.replace("P250.00", "P200.00") for line in GOOD])
+    code, headers = _book(admin, booking_payload)
+    fake_now.advance(minutes=3)
+    b = _upload(admin, code, headers).json()
+    assert b["status"] == "pending_verification"
+    assert b["pendingReason"] == "amount_short" and b["amountPaid"] == 200 and b["total"] == 250
+    assert _slot_state(admin) == "booked"  # nobody else can take it while the host sorts out the balance
+
+    d = admin.get(f"/api/admin/bookings/{code}").json()
+    assert d["label"] == "needs_check" and d["needsReview"] is True
+    assert [f["code"] for f in d["reviewFlags"]] == ["amount_short"]
+    assert d["reviewFlags"][0]["message"] == "Receipt shows ₱200, ₱50 short of the ₱250 total."
+    fake_now.advance(hours=3)  # the 10-minute hold doesn't apply any more: the host decides
+    assert _slot_state(admin) == "booked"
+
+    # the guest sent the missing ₱50 by GCash: the host confirms
+    assert admin.post(f"/api/admin/bookings/{code}/confirm").json()["status"] == "confirmed"
+
+
+def test_a_receipt_with_no_readable_amount_waits_for_the_host(admin, booking_payload, ocr_reads):
+    ocr_reads(["RE••••K V.", "Sent via GCash", "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM"])
+    code, headers = _book(admin, booking_payload)
+    b = _upload(admin, code, headers).json()
+    assert b["status"] == "pending_verification" and b["pendingReason"] == "amount_unreadable"
+
+
+def test_an_image_with_no_text_is_not_a_payment(admin, booking_payload, ocr_reads):
+    ocr_reads([])  # the OCR worked and found nothing: a photo of something else
+    code, headers = _book(admin, booking_payload)
+    assert _upload(admin, code, headers).json()["status"] == "pending_verification"
+
+
+def test_exact_and_over_payments_confirm_straight_away(admin, booking_payload, ocr_reads):
+    ocr_reads([line.replace("P250.00", "P300.00") for line in GOOD])
+    code, headers = _book(admin, booking_payload)
+    b = _upload(admin, code, headers).json()
+    assert b["status"] == "confirmed" and b["pendingReason"] is None
+    assert [f["code"] for f in admin.get(f"/api/admin/bookings/{code}").json()["reviewFlags"]] == ["amount_over"]
 
 
 def test_same_payment_cannot_confirm_two_bookings_even_as_a_new_screenshot(client, booking_payload, ocr_reads):

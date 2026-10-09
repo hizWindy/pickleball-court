@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { AlertCircle, ArrowLeft, Calendar, Check, ChevronLeft, ChevronRight, Clock, Lock, Moon, Pencil, ShieldCheck, Sparkles, Sun, Sunrise, Sunset, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Calendar, Check, ChevronRight, Clock, Lock, Minus, Moon, Pencil, Plus, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { api, ApiError, errorMessage, serverNowMs } from '../../lib/api';
 import { device } from '../../lib/device';
 import { normalizePhone } from '../../lib/phone';
-import { addDays, afterMidnightNote, currentPlayDate, daysBetween, fmtDate, hourLabel, hourTimeLabel, peso } from '../../lib/time';
+import { addDays, afterMidnightNote, currentPlayDate, daysBetween, fmtDate, hourLabel, hourTimeLabel, hrsLabel, isNightHour, peso } from '../../lib/time';
 import { useAvailability, useConfig } from '../../hooks/useBookingData';
 import type { AppConfig, Availability, BookingDraftSeed, BookingWithToken, PaymentMethod, SlotAvailability, TimePeriod } from '../../types';
+import { reviewNotices } from '../../data/houseRules';
 import { PrivacyNotice } from './PrivacyNotice';
+import { inputClass, PERIODS } from './helpers';
+import { Calendar as MonthCalendar, Field, Label, StepTitle } from './shared';
 import { cx, InlineError, PrimaryButton, useBodyScrollLock } from './ui';
 
 type Step = 'date' | 'time' | 'court' | 'details' | 'review';
@@ -18,15 +21,6 @@ const STEPS: { id: Step; label: string }[] = [
   { id: 'details', label: 'Details' },
   { id: 'review', label: 'Review' },
 ];
-
-const PERIODS: { id: TimePeriod; label: string; range: string; Icon: typeof Sun }[] = [
-  { id: 'morning', label: 'Morning', range: '6 AM – 12 PM', Icon: Sunrise },
-  { id: 'afternoon', label: 'Afternoon', range: '12 – 5 PM', Icon: Sun },
-  { id: 'evening', label: 'Evening', range: '5 – 10 PM', Icon: Sunset },
-  { id: 'night_owl', label: 'Night Owl', range: '10 PM – 6 AM', Icon: Moon },
-];
-
-const isNightHour = (h: number) => h >= 22 || h < 6;
 
 type SlotSummary = { state: 'available' | 'held' | 'booked' | 'past'; free: number };
 
@@ -75,7 +69,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
 
   // Hours after 5 AM roll into the next play day, so a 5 AM + 2 hr booking needs tomorrow's grid too.
   const hourIndex = avail && hour != null ? avail.slots.findIndex((s) => s.hour === hour) : -1;
-  const crossesDay = hourIndex >= 0 && hourIndex + (config?.maxHours ?? 3) > 24;
+  const crossesDay = hourIndex >= 0 && hourIndex + (config?.maxHours ?? 5) > 24;
   const { data: nextAvail } = useAvailability(crossesDay ? addDays(activeDate, 1) : null, {
     enabled: needsAvailability && crossesDay,
   });
@@ -208,7 +202,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: 'spring', damping: 30, stiffness: 340 }}
-        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#FBFCFB] sm:h-auto sm:max-h-[90dvh] sm:max-w-lg sm:rounded-[28px] sm:shadow-2xl"
+        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#F9F8F4] sm:h-auto sm:max-h-[90dvh] sm:max-w-lg sm:rounded-[28px] sm:shadow-2xl"
       >
         {/* Header */}
         <header className="shrink-0 border-b border-zinc-100 bg-white px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
@@ -262,6 +256,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
                   onPeriod={setPeriod}
                   onPick={pickHour}
                   onRetry={refresh}
+                  holdMinutes={config?.holdMinutes ?? 10}
                 />
               )}
               {step === 'court' && config && hour != null && (
@@ -275,7 +270,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
                   onCourt={setCourtId}
                   courtFreeFor={courtFreeFor}
                   slotAt={slotAt}
-                  loading={!avail}
+                  loading={!avail || (crossesDay && !nextAvail)}
                   paddles={paddles}
                   onPaddles={setPaddles}
                   lineItems={lineItems}
@@ -374,7 +369,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
           </div>
 
           <PrimaryButton className="w-full shadow-md shadow-emerald-950/10 text-sm font-heading font-extrabold uppercase tracking-wider" disabled={!canContinue} loading={submitting} onClick={next}>
-            {step === 'review' ? `Confirm & hold for ${config?.holdMinutes ?? 15} min` : 'Continue'}
+            {step === 'review' ? `Confirm & hold for ${config?.holdMinutes ?? 10} min` : 'Continue'}
             {step !== 'review' && <ChevronRight className="h-4 w-4" />}
           </PrimaryButton>
         </footer>
@@ -386,20 +381,8 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
 };
 
 // ── Step 1: Date ──────────────────────────────────────────────────────────────
-const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-
 function DateStep({ config, today, selected, onPick }: { config: AppConfig; today: string; selected: string; onPick: (d: string) => void }) {
   const last = addDays(today, config.bookingWindowDays);
-  const [month, setMonth] = useState(selected.slice(0, 7)); // YYYY-MM
-  const [y, m] = month.split('-').map(Number);
-  const firstWeekday = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
-  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const shiftMonth = (delta: number) => {
-    const d = new Date(Date.UTC(y, m - 1 + delta, 1));
-    setMonth(d.toISOString().slice(0, 7));
-  };
-  const canPrev = month > today.slice(0, 7);
-  const canNext = month < last.slice(0, 7);
   const quick = [
     { label: 'Today', date: today },
     { label: 'Tomorrow', date: addDays(today, 1) },
@@ -425,57 +408,14 @@ function DateStep({ config, today, selected, onPick }: { config: AppConfig; toda
         ))}
       </div>
 
-      <div className="rounded-3xl border border-zinc-200 bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm font-bold text-zinc-900">{fmtDate(`${month}-01`, { month: 'long', year: 'numeric' })}</span>
-          <div className="flex gap-1">
-            <button type="button" disabled={!canPrev} onClick={() => shiftMonth(-1)} className="rounded-full p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 cursor-pointer" aria-label="Previous month">
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button type="button" disabled={!canNext} onClick={() => shiftMonth(1)} className="rounded-full p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 cursor-pointer" aria-label="Next month">
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-        <div className="grid grid-cols-7 text-center text-[11px] font-semibold uppercase text-zinc-400">
-          {WEEKDAYS.map((d) => <div key={d} className="py-1">{d}</div>)}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: firstWeekday }, (_, i) => <div key={`pad-${i}`} />)}
-          {Array.from({ length: daysInMonth }, (_, i) => {
-            const d = `${month}-${String(i + 1).padStart(2, '0')}`;
-            const out = d < today || d > last;
-            const isSel = d === selected;
-            const isToday = d === today;
-            return (
-              <button
-                key={d}
-                type="button"
-                disabled={out}
-                onClick={() => onPick(d)}
-                aria-label={fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })}
-                aria-pressed={isSel}
-                className={cx(
-                  'mx-auto flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold transition cursor-pointer',
-                  out && 'cursor-not-allowed text-zinc-300',
-                  !out && !isSel && 'text-zinc-800 hover:bg-emerald-50',
-                  isSel && 'bg-[#15803D] text-white shadow-sm',
-                  isToday && !isSel && 'ring-1 ring-[#15803D] text-[#15803D]'
-                )}
-              >
-                {i + 1}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <MonthCalendar min={today} max={last} selected={selected} today={today} onPick={onPick} />
     </div>
   );
 }
 
 // ── Step 2: Time ──────────────────────────────────────────────────────────────
 function TimeStep({
-  date, avail, error, selectedHour, period, onPeriod, onPick, onRetry,
+  date, avail, error, selectedHour, period, onPeriod, onPick, onRetry, holdMinutes,
 }: {
   date: string;
   avail: Availability | null;
@@ -485,6 +425,7 @@ function TimeStep({
   onPeriod: (p: TimePeriod) => void;
   onPick: (h: number) => void;
   onRetry: () => void;
+  holdMinutes: number;
 }) {
   const firstOpen = avail?.slots.find((s) => summarize(s).state === 'available')?.period;
   const selectedPeriod = avail?.slots.find((s) => s.hour === selectedHour)?.period;
@@ -587,7 +528,7 @@ function TimeStep({
                   </span>
 
                   {slot.rateType === 'night_owl' && isAvail && (
-                    <span className={cx('absolute right-1.5 top-1.5 rounded-full px-1.5 text-[9px] font-bold', isSel ? 'bg-[#CCFF00] text-zinc-900' : 'bg-emerald-100 text-emerald-800')}>
+                    <span className={cx('absolute right-1.5 top-1.5 rounded-full px-1.5 text-[9px] font-bold', isSel ? 'bg-[#D2EE5E] text-zinc-900' : 'bg-emerald-100 text-emerald-800')}>
                       PROMO
                     </span>
                   )}
@@ -605,14 +546,14 @@ function TimeStep({
               12 AM – 5 AM are the early hours of {fmtDate(addDays(date, 1))}. Night Owl rate applies 10 PM – 6 AM.
             </p>
           )}
-          <Legend />
+          <Legend holdMinutes={holdMinutes} />
         </>
       )}
     </div>
   );
 }
 
-function Legend() {
+function Legend({ holdMinutes }: { holdMinutes: number }) {
   return (
     <div className="rounded-2xl border border-zinc-200/90 bg-white p-3 shadow-2xs">
       <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Court Availability Legend</div>
@@ -623,7 +564,7 @@ function Legend() {
         </div>
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 shrink-0 rounded-md border border-amber-300 bg-amber-200" />
-          <span className="font-medium text-amber-900">On Hold (15m)</span>
+          <span className="font-medium text-amber-900">On Hold ({holdMinutes}m)</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 shrink-0 rounded-md border border-rose-300 bg-rose-200" />
@@ -670,6 +611,9 @@ function CourtStep({
     )
   );
 
+  // The stepper stops at the longest run the club can actually give you from this start time.
+  const hoursLimit = loading ? config.maxHours : Math.max(1, Math.min(config.maxHours, maxContinuousOverall));
+
   // Is another court available for all requested hours?
   const altCourt =
     courtId && !courtFreeFor(courtId, hours)
@@ -701,7 +645,34 @@ function CourtStep({
             </span>
           )}
         </div>
-        <div className="grid grid-cols-3 gap-2">
+
+        {/* Stepper and quick chips both drive the same `hours` value. */}
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-2" role="group" aria-label="Session length in hours">
+          <button
+            type="button"
+            onClick={() => onHours(Math.max(1, hours - 1))}
+            disabled={hours <= 1}
+            aria-label="One hour less"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-800 transition hover:bg-emerald-50 hover:text-[#15803D] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200 cursor-pointer"
+          >
+            <Minus className="h-5 w-5" />
+          </button>
+          <div className="min-w-0 text-center" aria-live="polite">
+            <span className="block font-heading text-xl font-black leading-tight text-zinc-950">{hrsLabel(hours)}</span>
+            <span className="block text-xs font-medium text-zinc-500">until {hourLabel(endHour)}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onHours(Math.min(hoursLimit, hours + 1))}
+            disabled={hours >= hoursLimit}
+            aria-label="One hour more"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-800 transition hover:bg-emerald-50 hover:text-[#15803D] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200 cursor-pointer"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Quick pick">
           {Array.from({ length: config.maxHours }, (_, i) => i + 1).map((n) => {
             const anyFree = config.courts.some((c) => courtFreeFor(c.id, n));
             const isBlocked = !loading && !anyFree;
@@ -712,24 +683,18 @@ function CourtStep({
                 onClick={() => onHours(n)}
                 disabled={isBlocked}
                 aria-pressed={hours === n}
+                aria-label={isBlocked ? `${hrsLabel(n)}, not available` : hrsLabel(n)}
                 className={cx(
-                  'rounded-2xl border py-3 text-center transition cursor-pointer disabled:cursor-not-allowed',
+                  'flex min-h-11 min-w-[3.25rem] flex-1 items-center justify-center gap-1 rounded-xl border px-1 text-center text-[13px] font-bold transition cursor-pointer disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200',
                   hours === n && !isBlocked
-                    ? 'border-[#15803D] bg-emerald-50 ring-2 ring-emerald-200'
+                    ? 'border-[#15803D] bg-emerald-50 text-zinc-950 ring-2 ring-emerald-200'
                     : isBlocked
-                    ? 'border-rose-200 bg-rose-50/40 text-rose-900/60 opacity-60'
-                    : 'border-zinc-200 bg-white hover:border-emerald-300'
+                    ? 'border-rose-200 bg-rose-50/40 text-rose-950/60 line-through opacity-60'
+                    : 'border-zinc-200 bg-white text-zinc-800 hover:border-emerald-300'
                 )}
               >
-                <div className="flex items-center justify-center gap-1">
-                  <span className={cx('block text-[15px] font-bold', isBlocked ? 'text-rose-950/70 line-through' : 'text-zinc-950')}>
-                    {n} hr{n > 1 ? 's' : ''}
-                  </span>
-                  {isBlocked && <Lock className="h-3 w-3 text-rose-600" />}
-                </div>
-                <span className={cx('text-[11px]', isBlocked ? 'text-rose-700/80 font-medium' : 'text-zinc-500')}>
-                  {isBlocked ? 'Blocked' : `until ${hourLabel((hour + n) % 24)}`}
-                </span>
+                {hrsLabel(n)}
+                {isBlocked && <Lock className="h-3 w-3 text-rose-600" />}
               </button>
             );
           })}
@@ -1046,8 +1011,8 @@ function ReviewStep(props: {
       <div className="flex gap-3 rounded-2xl bg-amber-50 p-4 text-sm text-amber-950 ring-1 ring-amber-100">
         <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
         <p>
-          When you confirm, this slot is <strong>held for you for {config.holdMinutes} minutes</strong>. Send the payment and upload your
-          receipt within that time, or the slot is released for others.
+          When you confirm, this slot is <strong>held for you for {config.holdMinutes} minutes</strong>. Send the <strong>full amount</strong> and
+          upload your receipt within that time, or the slot is released for others. Your booking is confirmed once the full payment is received.
         </p>
       </div>
 
@@ -1057,9 +1022,9 @@ function ReviewStep(props: {
           <span>House Rules Quick Notice</span>
         </div>
         <ul className="space-y-1 text-emerald-950/90 pl-4 list-disc font-medium text-[11px] sm:text-xs">
-          <li><strong>20-Min No-Show Rule:</strong> Arrive on time. Slots with no check-in after 20 minutes are forfeited to walk-ins with no refund.</li>
-          <li><strong>Footwear:</strong> Non-marking athletic court shoes strictly required (no flip-flops/bare feet).</li>
-          <li><strong>CLAYGO:</strong> Water bottles only bench-side; dispose of trash in bins.</li>
+          {reviewNotices(config).map((n) => (
+            <li key={n.title}><strong>{n.title}:</strong> {n.text}</li>
+          ))}
         </ul>
       </div>
 
@@ -1087,36 +1052,6 @@ function ReviewStep(props: {
 }
 
 // ── Small pieces ──────────────────────────────────────────────────────────────
-function StepTitle({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div>
-      <h3 className="text-xl font-bold tracking-tight text-zinc-950">{title}</h3>
-      {subtitle && <p className="mt-1 text-sm text-zinc-500">{subtitle}</p>}
-    </div>
-  );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return <h4 className="mb-2 text-sm font-semibold text-zinc-800">{children}</h4>;
-}
-
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-sm font-semibold text-zinc-800">{label}</span>
-      {children}
-      {error && <span className="mt-1.5 block text-xs font-medium text-red-600">{error}</span>}
-    </label>
-  );
-}
-
-const inputClass = (err: boolean) =>
-  cx(
-    'w-full rounded-2xl border bg-white px-4 py-3 text-base text-zinc-950 placeholder:text-zinc-400 transition',
-    'focus:outline-none focus:ring-4',
-    err ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : 'border-zinc-200 focus:border-[#15803D] focus:ring-emerald-100'
-  );
-
 function ReviewRow({ label, onEdit, children }: { label: string; onEdit: () => void; children: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 p-4 text-sm">

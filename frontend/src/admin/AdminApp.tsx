@@ -8,12 +8,13 @@ import { BookingDetail } from './BookingDetail';
 import { BookingForm, type FormMode } from './BookingForm';
 import { BookingsPage } from './Bookings';
 import { DeskContext, type Desk, type FormSeed } from './desk';
-import { useTab } from './hooks';
+import { useRemote, useTab } from './hooks';
 import { Login } from './Login';
 import { OverviewPage } from './Overview';
 import { SchedulePage } from './Schedule';
 import { Shell } from './Shell';
 import type { NavCounts } from './types';
+import { WeatherPage } from './Weather';
 
 /**
  * The desk is for one person: keep it out of search results, and give it its own app identity so
@@ -65,7 +66,7 @@ export default function AdminApp() {
   if (authed === null) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-zinc-950" role="status" aria-label="Loading">
-        <Loader2 className="h-6 w-6 animate-spin text-[#CCFF00]" />
+        <Loader2 className="h-6 w-6 animate-spin text-[#D2EE5E]" />
       </div>
     );
   }
@@ -83,12 +84,19 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [toast, setToast] = useState<string | null>(null);
   const [preset, setPreset] = useState<{ status: string; nonce: number } | undefined>();
   const lastPending = useRef<number | null>(null);
+  const lastLate = useRef<number | null>(null);
 
   useEffect(() => {
     api.config().then(setConfig, () => {});
   }, []);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  // The forecast is shared: the Weather tab, the overview card and the nav dot all read this one request.
+  const { data: weatherReport, error: weatherError, loading: weatherLoading, refresh: refreshWeather } = useRemote('weather', () => adminApi.weather(), {
+    intervalMs: 5 * 60_000,
+    version: refreshKey,
+  });
 
   // The badge and tab title follow the queue, and a payment that arrives while the desk is open says so.
   useEffect(() => {
@@ -104,6 +112,12 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
           setRefreshKey((k) => k + 1);
         }
         lastPending.current = c.toReview;
+        // A group that just didn't turn up: the quiet minutes to restore it are short, so say so right away.
+        if (lastLate.current !== null && c.late > lastLate.current) {
+          setToast(c.late - lastLate.current === 1 ? 'A booking just went Late. Restore it if the guest turns up.' : 'Bookings just went Late. Restore them if the guests turn up.');
+          setRefreshKey((k) => k + 1);
+        }
+        lastLate.current = c.late;
       } catch {
         // a dropped connection just skips this round
       }
@@ -119,14 +133,20 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
   }, [refreshKey]);
 
   const pending = counts?.toReview ?? 0;
+  const late = counts?.late ?? 0;
+  const rainDelay = counts?.rainDelay ?? 0;
+  const rainExpected = !!weatherReport?.available && weatherReport.atRisk.length > 0;
+  const attention = pending + late;
   useEffect(() => {
-    document.title = pending ? `(${pending}) HousePickle Desk` : 'HousePickle Desk';
-  }, [pending]);
+    document.title = attention ? `(${attention}) HousePickle Desk` : 'HousePickle Desk';
+  }, [attention]);
 
   const desk = useMemo<Desk>(
     () => ({
       config,
       counts,
+      weather: { report: weatherReport, loading: weatherLoading && !weatherReport, failed: !!weatherError && !weatherReport },
+      refreshWeather,
       refreshKey,
       refresh,
       openBooking: (code) => {
@@ -147,7 +167,7 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
       },
       notify: setToast,
     }),
-    [config, counts, refreshKey, refresh, goTab]
+    [config, counts, weatherReport, weatherLoading, weatherError, refreshWeather, refreshKey, refresh, goTab]
   );
 
   const signOut = async () => {
@@ -167,10 +187,17 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
 
   return (
     <DeskContext.Provider value={desk}>
-      <Shell tab={tab} onTab={goTab} pending={pending} onAdd={() => desk.addBooking()} onSignOut={signOut}>
+      <Shell
+        tab={tab}
+        onTab={goTab}
+        badges={{ pending, late, rainDelay, rainExpected }}
+        onAdd={() => desk.addBooking()}
+        onSignOut={signOut}
+      >
         {tab === 'overview' && <OverviewPage />}
         {tab === 'bookings' && <BookingsPage presetStatus={preset} />}
         {tab === 'schedule' && <SchedulePage />}
+        {tab === 'weather' && <WeatherPage />}
       </Shell>
 
       {detail && <BookingDetail code={detail} onClose={() => setDetail(null)} />}

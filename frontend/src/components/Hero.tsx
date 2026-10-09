@@ -214,9 +214,9 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
             {/* Top Interactive Banner */}
             <div className="bg-gradient-to-r from-[#15803D] via-[#166534] to-[#093b1b] px-4 sm:px-5 py-3 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#CCFF00] animate-pulse shadow-xs shrink-0" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#D2EE5E] animate-pulse shadow-xs shrink-0" />
                 <span className="font-heading font-extrabold text-xs uppercase tracking-wider flex items-center gap-1.5 truncate">
-                  <Sparkles className="w-3.5 h-3.5 text-[#CCFF00] shrink-0" />
+                  <Sparkles className="w-3.5 h-3.5 text-[#D2EE5E] shrink-0" />
                   Quick Court Booking Console
                 </span>
               </div>
@@ -277,7 +277,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                           {fmtDate(date, { month: 'short' })}
                         </div>
                         {isSelected && (
-                          <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[#CCFF00]" />
+                          <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-[#D2EE5E]" />
                         )}
                       </motion.button>
                     );
@@ -356,7 +356,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                           {isBooked ? (
                             state === 'held' ? 'On hold' : state === 'past' ? 'Passed' : 'Reserved'
                           ) : slot.period === 'night_owl' ? (
-                            <span className={isSelected ? 'text-[#CCFF00]' : 'text-[#15803D] font-bold'}>
+                            <span className={isSelected ? 'text-[#D2EE5E]' : 'text-[#15803D] font-bold'}>
                               ₱200 Promo
                             </span>
                           ) : (
@@ -366,7 +366,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                           )}
                         </div>
                         {isSelected && (
-                          <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#CCFF00]" />
+                          <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#D2EE5E]" />
                         )}
                       </motion.button>
                     );
@@ -440,7 +440,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                       className="group w-full sm:w-auto flex items-center justify-between sm:justify-start gap-3 pl-5 pr-2 py-2.5 rounded-full bg-[#15803D] hover:bg-[#166534] text-white text-xs font-sport font-extrabold uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-emerald-950/20"
                     >
                       <span>{activeSlot ? 'Continue booking' : 'Book a slot'}</span>
-                      <div className="w-7 h-7 rounded-full bg-white/20 group-hover:bg-[#CCFF00] group-hover:text-zinc-950 flex items-center justify-center transition-colors">
+                      <div className="w-7 h-7 rounded-full bg-white/20 group-hover:bg-[#D2EE5E] group-hover:text-zinc-950 flex items-center justify-center transition-colors">
                         <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                       </div>
                     </motion.button>

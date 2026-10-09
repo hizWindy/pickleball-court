@@ -52,9 +52,9 @@ export const Login: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }) => {
           <div className="leading-none">
             <div className="flex items-center gap-2">
               <span className="font-heading text-lg font-black tracking-wide">
-                HOUSE<span className="text-[#CCFF00]">PICKLE</span>
+                HOUSE<span className="text-[#D2EE5E]">PICKLE</span>
               </span>
-              <span className="rounded bg-[#CCFF00] px-1.5 py-0.5 font-sport text-[10px] font-extrabold uppercase tracking-widest text-zinc-950">Desk</span>
+              <span className="rounded bg-[#D2EE5E] px-1.5 py-0.5 font-sport text-[10px] font-extrabold uppercase tracking-widest text-zinc-950">Desk</span>
             </div>
             <p className="mt-1.5 font-sport text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-400">Staff only</p>
           </div>
@@ -83,7 +83,7 @@ export const Login: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }) => {
                 aria-describedby={error ? 'desk-error' : undefined}
                 className={cx(
                   'h-12 w-full rounded-xl border bg-white/[0.06] pl-4 pr-12 text-base text-white placeholder:text-zinc-500 transition',
-                  'focus:border-[#CCFF00] focus:outline-none focus:ring-2 focus:ring-[#CCFF00]/30',
+                  'focus:border-[#D2EE5E] focus:outline-none focus:ring-2 focus:ring-[#D2EE5E]/30',
                   error ? 'border-red-400/70' : 'border-white/15'
                 )}
               />
@@ -91,7 +91,7 @@ export const Login: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }) => {
                 type="button"
                 onClick={() => setShow((s) => !s)}
                 aria-label={show ? 'Hide password' : 'Show password'}
-                className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-zinc-400 hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CCFF00]"
+                className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-zinc-400 hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2EE5E]"
               >
                 {show ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
@@ -106,7 +106,7 @@ export const Login: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }) => {
           <button
             type="submit"
             disabled={!password || busy}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#CCFF00] text-[15px] font-bold text-zinc-950 transition hover:bg-[#d9ff4d] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-zinc-500 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#D2EE5E] text-[15px] font-bold text-zinc-950 transition hover:bg-[#d9ff4d] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-zinc-500 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
             {busy ? 'Checking…' : 'Sign in'}

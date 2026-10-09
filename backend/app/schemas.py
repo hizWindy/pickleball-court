@@ -44,6 +44,9 @@ class ConfigOut(ApiModel):
     hold_minutes: int
     max_hours: int
     booking_window_days: int
+    late_after_minutes: int
+    reschedule_min_hours: int
+    reschedule_window_days: int
     consent_version: str
     today: date  # current play day in Manila
     server_now: str
@@ -106,6 +109,10 @@ class LineItemOut(ApiModel):
     rate_type: Literal["standard", "night_owl"]
 
 
+RescheduleState = Literal["open", "weather", "used", "too_late", "unavailable"]
+PendingReason = Literal["amount_short", "amount_unreadable"]
+
+
 class BookingOut(ApiModel):
     code: str
     status: BookingStatus
@@ -129,8 +136,44 @@ class BookingOut(ApiModel):
     proof_type: Literal["receipt", "reference"] | None
     closed_at: str | None
     server_now: str
+    # What the pass needs to know once the booking is paid
+    arrived: bool  # the group has checked in
+    late: bool  # not there in time: the hours were released (the host may still sort it out)
+    weather_hold: bool  # the host called a rain delay: pick a new time
+    can_check_in: bool
+    reschedule: RescheduleState
+    reschedule_count: int
+    # Why a payment is waiting for the host instead of confirming, and what the receipt showed
+    pending_reason: PendingReason | None = None
+    amount_paid: float | None = None
 
 
 class BookingWithTokenOut(ApiModel):
     booking: BookingOut
     access_token: str
+
+
+# ── Rescheduling ──────────────────────────────────────────────────────────────
+class RescheduleLookupIn(ApiModel):
+    """Proof of ownership is the booking code plus the mobile number on it (or this device's booking token)."""
+
+    code: str = Field(max_length=20)
+    customer_phone: str | None = None
+
+    @field_validator("customer_phone")
+    @classmethod
+    def _phone(cls, v: str | None) -> str | None:
+        return normalize_ph_mobile(v) if v and v.strip() else None
+
+
+class RescheduleIn(RescheduleLookupIn):
+    court_id: str | None = None
+    date: date
+    hour: int = Field(ge=0, le=23)
+
+
+class RescheduleLookupOut(ApiModel):
+    booking: BookingOut
+    access_token: str  # lets this device keep reading the booking after the lookup
+    earliest_date: date
+    latest_date: date

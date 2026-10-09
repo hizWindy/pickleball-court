@@ -62,7 +62,7 @@ export const ColumnChart: React.FC<{
                     c.value === 0
                       ? dark ? 'bg-white/15' : 'bg-zinc-200'
                       : dark
-                        ? on ? 'bg-white' : c.emphasis ? 'bg-[#CCFF00]' : 'bg-[#B4E600]/80'
+                        ? on ? 'bg-white' : c.emphasis ? 'bg-[#D2EE5E]' : 'bg-[#B4E600]/80'
                         : on ? 'bg-[#166534]' : c.emphasis ? 'bg-[#15803D]' : 'bg-[#15803D]/70'
                   )}
                   style={{ height: c.value === 0 ? 2 : `max(3px, ${pct}%)` }}
@@ -132,7 +132,7 @@ export const HourGrid: React.FC<{ counts: number[] }> = ({ counts }) => {
               'flex aspect-[5/4] flex-col items-center justify-center rounded-lg text-center',
               n === 0 && 'bg-zinc-50 text-zinc-300 ring-1 ring-inset ring-zinc-100',
               n > 0 && r > 0.55 ? 'text-white' : n > 0 ? 'text-zinc-900' : '',
-              h === peak && 'ring-2 ring-[#CCFF00] ring-offset-1 ring-offset-white'
+              h === peak && 'ring-2 ring-[#D2EE5E] ring-offset-1 ring-offset-white'
             )}
             style={n > 0 ? { backgroundColor: `rgba(21, 128, 61, ${0.1 + 0.9 * r})` } : undefined}
           >

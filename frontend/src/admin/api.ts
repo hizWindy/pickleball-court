@@ -7,7 +7,11 @@ import type {
   ListQuery,
   NavCounts,
   Overview,
+  RainDelayBody,
+  RainDelayPreview,
+  RainDelayResult,
   UpdateBody,
+  WeatherReport,
 } from './types';
 
 /** Fired when the server says the session is gone, so the whole desk can fall back to the sign-in screen. */
@@ -55,6 +59,14 @@ export const adminApi = {
   overview: (days: number) => call<Overview>(`/api/admin/overview?days=${days}`),
   schedule: (date: string) => call<AdminSchedule>(`/api/admin/schedule?date=${enc(date)}`),
 
+  /** Rain forecast for the next few days, and the paid bookings that fall in it. */
+  weather: () => call<WeatherReport>('/api/admin/weather'),
+  /** Who a rain delay on this window would move. Changes nothing. */
+  rainDelayPreview: (date: string, fromHour: number, hours: number) =>
+    call<RainDelayPreview>(`/api/admin/rain-delay?date=${enc(date)}&fromHour=${fromHour}&hours=${hours}`),
+  /** Give the hours back for everyone in the window (or just `codes`). Nothing is cancelled or refunded. */
+  rainDelay: (body: RainDelayBody) => call<RainDelayResult>('/api/admin/rain-delay', { method: 'POST', json: body }),
+
   list: (query: ListQuery) => {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
@@ -68,8 +80,14 @@ export const adminApi = {
   confirm: (code: string) => call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/confirm`, { method: 'POST' }),
   /** "Looks good": the host checked an automatically confirmed payment. */
   check: (code: string) => call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/check`, { method: 'POST' }),
+  /** "They're here": the group is on site, so the booking never goes Late. */
+  arrived: (code: string) => call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/arrived`, { method: 'POST' }),
+  /** Put a Late booking (inside the quiet window) or a rain-delayed one back on court. */
+  restore: (code: string, note?: string) =>
+    call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/restore`, { method: 'POST', json: { note: note || null } }),
   reject: (code: string, reason?: string) =>
     call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/reject`, { method: 'POST', json: { reason: reason || null } }),
+  /** The old "cancel", now "void": guests can't cancel, so this is only for mistakes, duplicates and refunds. */
   cancel: (code: string, reason?: string) =>
     call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/cancel`, { method: 'POST', json: { reason: reason || null } }),
   remove: (code: string) => call<void>(`/api/admin/bookings/${enc(code)}`, { method: 'DELETE' }),

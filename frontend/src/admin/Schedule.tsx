@@ -4,16 +4,19 @@ import { serverNowMs } from '../lib/api';
 import { addDays, currentPlayDate, fmtDate, hourLabel } from '../lib/time';
 import { adminApi } from './api';
 import { useDesk } from './desk';
-import { hourSpan, isNight, PLAY_HOURS } from './format';
+import { arrivable, hourSpan, isNight, PLAY_HOURS } from './format';
 import { useNow, useRemote } from './hooks';
+import { ArrivedIconBtn, RestoreIconBtn } from './QuickActions';
 import { Btn, cx } from './ui';
+import { useQuickActions } from './useQuickActions';
 import type { AdminBooking } from './types';
 
 const ROW = 56; // px per hour
 
 const TONE = {
-  confirmed: 'border-emerald-600 bg-emerald-50 text-emerald-950 hover:bg-emerald-100',
-  pending_verification: 'border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100',
+  paid: 'border-emerald-600 bg-emerald-50 text-emerald-950 hover:bg-emerald-100',
+  done: 'border-zinc-400 bg-zinc-100 text-zinc-600 hover:bg-zinc-200/70',
+  check: 'border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100',
   held: 'border-sky-500 bg-sky-50 text-sky-950 hover:bg-sky-100',
   blocked: 'border-zinc-500 bg-[repeating-linear-gradient(135deg,#f4f4f5,#f4f4f5_6px,#e4e4e7_6px,#e4e4e7_12px)] text-zinc-800 hover:brightness-95',
 } as const;
@@ -22,14 +25,20 @@ const toneOf = (b: AdminBooking): keyof typeof TONE =>
   b.source === 'blocked'
     ? 'blocked'
     : b.status === 'pending_verification' || (b.needsReview && b.reviewFlags.length > 0)
-      ? 'pending_verification'
+      ? 'check'
       : b.status === 'held'
         ? 'held'
-        : 'confirmed';
+        : b.label === 'done'
+          ? 'done'
+          : 'paid';
+
+/** Late and rain-delayed bookings have given their hours back: they are shown, but they do not take up the court. */
+const releasedHours = (b: AdminBooking) => b.label === 'late' || b.label === 'rain_delay';
 
 export const SchedulePage: React.FC = () => {
   const desk = useDesk();
-  useNow(30000); // re-render every 30 s so the "now" line moves
+  const now = useNow(30000); // re-render every 30 s so the "now" line moves
+  const { q, problemDialog } = useQuickActions();
   const realToday = desk.config?.today ?? currentPlayDate(serverNowMs());
   const [date, setDate] = useState(realToday);
   const { data, error } = useRemote(`schedule-${date}`, () => adminApi.schedule(date), { intervalMs: 20000, version: desk.refreshKey });
@@ -58,7 +67,7 @@ export const SchedulePage: React.FC = () => {
       .filter(({ a, z }) => z > a);
 
   const bookedHours = (data?.bookings ?? []).reduce((sum, b) => {
-    if (b.source === 'blocked') return sum;
+    if (b.source === 'blocked' || releasedHours(b)) return sum;
     const a = Math.max(0, (Date.parse(b.startAt) - dayStart) / 3_600_000);
     const z = Math.min(24, (Date.parse(b.endAt) - dayStart) / 3_600_000);
     return sum + Math.max(0, z - a);
@@ -86,7 +95,7 @@ export const SchedulePage: React.FC = () => {
         <label className="relative flex h-11 min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 focus-within:ring-2 focus-within:ring-[#15803D]">
           <CalendarDays className="h-4 w-4 text-[#15803D]" />
           <span className="truncate">{fmtDate(date, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-          {isToday && <span className="rounded-full bg-[#CCFF00] px-2 py-0.5 font-sport text-[10px] font-extrabold uppercase tracking-wider text-zinc-950">Today</span>}
+          {isToday && <span className="rounded-full bg-[#D2EE5E] px-2 py-0.5 font-sport text-[10px] font-extrabold uppercase tracking-wider text-zinc-950">Today</span>}
           <input
             type="date"
             value={date}
@@ -148,34 +157,74 @@ export const SchedulePage: React.FC = () => {
           <div className="pointer-events-none absolute inset-y-0 right-0 left-14 grid" style={{ gridTemplateColumns: `repeat(${courts.length || 2}, minmax(0, 1fr))` }}>
             {courts.map((c) => (
               <div key={c.id} className="relative">
-                {blocks(c.id).map(({ b, a, z }) => {
-                  const tone = toneOf(b);
-                  const tall = z - a >= 1.5;
-                  return (
-                    <button
-                      key={b.code}
-                      type="button"
-                      onClick={() => desk.openBooking(b.code)}
-                      style={{ top: a * ROW + 2, height: (z - a) * ROW - 4 }}
-                      className={cx(
-                        'pointer-events-auto absolute inset-x-1 overflow-hidden rounded-lg border-l-4 px-2 py-1 text-left shadow-xs ring-1 ring-black/5 transition cursor-pointer',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15803D]',
-                        TONE[tone]
-                      )}
-                    >
-                      <span className="flex items-center gap-1 text-[13px] font-bold leading-tight">
-                        {b.source === 'blocked' && <Ban className="h-3 w-3 shrink-0" />}
-                        <span className="truncate">{b.customerName}</span>
-                      </span>
-                      <span className="block truncate text-[11px] font-medium leading-tight opacity-75">{hourSpan(b.hour, b.hours)}</span>
-                      {tall && tone !== 'confirmed' && tone !== 'blocked' && (
-                        <span className="mt-1 inline-block rounded bg-white/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-                          {tone === 'pending_verification' ? 'Check payment' : 'Paying now'}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                {/* Late bookings first, so a booking made for the freed hours sits on top of them */}
+                {blocks(c.id)
+                  .filter(({ b }) => b.label === 'late')
+                  .map(({ b, a, z }) => {
+                    // The dashed outline shows the hours that reopened and lets taps through to the empty cells;
+                    // only the first hour carries the guest name and the Restore button.
+                    const head = Math.min(ROW - 4, (z - a) * ROW - 4);
+                    return (
+                      <div
+                        key={b.code}
+                        style={{ top: a * ROW + 2, height: (z - a) * ROW - 4 }}
+                        className="pointer-events-none absolute inset-x-1 rounded-lg border-2 border-dashed border-amber-500 bg-amber-100/50"
+                      >
+                        <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-center overflow-hidden rounded-md bg-amber-50/90" style={{ height: head }}>
+                          <button
+                            type="button"
+                            onClick={() => desk.openBooking(b.code)}
+                            aria-label={`${b.customerName}, Late, ${hourSpan(b.hour, b.hours)}. Open booking`}
+                            className="h-full min-w-0 flex-1 cursor-pointer px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#15803D]"
+                          >
+                            <span className="block truncate text-[13px] font-bold leading-tight text-amber-950">{b.customerName}</span>
+                            <span className="mt-0.5 inline-block rounded bg-amber-500 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-white">Late</span>
+                          </button>
+                          <RestoreIconBtn b={b} q={q} className="mr-0.5" />
+                        </div>
+                        {z - a > 1 && (
+                          <span className="pointer-events-none absolute inset-x-2 text-[10px] font-medium leading-tight text-amber-800/80" style={{ top: head + 4 }}>
+                            {hourSpan(b.hour, b.hours)} · hours reopened
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                {blocks(c.id)
+                  .filter(({ b }) => b.label !== 'late')
+                  .map(({ b, a, z }) => {
+                    const tone = toneOf(b);
+                    const tall = z - a >= 1.5;
+                    const canArrive = arrivable(b, now);
+                    return (
+                      <div
+                        key={b.code}
+                        style={{ top: a * ROW + 2, height: (z - a) * ROW - 4 }}
+                        className={cx('pointer-events-auto absolute inset-x-1 overflow-hidden rounded-lg border-l-4 shadow-xs ring-1 ring-black/5 transition', TONE[tone])}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => desk.openBooking(b.code)}
+                          className={cx(
+                            'block h-full w-full cursor-pointer px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#15803D]',
+                            canArrive && 'pr-[3.1rem]'
+                          )}
+                        >
+                          <span className="flex items-center gap-1 text-[13px] font-bold leading-tight">
+                            {b.source === 'blocked' && <Ban className="h-3 w-3 shrink-0" />}
+                            <span className="truncate">{b.customerName}</span>
+                          </span>
+                          <span className="block truncate text-[11px] font-medium leading-tight opacity-75">{hourSpan(b.hour, b.hours)}</span>
+                          {tall && (tone === 'check' || tone === 'held') && (
+                            <span className="mt-1 inline-block rounded bg-white/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                              {tone === 'check' ? (b.status === 'pending_verification' ? 'Needs check' : 'Check payment') : 'Paying now'}
+                            </span>
+                          )}
+                        </button>
+                        {canArrive && <ArrivedIconBtn b={b} q={q} now={now} className="absolute right-0.5 top-0.5" />}
+                      </div>
+                    );
+                  })}
               </div>
             ))}
           </div>
@@ -192,8 +241,9 @@ export const SchedulePage: React.FC = () => {
 
       <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-zinc-500" aria-label="Legend">
         {[
-          ['bg-emerald-600', 'Confirmed'],
-          ['bg-amber-500', 'Receipt looks off'],
+          ['bg-emerald-600', 'Paid'],
+          ['bg-zinc-400', 'Done'],
+          ['bg-amber-500', 'Needs a look'],
           ['bg-sky-500', 'Player is paying'],
           ['bg-zinc-500', 'Blocked'],
         ].map(([dot, label]) => (
@@ -201,8 +251,12 @@ export const SchedulePage: React.FC = () => {
             <span className={cx('h-2.5 w-2.5 rounded-sm', dot)} /> {label}
           </li>
         ))}
+        <li className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm border-2 border-dashed border-amber-500" /> Late (hours reopened)
+        </li>
         <li className="text-indigo-400">Night Owl hours are shaded</li>
       </ul>
+      {problemDialog}
     </div>
   );
 };

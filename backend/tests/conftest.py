@@ -17,7 +17,7 @@ os.environ["OCR_ENABLED"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import clock, ratelimit  # noqa: E402
+from app import clock, ratelimit, weather  # noqa: E402
 from app.clock import MANILA  # noqa: E402
 from app.db import connect  # noqa: E402
 from app.main import app  # noqa: E402
@@ -47,10 +47,11 @@ def client(fake_now):
         conn = connect()
         conn.executescript(
             "DELETE FROM booking_access; DELETE FROM booking_slots; DELETE FROM bookings;"
-            "DELETE FROM admin_sessions; DELETE FROM admin_events; DELETE FROM receipt_scans;"
+            "DELETE FROM admin_sessions; DELETE FROM admin_events; DELETE FROM receipt_scans; DELETE FROM notices_sent;"
         )
         conn.close()
         ratelimit.reset()
+        weather.reset()
         yield c
 
 

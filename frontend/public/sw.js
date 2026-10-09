@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'housepickle-v4';
+const CACHE_VERSION = 'housepickle-v5'; // bumped: new colours, rules and booking screens
 const STATIC_ASSETS = [
   '/',
   '/index.html',

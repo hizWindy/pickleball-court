@@ -1,15 +1,19 @@
-import React, { useEffect, useId, useRef } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Loader2, X } from 'lucide-react';
-import type { BookingStatus } from '../types';
+import { Check, Copy, Loader2, X } from 'lucide-react';
 import { cx } from '../components/booking/ui';
-import { STATUS, type Tone } from './format';
+import { LABEL, type AdminLabel, type Tone } from './format';
 
 export { cx };
 
 // ── Surfaces & text ───────────────────────────────────────────────────────────
+// A card that is given its own background or border colour (an amber note, say) must not also get the white one:
+// when two utilities set the same property, the stylesheet order decides, not the order in the class list.
+const hasBg = (c?: string) => /(^|\s)bg-/.test(c ?? '');
+const hasBorderColor = (c?: string) => /(^|\s)border-(?:[a-z]+-\d{2,3}|transparent)/.test(c ?? '');
+
 export const Card: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...rest }) => (
-  <div {...rest} className={cx('rounded-2xl border border-zinc-200 bg-white', className)} />
+  <div {...rest} className={cx('rounded-2xl border', !hasBorderColor(className) && 'border-zinc-200', !hasBg(className) && 'bg-white', className)} />
 );
 
 /** Small uppercase section label, in the club's condensed sport face. */
@@ -27,15 +31,16 @@ const TONES: Record<Tone, { pill: string; dot: string }> = {
   red: { pill: 'bg-red-50 text-red-800 ring-red-200', dot: 'bg-red-500' },
   zinc: { pill: 'bg-zinc-100 text-zinc-600 ring-zinc-200', dot: 'bg-zinc-400' },
   blue: { pill: 'bg-sky-50 text-sky-800 ring-sky-200', dot: 'bg-sky-500' },
-  dark: { pill: 'bg-zinc-900 text-white ring-zinc-900', dot: 'bg-[#CCFF00]' },
+  dark: { pill: 'bg-zinc-900 text-white ring-zinc-900', dot: 'bg-[#D2EE5E]' },
 };
 
-export const StatusPill: React.FC<{ status: BookingStatus; className?: string }> = ({ status, className }) => {
-  const s = STATUS[status];
+/** The one word on a booking: Paid, Late, Done, Rain delay (or one of the rare ones). */
+export const LabelBadge: React.FC<{ label: AdminLabel; className?: string }> = ({ label, className }) => {
+  const s = LABEL[label];
   const tone = TONES[s.tone];
   return (
     <span className={cx('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ring-1', tone.pill, className)}>
-      <span className={cx('h-1.5 w-1.5 rounded-full', tone.dot, status === 'pending_verification' && 'animate-pulse motion-reduce:animate-none')} />
+      <span className={cx('h-1.5 w-1.5 rounded-full', tone.dot, label === 'needs_check' && 'animate-pulse motion-reduce:animate-none')} />
       {s.label}
     </span>
   );
@@ -55,26 +60,70 @@ const VARIANTS: Record<Variant, string> = {
   ghost: 'text-zinc-700 hover:bg-zinc-100 disabled:opacity-50',
 };
 
-type BtnProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' | 'lg'; loading?: boolean };
+type Size = 'sm' | 'md' | 'lg';
+type BtnProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: Size; loading?: boolean };
+
+const btnClass = (variant: Variant, size: Size, className?: string) =>
+  cx(
+    'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition cursor-pointer disabled:cursor-not-allowed',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15803D] focus-visible:ring-offset-2',
+    'active:scale-[0.98] motion-reduce:active:scale-100',
+    size === 'sm' ? 'h-9 px-3 text-[13px]' : size === 'md' ? 'h-11 px-4 text-sm' : 'h-12 px-5 text-[15px]',
+    VARIANTS[variant],
+    className
+  );
 
 export const Btn: React.FC<BtnProps> = ({ variant = 'outline', size = 'md', loading, className, children, disabled, type = 'button', ...rest }) => (
-  <button
-    {...rest}
-    type={type}
-    disabled={disabled || loading}
-    className={cx(
-      'inline-flex shrink-0 items-center justify-center gap-2 rounded-xl font-semibold transition cursor-pointer disabled:cursor-not-allowed',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15803D] focus-visible:ring-offset-2',
-      'active:scale-[0.98] motion-reduce:active:scale-100',
-      size === 'sm' ? 'h-9 px-3 text-[13px]' : size === 'md' ? 'h-11 px-4 text-sm' : 'h-12 px-5 text-[15px]',
-      VARIANTS[variant],
-      className
-    )}
-  >
+  <button {...rest} type={type} disabled={disabled || loading} className={btnClass(variant, size, className)}>
     {loading && <Loader2 className="h-4 w-4 animate-spin" />}
     {children}
   </button>
 );
+
+/** A link (call, text) that looks and feels like a Btn. */
+export const LinkBtn: React.FC<React.AnchorHTMLAttributes<HTMLAnchorElement> & { variant?: Variant; size?: Size }> = ({
+  variant = 'outline',
+  size = 'md',
+  className,
+  children,
+  ...rest
+}) => (
+  <a {...rest} className={btnClass(variant, size, className)}>
+    {children}
+  </a>
+);
+
+/** Copy some text (a message to paste into Messenger, say), with a quiet "Copied" confirmation. */
+export const CopyBtn: React.FC<{ text: string; label?: string; size?: Size; className?: string }> = ({ text, label = 'Copy', size = 'md', className }) => {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1800);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Older iOS without clipboard permission: select a hidden input instead
+      const input = document.createElement('input');
+      input.value = text;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      input.remove();
+    }
+    setCopied(true);
+  };
+
+  return (
+    <Btn size={size} variant="outline" onClick={copy} className={cx(copied && '!bg-emerald-50 !text-emerald-800 !ring-emerald-200', className)} aria-live="polite">
+      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+      {copied ? 'Copied' : label}
+    </Btn>
+  );
+};
 
 // ── Form fields ───────────────────────────────────────────────────────────────
 const inputBase =
@@ -236,7 +285,7 @@ export const Sheet: React.FC<{
         initial={{ opacity: 0, y: 28 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-        className="relative mt-8 flex w-full flex-col overflow-hidden rounded-t-3xl bg-[#FAFCF9] shadow-2xl outline-none sm:mt-0 sm:max-w-[34rem] sm:rounded-none sm:rounded-l-3xl"
+        className="relative mt-8 flex w-full flex-col overflow-hidden rounded-t-3xl bg-[#F7F6F1] shadow-2xl outline-none sm:mt-0 sm:max-w-[34rem] sm:rounded-none sm:rounded-l-3xl"
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-3 sm:px-5">
           <div className="min-w-0 flex-1">{title}</div>

@@ -4,9 +4,16 @@ import type { BookingStatus, LineItem } from '../types';
 export type AdminPayment = 'gcash' | 'gotyme' | 'cash' | 'none';
 export type Source = 'online' | 'walk_in' | 'blocked';
 
+/**
+ * The one word on a booking. Day to day it's Paid, Late, Done (and Rain delay when you've called one);
+ * the rest are rare states. A Late or rain-delayed booking is still `status: 'confirmed'`.
+ */
+export type AdminLabel = 'paid' | 'late' | 'done' | 'rain_delay' | 'blocked' | 'awaiting' | 'needs_check' | 'rejected' | 'expired' | 'cancelled';
+
 export interface AdminBooking {
   code: string;
   status: BookingStatus;
+  label: AdminLabel;
   source: Source;
   courtId: string;
   courtName: string;
@@ -39,6 +46,18 @@ export interface AdminBooking {
   reviewFlags: ReviewFlag[];
   /** Paid online and confirmed automatically, but nobody has looked yet. */
   needsReview: boolean;
+  /** The host marked the group as on site (this is what stops a booking going Late). */
+  arrivedAt: string | null;
+  /** When the court was released because the group didn't show up. */
+  lateAt: string | null;
+  /** When a rain delay gave the hours back. */
+  weatherHoldAt: string | null;
+  rescheduleCount: number;
+  /** Late (inside the quiet window) or rain-delayed: the host can put it back with Restore. */
+  restorable: boolean;
+  /** End of that quiet window for a Late booking (guests are never told). Null for rain delays. */
+  restoreUntil: string | null;
+  canMarkArrived: boolean;
 }
 
 export interface ReviewFlag {
@@ -82,6 +101,11 @@ export interface StatusCounts {
   cancelled: number;
   toReview: number;
   flagged: number;
+  /** Confirmed bookings by the host's words (Late includes ones past their restore window). */
+  paid: number;
+  late: number;
+  done: number;
+  rainDelay: number;
 }
 
 export interface AdminBookingList {
@@ -96,6 +120,7 @@ export interface ListQuery {
   q?: string;
   status?: string;
   review?: 'unchecked' | 'flagged';
+  label?: 'paid' | 'late' | 'done' | 'rain_delay';
   dateFrom?: string;
   dateTo?: string;
   courtId?: string;
@@ -108,6 +133,10 @@ export interface NavCounts {
   toReview: number;
   flagged: number;
   held: number;
+  /** Late bookings the host can still restore. */
+  late: number;
+  /** Guests waiting to pick a new time after a rain delay. */
+  rainDelay: number;
 }
 
 export interface CreateBody {
@@ -130,6 +159,48 @@ export interface AdminSchedule {
   date: string;
   serverNow: string;
   bookings: AdminBooking[];
+}
+
+// ── Weather and rain delays ───────────────────────────────────────────────────
+export interface HourForecast {
+  /** Start of the hour, ISO (UTC). */
+  at: string;
+  /** Chance of rain, 0-100. */
+  probability: number;
+  mm: number;
+}
+
+export interface RainRisk {
+  booking: AdminBooking;
+  peak: number;
+}
+
+export interface WeatherReport {
+  /** False when the forecast service couldn't be reached. */
+  available: boolean;
+  updatedAt: string | null;
+  warnPercent: number;
+  hours: HourForecast[];
+  atRisk: RainRisk[];
+}
+
+export interface RainDelayPreview {
+  windowStart: string;
+  windowEnd: string;
+  bookings: AdminBooking[];
+}
+
+export interface RainDelayBody {
+  /** Play-day date; hours after midnight belong to the previous day's date. */
+  date: string;
+  fromHour: number;
+  hours: number;
+  codes?: string[];
+  note?: string;
+}
+
+export interface RainDelayResult {
+  moved: AdminBooking[];
 }
 
 export interface Kpis {

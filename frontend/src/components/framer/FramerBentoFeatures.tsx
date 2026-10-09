@@ -96,7 +96,7 @@ export const FramerBentoFeatures: React.FC = () => {
                 className="w-full h-full object-cover select-none"
               />
               {/* Warm stadium lighting glow */}
-              <div className="absolute top-0 right-1/4 w-72 h-72 bg-[#CCFF00]/15 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute top-0 right-1/4 w-72 h-72 bg-[#D2EE5E]/15 rounded-full blur-3xl pointer-events-none" />
               {/* Clean bottom vignette for text contrast while keeping court photo 100% visible */}
               <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/45 to-transparent" />
             </div>
@@ -104,8 +104,8 @@ export const FramerBentoFeatures: React.FC = () => {
             {/* Card Header */}
             <div className="p-6 flex items-start justify-between text-white relative z-10">
               <div>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-[#CCFF00] font-sport font-bold text-xs uppercase tracking-wider border border-white/20">
-                  <span className="w-2 h-2 rounded-full bg-[#CCFF00] animate-ping" />
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-[#D2EE5E] font-sport font-bold text-xs uppercase tracking-wider border border-white/20">
+                  <span className="w-2 h-2 rounded-full bg-[#D2EE5E] animate-ping" />
                   Open 24 Hours Non-Stop
                 </span>
                 <h3 className="text-xl sm:text-2xl font-heading font-black uppercase text-white mt-3 leading-tight tracking-wide">
@@ -113,7 +113,7 @@ export const FramerBentoFeatures: React.FC = () => {
                 </h3>
               </div>
               <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 text-white flex items-center justify-center shrink-0 shadow-sm">
-                <Clock className="w-5 h-5 text-[#CCFF00]" />
+                <Clock className="w-5 h-5 text-[#D2EE5E]" />
               </div>
             </div>
 
@@ -125,7 +125,7 @@ export const FramerBentoFeatures: React.FC = () => {
               <div className="pt-3 border-t border-white/20 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="text-zinc-300 font-sport uppercase text-[11px] font-semibold">Koronadal Clock:</span>
-                  <span className="font-mono font-bold text-[#CCFF00] bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/20 shadow-xs">
+                  <span className="font-mono font-bold text-[#D2EE5E] bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/20 shadow-xs">
                     <LiveClock />
                   </span>
                 </div>
@@ -150,7 +150,7 @@ export const FramerBentoFeatures: React.FC = () => {
                 <div>
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-800 font-sport font-bold text-xs uppercase tracking-wider border border-blue-200">
                     <Zap className="w-3.5 h-3.5 text-blue-600" />
-                    Instant GCash Pay
+                    Easy GCash Pay
                   </span>
                   <h3 className="text-lg sm:text-xl font-heading font-black uppercase text-zinc-950 mt-3">
                     Fast & Easy GCash Booking
@@ -186,7 +186,7 @@ export const FramerBentoFeatures: React.FC = () => {
             <div className="pt-3 border-t border-zinc-100 flex items-center justify-between text-xs">
               <span className="text-zinc-500">Pay on your phone</span>
               <span className="font-sport font-bold text-[#15803D] uppercase tracking-wider">
-                Get Pass Right Away
+                Pass Once Paid in Full
               </span>
             </div>
           </motion.div>

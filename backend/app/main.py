@@ -15,7 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import admin_auth, booking_service
+from app import admin_auth, booking_service, notify
 from app.admin_api import router as admin_router
 from app.api import router
 from app.config import settings
@@ -23,25 +23,34 @@ from app.db import connect, init_db
 from app.errors import BookingError, booking_error_handler
 
 log = logging.getLogger("housepickle")
-SWEEP_INTERVAL_SECONDS = 30
+SWEEP_INTERVAL_SECONDS = 15  # unpaid holds and late bookings are freed within seconds of their deadline
+
+
+def _sweep_once(ticks: int) -> None:
+    conn = connect()
+    try:
+        if n := booking_service.sweep(conn):
+            log.info("expired %d hold(s)", n)
+        if ticks % 240 == 1 and (n := booking_service.purge_old_receipts(conn)):
+            log.info("deleted %d old receipt image(s)", n)
+        if notify.enabled():
+            notify.check_late(conn)
+            if ticks % 120 == 1:  # about every 30 minutes
+                notify.check_rain(conn)
+    finally:
+        conn.close()
 
 
 async def _sweep_forever() -> None:
-    """Expire overdue holds even when nobody is browsing, so the record is accurate for admin.
-    Roughly once an hour, also delete receipt images past their retention period."""
+    """Free overdue holds and late bookings even when nobody is browsing, so the record is accurate for admin.
+    Roughly once an hour, also delete receipt images past their retention period. Runs off the event loop
+    because Telegram and the weather forecast are network calls."""
     ticks = 0
     while True:
         await asyncio.sleep(SWEEP_INTERVAL_SECONDS)
         ticks += 1
         try:
-            conn = connect()
-            try:
-                if n := booking_service.sweep(conn):
-                    log.info("expired %d hold(s)", n)
-                if ticks % 120 == 1 and (n := booking_service.purge_old_receipts(conn)):
-                    log.info("deleted %d old receipt image(s)", n)
-            finally:
-                conn.close()
+            await asyncio.to_thread(_sweep_once, ticks)
         except Exception:  # never let the sweeper die
             log.exception("hold sweep failed")
 

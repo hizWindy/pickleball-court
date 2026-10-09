@@ -111,10 +111,10 @@ def test_admin_is_locked_when_no_password_is_configured(client, monkeypatch):
 # ── Reviewing payments ────────────────────────────────────────────────────────
 def test_paid_booking_is_confirmed_at_once_and_waits_for_a_look(admin, booking_payload):
     code, headers = public_booking(admin, booking_payload)
-    assert admin.get("/api/admin/counts").json() == {"toReview": 0, "flagged": 0, "held": 1}
+    assert admin.get("/api/admin/counts").json() == {"toReview": 0, "flagged": 0, "held": 1, "late": 0, "rainDelay": 0}
     pay_by_receipt(admin, code, headers)
     # OCR is off in this test, so the receipt couldn't be read: confirmed, but flagged for a look.
-    assert admin.get("/api/admin/counts").json() == {"toReview": 1, "flagged": 1, "held": 0}
+    assert admin.get("/api/admin/counts").json() == {"toReview": 1, "flagged": 1, "held": 0, "late": 0, "rainDelay": 0}
 
     detail = admin.get(f"/api/admin/bookings/{code}").json()
     assert detail["status"] == "confirmed" and detail["needsReview"] is True and detail["checkedAt"] is None
@@ -130,7 +130,7 @@ def test_paid_booking_is_confirmed_at_once_and_waits_for_a_look(admin, booking_p
     done = admin.post(f"/api/admin/bookings/{code}/check").json()
     assert done["status"] == "confirmed" and done["checkedAt"] and done["needsReview"] is False
     assert done["events"][0]["action"] == "checked"
-    assert admin.get("/api/admin/counts").json() == {"toReview": 0, "flagged": 0, "held": 0}
+    assert admin.get("/api/admin/counts").json() == {"toReview": 0, "flagged": 0, "held": 0, "late": 0, "rainDelay": 0}
 
 
 def test_rejecting_frees_the_slot_and_confirming_again_takes_it_back(admin, booking_payload):
@@ -295,7 +295,7 @@ def test_list_filters_search_and_counts(admin, booking_payload):
     assert everything["total"] == 3
     assert everything["counts"] == {
         "all": 3, "held": 1, "pendingVerification": 0, "confirmed": 2, "rejected": 0, "expired": 0, "cancelled": 0,
-        "toReview": 1, "flagged": 1,
+        "toReview": 1, "flagged": 1, "paid": 2, "late": 0, "done": 0, "rainDelay": 0,
     }
     to_review = admin.get("/api/admin/bookings", params={"review": "unchecked"}).json()
     assert [b["code"] for b in to_review["items"]] == [code]  # the walk-in needs no review

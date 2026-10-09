@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Ban, Check, CheckCircle2, ImageOff, Maximize2, Pencil, Phone, RotateCcw, ScanText, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Ban, Check, CheckCircle2, CloudRain, ImageOff, Info, Maximize2, Pencil, Phone, RotateCcw, ScanText, Trash2, X } from 'lucide-react';
 import { CopyButton } from '../components/booking/ui';
 import { errorMessage } from '../lib/api';
-import { fmtDate, peso } from '../lib/time';
+import { fmtDate, fmtTime, peso } from '../lib/time';
 import { adminApi } from './api';
 import { useDesk } from './desk';
-import { clock, METHOD_LABEL, PROVIDER_LABEL, stamp, hourSpan } from './format';
-import { useRemote } from './hooks';
-import { Btn, Card, cx, Dialog, ErrorNote, Label, Sheet, StatusPill, Tag, TextArea } from './ui';
+import { arrivable, clock, manilaHour, METHOD_LABEL, PROVIDER_LABEL, restoreLeft, stamp, hourSpan, telHref } from './format';
+import { useNow, useRemote } from './hooks';
+import { lateMessage, rainMessage } from './messages';
+import { ArrivedBtn, ContactBtns, RestoreBtn } from './QuickActions';
+import { Btn, Card, CopyBtn, cx, Dialog, ErrorNote, Label, LabelBadge, Sheet, Tag, TextArea } from './ui';
+import { useQuickActions } from './useQuickActions';
 import type { AdminBookingDetail } from './types';
 
 const REJECT_REASONS = ["Amount doesn't match", 'Reference not found', 'Paid to a different account', 'Receipt is unreadable', 'Payment is from a different time'];
@@ -18,10 +21,17 @@ const EVENT_LABEL: Record<string, string> = {
   confirmed: 'Confirmed',
   checked: 'You looked at the payment',
   rejected: 'Rejected',
-  cancelled: 'Cancelled',
+  cancelled: 'Voided',
   edited: 'Edited',
   walk_in_added: 'Added by you',
   blocked: 'Court blocked',
+  went_late: 'Went Late: the court was released',
+  restored: 'Restored to the court',
+  arrived: 'You marked the group as here',
+  checked_in: 'The player checked in',
+  rain_delay: 'Rain delay: hours given back',
+  guest_rescheduled: 'The player moved it to a new time',
+  rain_rescheduled: 'The player picked a new time after the rain',
 };
 
 const Row: React.FC<{ label: string; children: React.ReactNode; action?: React.ReactNode; emphasis?: boolean }> = ({ label, children, action, emphasis }) => (
@@ -49,8 +59,10 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
   const [ask, setAsk] = useState<Ask>(null);
   const [reason, setReason] = useState('');
   const [zoom, setZoom] = useState(false);
+  const now = useNow(5000);
+  const { q, problemDialog } = useQuickActions();
 
-  const run = async (action: () => Promise<AdminBookingDetail | void>, done: string, closeAfter = false) => {
+  const run =async (action: () => Promise<AdminBookingDetail | void>, done: string, closeAfter = false) => {
     setBusy(true);
     setProblem(null);
     try {
@@ -112,23 +124,34 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
       footer = (
         <div className="flex gap-2">
           <Btn variant="danger" size="lg" onClick={() => setAsk('cancel')} disabled={busy}>
-            Cancel
+            Release hold
           </Btn>
           <Btn variant="dark" size="lg" className="flex-1" onClick={() => setAsk('confirm-unpaid')} disabled={busy}>
             Confirm without proof
           </Btn>
         </div>
       );
-    } else if (confirmed) {
+    } else if (confirmed && b.source !== 'blocked') {
+      // Paid, Late, Done or Rain delay: the main action depends on which.
+      const main =
+        restoreLeft(b, now) !== null ? (
+          <RestoreBtn b={b} q={q} size="lg" className="w-full" />
+        ) : arrivable(b, now) ? (
+          <ArrivedBtn b={b} q={q} now={now} size="lg" className="w-full" />
+        ) : null;
+      // The thing to do now is the big button at the bottom, where a thumb rests; voiding sits quietly above it.
       footer = (
-        <Btn variant="danger" size="lg" className="w-full" onClick={() => setAsk('cancel')} disabled={busy}>
-          <Ban className="h-4 w-4" /> Cancel this booking
-        </Btn>
+        <div className="flex flex-col gap-2">
+          <Btn variant="danger" size={main ? 'md' : 'lg'} className="w-full" onClick={() => setAsk('cancel')} disabled={busy}>
+            <Ban className="h-4 w-4" /> Void booking
+          </Btn>
+          {main}
+        </div>
       );
     } else if (b.source !== 'blocked') {
       footer = (
-        <Btn variant="primary" size="lg" className="w-full" loading={busy} onClick={() => run(() => adminApi.confirm(code), 'Booking restored and confirmed.')}>
-          <RotateCcw className="h-4 w-4" /> Restore and confirm
+        <Btn variant="primary" size="lg" className="w-full" loading={busy} onClick={() => run(() => adminApi.confirm(code), 'Booking reopened and confirmed.')}>
+          <RotateCcw className="h-4 w-4" /> Reopen and confirm
         </Btn>
       );
     } else {
@@ -151,10 +174,19 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
           {b && (
             <>
               <div className="flex flex-wrap items-center gap-2">
-                {b.source === 'blocked' ? <Tag tone="dark">Court blocked</Tag> : <StatusPill status={b.status} />}
+                <LabelBadge label={b.label} />
                 {b.source === 'walk_in' && <Tag>Walk-in</Tag>}
                 {b.customPrice && b.source !== 'blocked' && <Tag tone="blue">Custom price</Tag>}
+                {b.arrivedAt && b.source !== 'blocked' && (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                    <Check className="h-3.5 w-3.5" strokeWidth={3} /> arrived
+                  </span>
+                )}
               </div>
+
+              {b.status === 'pending_verification' && <NotConfirmed b={b} />}
+              {b.label === 'late' && <LateNote b={b} now={now} minutes={desk.config?.lateAfterMinutes ?? 15} />}
+              {b.label === 'rain_delay' && <RainNote b={b} />}
 
               {b.source === 'online' && b.submittedAt && <PaymentProof b={b} onZoom={() => setZoom(true)} />}
               {b.status === 'held' && (
@@ -165,7 +197,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
               {b.status === 'rejected' && (
                 <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-900">
                   You rejected this payment. The hours are free for other players and the player's pass shows it wasn't verified.
-                  Restore it below if you change your mind.
+                  Reopen it below if you change your mind.
                 </Card>
               )}
 
@@ -176,6 +208,13 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
                 </Row>
                 <Row label="Court">{b.courtName}</Row>
                 {b.hour < 6 && <Row label="Note"><span className="font-medium text-zinc-600">Early morning of the next day</span></Row>}
+                {b.arrivedAt && <Row label="Arrived">{stamp(b.arrivedAt)}</Row>}
+                {b.lateAt && <Row label="Went Late">{stamp(b.lateAt)}</Row>}
+                {b.rescheduleCount > 0 && (
+                  <Row label="Moved by the player">
+                    <span className="font-medium text-zinc-600">{b.rescheduleCount === 1 ? 'Once' : `${b.rescheduleCount} times`}</span>
+                  </Row>
+                )}
               </Block>
 
               {b.source !== 'blocked' && (
@@ -186,7 +225,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
                     action={
                       b.customerPhone ? (
                         <>
-                          <a href={`tel:${b.customerPhone}`} aria-label={`Call ${b.customerName}`} className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-[#15803D] hover:bg-emerald-100">
+                          <a href={telHref(b.customerPhone)} aria-label={`Call ${b.customerName}`} className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-50 text-[#15803D] hover:bg-emerald-100">
                             <Phone className="h-4 w-4" />
                           </a>
                           <CopyButton value={b.customerPhone} />
@@ -202,8 +241,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
               {b.source !== 'blocked' && (
                 <Block title="Payment">
                   {b.lineItems.map((li) => {
-                    const hour = new Date(li.startAt);
-                    const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', hourCycle: 'h23' }).format(hour));
+                    const h = manilaHour(Date.parse(li.startAt));
                     return (
                       <Row key={li.startAt} label={`${clock(h)}${li.rateType === 'night_owl' ? ' · Night Owl' : ''}`}>
                         {peso(li.rate)}
@@ -241,6 +279,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
       </Sheet>
 
       {zoom && b && <Lightbox code={code} onClose={() => setZoom(false)} />}
+      {problemDialog}
 
       {ask === 'reject' && (
         <Dialog
@@ -274,18 +313,34 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
 
       {ask === 'cancel' && b && (
         <Dialog
-          title={b.source === 'blocked' ? 'Lift this block?' : 'Cancel this booking?'}
+          title={b.source === 'blocked' ? 'Lift this block?' : b.status === 'held' ? 'Release this hold?' : 'Void this booking?'}
           onClose={() => setAsk(null)}
           actions={
             <>
               <Btn onClick={() => setAsk(null)}>Keep it</Btn>
-              <Btn variant="dark" loading={busy} onClick={() => run(() => adminApi.cancel(code, reason.trim()), b.source === 'blocked' ? 'Block lifted.' : 'Booking cancelled. The hours are free again.')}>
-                {b.source === 'blocked' ? 'Lift block' : 'Cancel booking'}
+              <Btn
+                variant="dark"
+                loading={busy}
+                onClick={() =>
+                  run(
+                    () => adminApi.cancel(code, reason.trim()),
+                    b.source === 'blocked' ? 'Block lifted.' : b.status === 'held' ? 'Hold released. The hours are free again.' : 'Booking voided. The hours are free again.'
+                  )
+                }
+              >
+                {b.source === 'blocked' ? 'Lift block' : b.status === 'held' ? 'Release hold' : 'Void booking'}
               </Btn>
             </>
           }
         >
-          <p>{b.source === 'blocked' ? 'The court opens up for booking again.' : 'The hours go back on sale. Any refund is between you and the player.'}</p>
+          {b.source === 'blocked' ? (
+            <p>The court opens up for booking again.</p>
+          ) : b.status === 'held' ? (
+            <p>The player hasn't paid yet. The hours go back on sale right away.</p>
+          ) : (
+            <p>Guests can't cancel. Use this only for mistakes, duplicates or a refund you've decided to give. The hours go back on sale.</p>
+          )}
+          {b.source !== 'blocked' && b.status !== 'held' && <p>Any refund is between you and the player.</p>}
           {b.source !== 'blocked' && <TextArea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional, only you see this)" maxLength={200} aria-label="Reason" />}
         </Dialog>
       )}
@@ -323,7 +378,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
           <p className="flex gap-2 rounded-xl bg-red-50 p-3 text-red-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              This erases the booking, its receipt image and its place in your revenue. It can't be undone. If you only want the hours back, cancel the booking instead.
+              This erases the booking, its receipt image and its place in your revenue. It can't be undone. If you only want the hours back, void the booking instead.
             </span>
           </p>
         </Dialog>
@@ -363,32 +418,53 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
   const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' });
   const from = fmt.format(new Date(b.createdAt));
   const to = b.submittedAt ? fmt.format(new Date(b.submittedAt)) : null;
-  const flagged = b.reviewFlags.length > 0;
+  const waiting = b.status === 'pending_verification'; // a short or unreadable amount: not confirmed until the host decides
+  const over = codes.has('amount_over'); // more than the total: for information only
+  const issues = b.reviewFlags.filter((f) => f.code !== 'amount_over');
+  const flagged = issues.length > 0;
+  const shortBy = codes.has('amount_short') && scan?.amount != null ? b.total - scan.amount : null;
 
-  const tone = !b.needsReview ? 'zinc' : flagged ? 'amber' : 'green';
+  const tone = waiting ? 'red' : !b.needsReview ? 'zinc' : flagged ? 'amber' : 'green';
   const head = {
     zinc: { box: 'border-zinc-200', bar: 'bg-zinc-50', label: 'Payment proof', text: b.checkedAt ? `You looked at this on ${stamp(b.checkedAt)}.` : 'Checked.' },
+    red: {
+      box: 'border-red-300',
+      bar: 'bg-red-50',
+      label: 'Waiting for your decision',
+      text: "This payment isn't confirmed. The hours stay held for the player until you confirm or reject it.",
+    },
     amber: {
       box: 'border-amber-300',
       bar: 'bg-amber-50',
-      label: flagged && b.reviewFlags.length === 1 ? '1 thing to check' : `${b.reviewFlags.length} things to check`,
+      label: issues.length === 1 ? '1 thing to check' : `${issues.length} things to check`,
       text: 'The booking was confirmed automatically. Open your app and make sure this payment really arrived.',
     },
-    green: { box: 'border-emerald-200', bar: 'bg-emerald-50', label: 'Receipt matches the booking', text: 'Confirmed automatically. A quick look in your app, then tap Looks good.' },
+    green: {
+      box: 'border-emerald-200',
+      bar: 'bg-emerald-50',
+      label: over ? 'Receipt is more than the total' : 'Receipt matches the booking',
+      text: 'Confirmed automatically. A quick look in your app, then tap Looks good.',
+    },
   }[tone];
 
   return (
     <Card className={cx('overflow-hidden', head.box)}>
       <div className={cx('px-4 py-3', head.bar)}>
-        <Label className={tone === 'amber' ? '!text-amber-800' : tone === 'green' ? '!text-emerald-800' : undefined}>{head.label}</Label>
+        <Label className={tone === 'amber' ? '!text-amber-800' : tone === 'green' ? '!text-emerald-800' : tone === 'red' ? '!text-red-800' : undefined}>{head.label}</Label>
         <p className="mt-1 text-sm text-zinc-800">{head.text}</p>
-        {flagged && (
+        {b.reviewFlags.length > 0 && (
           <ul className="mt-2.5 space-y-1.5">
-            {b.reviewFlags.map((f) => (
-              <li key={f.code} className="flex items-start gap-2 text-sm font-medium text-amber-900">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /> {f.message}
-              </li>
-            ))}
+            {b.reviewFlags.map((f) =>
+              f.code === 'amount_over' ? (
+                <li key={f.code} className="flex items-start gap-2 text-sm font-medium text-sky-900">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" /> {f.message} For your information.
+                </li>
+              ) : (
+                <li key={f.code} className={cx('flex items-start gap-2 text-sm font-medium', f.code === 'amount_short' ? 'text-red-800' : 'text-amber-900')}>
+                  <AlertTriangle className={cx('mt-0.5 h-4 w-4 shrink-0', f.code === 'amount_short' ? 'text-red-600' : 'text-amber-600')} /> {f.message}
+                </li>
+              )
+            )}
           </ul>
         )}
       </div>
@@ -418,7 +494,11 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
       <dl className="divide-y divide-zinc-100 px-4">
         {scan ? (
           <>
-            <ReadRow label="Amount" ok={!codes.has('amount_mismatch') && !codes.has('amount_missing')} hint={`Booking total ${peso(b.total)}`}>
+            <ReadRow
+              label="Amount"
+              ok={!codes.has('amount_short') && !codes.has('amount_missing') && !over}
+              hint={shortBy != null ? `Booking total ${peso(b.total)} · ${peso(shortBy)} short` : `Booking total ${peso(b.total)}`}
+            >
               {scan.amount != null ? peso(scan.amount) : 'Not found'}
             </ReadRow>
             <ReadRow label="Reference" ok={!codes.has('reference_missing')} action={scan.reference ? <CopyButton value={scan.reference} /> : undefined}>
@@ -457,12 +537,72 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
   );
 };
 
+/** A payment that fell short (or could not be read) is not confirmed: say so loudly, with the numbers. */
+const NotConfirmed: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
+  const short = b.reviewFlags.find((f) => f.code === 'amount_short');
+  const paid = b.scan?.amount ?? null;
+  const gap = short && paid != null ? b.total - paid : null;
+  return (
+    <Card role="alert" className="border-red-300 bg-red-50 p-4">
+      <p className="flex items-center gap-2 font-heading text-lg font-bold text-red-900">
+        <AlertTriangle className="h-5 w-5 shrink-0" />
+        {gap != null ? `Short by ${peso(gap)}` : short ? 'Short payment' : "Amount couldn't be confirmed"}
+      </p>
+      <p className="mt-1 text-sm font-medium text-red-900">
+        {gap != null ? `(receipt ${peso(paid!)} / total ${peso(b.total)}). ` : short ? `${short.message} ` : ''}
+        Not confirmed. {short ? "Confirm only after you've received the rest." : 'Check your payment app before you confirm.'} Or reject it to put the hours back on sale.
+      </p>
+    </Card>
+  );
+};
+
+/** A booking that went Late: what happened, and the way back while there is one. */
+const LateNote: React.FC<{ b: AdminBookingDetail; now: number; minutes: number }> = ({ b, now, minutes }) => {
+  const canRestore = restoreLeft(b, now) !== null;
+  return (
+    <Card className="border-dashed border-amber-400 bg-amber-50 p-4">
+      <p className="font-heading font-bold text-amber-950">{b.lateAt ? `Went Late at ${fmtTime(b.lateAt)}` : 'Late'}</p>
+      <p className="mt-1 text-sm text-amber-900">
+        The group wasn't here {minutes} minutes after the start, so the court was released and its hours are open to others. The booking stays paid.{' '}
+        {canRestore ? 'If they turn up, tap Restore.' : 'The time to restore it has passed. To seat them anyway, use Edit to move it to a free time.'}
+      </p>
+      {b.customerPhone && (
+        <div className="mt-3 flex gap-2">
+          <ContactBtns b={b} message={lateMessage(b)} className="flex-1" />
+        </div>
+      )}
+    </Card>
+  );
+};
+
+/** A rain delay: the hours are back on sale and the guest rebooks themselves. */
+const RainNote: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
+  const message = rainMessage(b);
+  return (
+    <Card className="border-sky-200 bg-sky-50 p-4">
+      <p className="flex items-center gap-2 font-heading font-bold text-sky-950">
+        <CloudRain className="h-5 w-5 shrink-0" /> Rain delay{b.weatherHoldAt ? ` · ${stamp(b.weatherHoldAt)}` : ''}
+      </p>
+      <p className="mt-1 text-sm text-sky-900">
+        The hours are open again. Nothing is cancelled or refunded: the guest keeps their paid booking and picks a new time on the site (free, it doesn't use their one reschedule). Changed your mind? Undo puts it back.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <ContactBtns b={b} message={message} className="flex-1" />
+        <CopyBtn text={message} label="Copy message" className="w-full" />
+      </div>
+    </Card>
+  );
+};
+
 const Timeline: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
   const items: { at: string; title: string; detail?: string | null }[] = [{ at: b.createdAt, title: b.source === 'online' ? 'Booked online' : 'Added' }];
   if (b.submittedAt && b.source === 'online')
-    items.push({ at: b.submittedAt, title: `${b.proofType === 'receipt' ? 'Receipt uploaded' : 'Reference typed in'} · confirmed automatically` });
+    items.push({
+      at: b.submittedAt,
+      title: `${b.proofType === 'receipt' ? 'Receipt uploaded' : 'Reference typed in'} · ${b.reviewFlags.some((f) => f.code === 'amount_short' || f.code === 'amount_missing') ? 'held for your decision' : 'confirmed automatically'}`,
+    });
   if (b.status === 'expired' && b.closedAt) items.push({ at: b.closedAt, title: 'Payment window ran out' });
-  if (b.status === 'cancelled' && b.closeReason === 'customer' && b.closedAt) items.push({ at: b.closedAt, title: 'Cancelled by the player' });
+  if (b.status === 'cancelled' && b.closeReason === 'customer' && b.closedAt) items.push({ at: b.closedAt, title: 'Released by the player before paying' });
   for (const e of b.events) items.push({ at: e.createdAt, title: EVENT_LABEL[e.action] ?? e.action, detail: e.detail });
   items.sort((x, y) => (x.at < y.at ? 1 : -1));
 

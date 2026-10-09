@@ -63,7 +63,7 @@ export const device = {
 
   tokenFor: (code: string) => device.passes().find((p) => p.code === code)?.token,
 
-  /** The booking currently in its 15-minute payment window, if any. */
+  /** The booking currently in its payment window (the server's hold time), if any. */
   activeHold: (): { code: string; token: string } | null => read(ACTIVE_KEY, null),
 
   setActiveHold(code: string, token: string) {

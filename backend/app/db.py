@@ -6,6 +6,8 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from app import clock
+from app.clock import to_iso
 from app.config import settings
 
 SCHEMA = """
@@ -52,7 +54,11 @@ CREATE TABLE IF NOT EXISTS bookings (
     decided_at          TEXT,
     admin_note          TEXT,
     checked_at          TEXT,   -- when the host looked at an automatically confirmed payment
-    review_flags        TEXT    -- JSON list of {code, message}: what looked off about the proof
+    review_flags        TEXT,   -- JSON list of {code, message}: what looked off about the proof
+    arrived_at          TEXT,   -- the group showed up (host tapped Arrived, or the guest checked in)
+    late_at             TEXT,   -- the group was not there in time: the hours were released and the booking is Late
+    reschedule_count    INTEGER NOT NULL DEFAULT 0,  -- guest-initiated reschedules used (a weather delay is free)
+    weather_hold_at     TEXT    -- the host called a rain delay: the hours are free, the guest picks a new time
 );
 
 CREATE INDEX IF NOT EXISTS idx_bookings_status_expiry ON bookings(status, hold_expires_at);
@@ -119,6 +125,12 @@ CREATE TABLE IF NOT EXISTS receipt_scans (
     duration_ms       INTEGER,
     created_at        TEXT NOT NULL
 );
+
+-- Alerts already sent to the host (e.g. "rain expected on this day"), so each one goes out once.
+CREATE TABLE IF NOT EXISTS notices_sent (
+    key        TEXT PRIMARY KEY,
+    sent_at    TEXT NOT NULL
+);
 """
 
 # Columns added after the first release. CREATE TABLE IF NOT EXISTS won't touch an existing database.
@@ -127,6 +139,10 @@ MIGRATIONS = [
     ("bookings", "admin_note", "TEXT"),
     ("bookings", "checked_at", "TEXT"),
     ("bookings", "review_flags", "TEXT"),
+    ("bookings", "arrived_at", "TEXT"),
+    ("bookings", "late_at", "TEXT"),
+    ("bookings", "reschedule_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("bookings", "weather_hold_at", "TEXT"),
 ]
 
 SEED_COURTS = [
@@ -148,10 +164,18 @@ def connect() -> sqlite3.Connection:
 
 def apply_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    # Before arrivals were tracked, nothing could be Late. Treat every booking that already started as
+    # attended, or the first sweep would mark the whole history Late.
+    had_arrivals = "arrived_at" in {row["name"] for row in conn.execute("PRAGMA table_info(bookings)")}
     for table, column, decl in MIGRATIONS:
         existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+    if not had_arrivals:
+        conn.execute(
+            "UPDATE bookings SET arrived_at = start_at WHERE status = 'confirmed' AND source != 'blocked' AND start_at <= ?",
+            (to_iso(clock.now()),),
+        )
     conn.executemany(
         "INSERT OR IGNORE INTO courts (id, name, day_rate, night_rate, sort_order) VALUES (?, ?, ?, ?, ?)",
         SEED_COURTS,
