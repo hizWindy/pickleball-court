@@ -79,9 +79,24 @@ def test_logout_ends_the_session(admin):
     assert admin.get("/api/admin/counts").status_code == 401
 
 
-def test_session_expires(admin, fake_now):
+def test_session_expires_when_hours_are_set(client, fake_now, monkeypatch):
+    from app import admin_auth
+
+    monkeypatch.setattr(admin_auth, "settings", replace(admin_auth.settings, admin_session_hours=168))
+    client.post("/api/admin/login", json={"password": ADMIN_PASSWORD})
+    assert client.get("/api/admin/counts").status_code == 200
     fake_now.advance(hours=168, minutes=1)
-    assert admin.get("/api/admin/counts").status_code == 401
+    assert client.get("/api/admin/counts").status_code == 401
+
+
+def test_session_never_expires_with_zero_hours(client, fake_now, monkeypatch):
+    from app import admin_auth
+
+    monkeypatch.setattr(admin_auth, "settings", replace(admin_auth.settings, admin_session_hours=0))
+    res = client.post("/api/admin/login", json={"password": ADMIN_PASSWORD})
+    assert "Max-Age=0" not in res.headers["set-cookie"]
+    fake_now.advance(days=365)
+    assert client.get("/api/admin/counts").status_code == 200
 
 
 def test_changing_the_password_signs_everyone_out(admin, monkeypatch):

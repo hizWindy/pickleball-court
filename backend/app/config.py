@@ -95,7 +95,8 @@ class Settings:
     # ADMIN_PASSWORD_HASH (made with `python -m app.admin_auth`) is preferred over a plain ADMIN_PASSWORD.
     admin_password: str = field(default_factory=lambda: _env("ADMIN_PASSWORD", ""))
     admin_password_hash: str = field(default_factory=lambda: _env("ADMIN_PASSWORD_HASH", ""))
-    admin_session_hours: int = field(default_factory=lambda: _env_int("ADMIN_SESSION_HOURS", 168))
+    # Hours a sign-in lasts; 0 = never expires (the single host account stays signed in until sign-out or a password change)
+    admin_session_hours: int = field(default_factory=lambda: _env_int("ADMIN_SESSION_HOURS", 0))
     consent_version: str = field(default_factory=lambda: _env("CONSENT_VERSION", "2026-10-v1"))
     gcash: PaymentAccount = field(
         default_factory=lambda: PaymentAccount(

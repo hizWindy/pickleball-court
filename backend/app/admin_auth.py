@@ -6,7 +6,7 @@ Hiding the link to the desk is only a courtesy. What keeps it safe is this modul
 * Sign-in attempts are rate limited per IP and, more loosely, across everyone.
 * The cookie is HttpOnly (scripts can't read it), SameSite=Strict (other sites can't use it) and only
   sent to /api/admin. Over HTTPS it is also Secure.
-* Sessions live in the database as hashes, expire, and die when the password changes.
+* Sessions live in the database as hashes, expire (or never, when ADMIN_SESSION_HOURS=0), and die when the password changes.
 * Every write must carry a custom header that a cross-site form can't add.
 
 Make a hash:  python -m app.admin_auth
@@ -88,6 +88,11 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _session_lifetime() -> timedelta:
+    """ADMIN_SESSION_HOURS=0 means the host stays signed in until they sign out or change the password."""
+    return timedelta(hours=settings.admin_session_hours) if settings.admin_session_hours > 0 else timedelta(days=3650)
+
+
 def start_session(conn: sqlite3.Connection, request: Request, response: Response) -> None:
     now = clock.now()
     token = secrets.token_urlsafe(32)
@@ -96,13 +101,13 @@ def start_session(conn: sqlite3.Connection, request: Request, response: Response
         "INSERT INTO admin_sessions (token_hash, pw_fp, created_at, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?)",
         (
             _hash_token(token), password_fingerprint(), to_iso(now),
-            to_iso(now + timedelta(hours=settings.admin_session_hours)),
+            to_iso(now + _session_lifetime()),
             request.client.host if request.client else None,
             (request.headers.get("user-agent") or "")[:200],
         ),
     )
     response.set_cookie(
-        COOKIE, token, max_age=settings.admin_session_hours * 3600, path=COOKIE_PATH,
+        COOKIE, token, max_age=int(_session_lifetime().total_seconds()), path=COOKIE_PATH,
         httponly=True, samesite="strict", secure=request.url.scheme == "https",
     )
 
