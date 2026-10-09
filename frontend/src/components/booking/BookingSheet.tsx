@@ -202,7 +202,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: 'spring', damping: 30, stiffness: 340 }}
-        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#F9F8F4] sm:h-auto sm:max-h-[90dvh] sm:max-w-lg sm:rounded-[28px] sm:shadow-2xl"
+        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#F8F9FA] sm:h-auto sm:max-h-[90dvh] sm:max-w-lg sm:rounded-[28px] sm:shadow-2xl"
       >
         {/* Header */}
         <header className="shrink-0 border-b border-zinc-100 bg-white px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">

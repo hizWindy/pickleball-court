@@ -156,7 +156,7 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
         </div>
       </div>
 
-      <div className="sticky top-14 z-20 -mx-4 space-y-3 border-b border-zinc-200/80 bg-[#F7F6F1]/95 px-4 pb-3 pt-2 backdrop-blur sm:mx-0 sm:rounded-b-2xl sm:px-0">
+      <div className="sticky top-14 z-20 -mx-4 space-y-3 border-b border-zinc-200/80 bg-[#F6F8FA]/95 px-4 pb-3 pt-2 backdrop-blur sm:mx-0 sm:rounded-b-2xl sm:px-0">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input

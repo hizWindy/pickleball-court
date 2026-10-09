@@ -6,17 +6,16 @@
 @theme {
   --breakpoint-xs: 30rem;
 
-  /* Easy on the eyes. The site stays white, but not the harsh #FFFFFF that glares on a phone at night:
-     every `bg-white` / `text-white` / `from-white` now resolves to a warm "paper" white, the neutral greys
-     lean the same warm way so borders and panels still separate from it, and the darkest text is a soft
-     charcoal instead of near-black. Text/background contrast stays well above WCAG AAA (7:1).
-     Only QR codes keep literal pure white, because scanners need it. */
-  --color-white: #FAF9F5;
-  --color-zinc-50: #F4F3EE;
-  --color-zinc-100: #ECEBE5;
-  --color-zinc-200: #DEDDD5;
-  --color-zinc-300: #C9C8BF;
-  --color-zinc-950: #18211C;
+  /* Universal, eye-friendly neutral system:
+     Eliminates harsh 100% white glare with an ergonomic, soothing canvas tone (#F6F8FA).
+     Neutral-calibrated (not yellowish/sepia or stark blue) so it fits all screens and users.
+     WCAG AAA contrast (>13:1) maintained for crystal-clear readability. */
+  --color-white: #FFFFFF;
+  --color-zinc-50: #F8F9FA;
+  --color-zinc-100: #F1F3F5;
+  --color-zinc-200: #E5E7EB;
+  --color-zinc-300: #D1D5DB;
+  --color-zinc-950: #0F172A;
 
   /* Soft pulsing glow on the navbar Book button (phones only; see Navbar) */
   --animate-book-glow: book-glow 2.4s ease-in-out infinite;
@@ -47,8 +46,8 @@
     --court-lime-bright: #D2EE5E;  /* Softened from neon #CCFF00, which was too harsh on the eyes */
     --court-mint-bg: #F0FDF4;      /* Soft court section background */
     --court-mint-border: #BBF7D0;  /* Soft emerald border */
-    --paper: #F7F6F1;              /* Page background: warm off-white */
-    --ink: #1C2530;                /* Body text: soft slate, 14:1 on paper */
+    --paper: #F6F8FA;              /* Page background: universal, eye-soothing soft off-white */
+    --ink: #0F172A;                /* Body text: deep slate charcoal, 14:1 contrast */
     color-scheme: light;
   }
 
@@ -106,9 +105,9 @@
 .double-bezel {
   border-radius: 1.75rem;
   padding: 0.375rem;
-  background: linear-gradient(135deg, rgba(21, 128, 61, 0.15), rgba(250, 249, 245, 0.9), rgba(132, 204, 22, 0.15));
-  border: 1px solid rgba(21, 128, 61, 0.2);
-  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.07);
+  background: linear-gradient(135deg, rgba(21, 128, 61, 0.12), rgba(255, 255, 255, 0.92), rgba(132, 204, 22, 0.12));
+  border: 1px solid rgba(21, 128, 61, 0.18);
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.06);
 }
 
 .double-bezel-inner {

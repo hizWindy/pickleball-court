@@ -146,7 +146,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
       <motion.div
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#F9F8F4] sm:h-auto sm:max-h-[92dvh] sm:max-w-lg sm:rounded-[28px] sm:shadow-2xl"
+        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#F8F9FA] sm:h-auto sm:max-h-[92dvh] sm:max-w-lg sm:rounded-[28px] sm:shadow-2xl"
       >
         {/* Timer header */}
         <header className="shrink-0 bg-gradient-to-br from-[#15803D] to-[#0B3D1C] px-5 pb-5 pt-[max(1rem,env(safe-area-inset-top))] text-white">

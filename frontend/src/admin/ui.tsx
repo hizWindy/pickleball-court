@@ -285,7 +285,7 @@ export const Sheet: React.FC<{
         initial={{ opacity: 0, y: 28 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-        className="relative mt-8 flex w-full flex-col overflow-hidden rounded-t-3xl bg-[#F7F6F1] shadow-2xl outline-none sm:mt-0 sm:max-w-[34rem] sm:rounded-none sm:rounded-l-3xl"
+        className="relative mt-8 flex w-full flex-col overflow-hidden rounded-t-3xl bg-[#F6F8FA] shadow-2xl outline-none sm:mt-0 sm:max-w-[34rem] sm:rounded-none sm:rounded-l-3xl"
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-3 sm:px-5">
           <div className="min-w-0 flex-1">{title}</div>

@@ -135,7 +135,7 @@ export function App() {
       <div
         inert={behindLayer ? true : undefined}
         aria-hidden={behindLayer ? true : undefined}
-        className="min-h-screen w-full overflow-x-hidden bg-white text-zinc-900 flex flex-col antialiased selection:bg-[#15803D] selection:text-white"
+        className="min-h-screen w-full overflow-x-hidden bg-[#F6F8FA] text-zinc-900 flex flex-col antialiased selection:bg-[#15803D] selection:text-white"
       >
         <FramerScrollProgress />
 

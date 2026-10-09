@@ -148,7 +148,7 @@ export const FramerRulesAccordion: React.FC<{ onReschedule?: () => void }> = ({ 
   ];
 
   return (
-    <section id="rules" className="py-16 sm:py-20 bg-[#F7F6F1] border-b border-zinc-200 cv-auto scroll-mt-20">
+    <section id="rules" className="py-16 sm:py-20 bg-[#F6F8FA] border-b border-zinc-200/80 cv-auto scroll-mt-20">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         {/* Header */}
         <motion.div

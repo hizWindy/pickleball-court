@@ -61,7 +61,7 @@ export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
   const nothingFree = !loading && tomorrowAvail && picks.length === 0;
 
   return (
-    <section id="open-slots" className="py-12 sm:py-14 bg-[#F7F6F1] border-b border-zinc-200">
+    <section id="open-slots" className="py-12 sm:py-14 bg-[#F6F8FA] border-b border-zinc-200/80">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

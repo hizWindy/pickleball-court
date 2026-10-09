@@ -3,7 +3,7 @@ import { COURT_DETAILS } from '../data/mockData';
 
 export const Footer: React.FC<{ onReschedule: () => void }> = ({ onReschedule }) => {
   return (
-    <footer className="bg-white border-t border-emerald-100 py-10 text-xs text-zinc-500">
+    <footer className="bg-[#F6F8FA] border-t border-zinc-200/80 py-10 text-xs text-zinc-500">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-3">
           <img src="/icon.svg" alt="HousePickle Club" className="w-8 h-8 rounded-xl shadow-xs" />
