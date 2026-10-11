@@ -57,7 +57,7 @@ const Block: React.FC<{ title: string; children: React.ReactNode; className?: st
 
 export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({ code, onClose }) => {
   const desk = useDesk();
-  const { data: b, error, setData } = useRemote(`detail-${code}`, () => adminApi.get(code), { version: desk.refreshKey, intervalMs: 20000 });
+  const { data: b, error, setData } = useRemote(`detail-${code}`, () => adminApi.get(code), { version: desk.refreshKey, intervalMs: 60000 });
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [ask, setAsk] = useState<Ask>(null);

@@ -9,14 +9,14 @@ import { useNow, useRemote } from './hooks';
 import { summarizeRain } from './forecast';
 import { RowActions } from './QuickActions';
 import { RainBars } from './rain';
-import { Btn, Card, cx, Label, LabelBadge, Num, Segmented } from './ui';
+import { Btn, Card, cx, Label, LabelBadge, Num, SelectInput } from './ui';
 import { useQuickActions } from './useQuickActions';
 import type { Overview } from './types';
 
 const RANGES = [
-  { value: 7, label: '7 days' },
-  { value: 30, label: '30 days' },
-  { value: 90, label: '90 days' },
+  { value: 7, label: 'Last 7 days' },
+  { value: 30, label: 'Last 30 days' },
+  { value: 90, label: 'Last 90 days' },
 ];
 
 const Skeleton: React.FC<{ className: string }> = ({ className }) => <div className={cx('animate-pulse rounded-2xl bg-zinc-100', className)} />;
@@ -166,7 +166,7 @@ const WeatherCard: React.FC = () => {
 export const OverviewPage: React.FC = () => {
   const desk = useDesk();
   const [days, setDays] = useState(30);
-  const { data: o, error } = useRemote(`overview-${days}`, () => adminApi.overview(days), { intervalMs: 45000, version: desk.refreshKey });
+  const { data: o, error } = useRemote(`overview-${days}`, () => adminApi.overview(days), { intervalMs: 120000, version: desk.refreshKey, keepPrevious: true });
   const now = useNow();
 
   return (
@@ -176,7 +176,13 @@ export const OverviewPage: React.FC = () => {
           <h1 className="font-heading text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">Overview</h1>
           <p className="mt-0.5 text-sm text-zinc-500">{o ? `${fmtDate(o.dateFrom, { month: 'short', day: 'numeric' })} – ${fmtDate(o.dateTo, { month: 'short', day: 'numeric' })}` : ' '}</p>
         </div>
-        <Segmented className="w-full sm:w-64" label="Time range" value={days} onChange={setDays} options={RANGES} />
+        <SelectInput aria-label="Time range" value={days} onChange={(e) => setDays(Number(e.target.value))} className="w-full sm:w-48 font-semibold">
+          {RANGES.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </SelectInput>
       </div>
 
       <NeedsYou o={o} />
@@ -218,18 +224,25 @@ const OverviewBody: React.FC<{ o: Overview; days: number; now: number }> = ({ o,
     <>
       <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <section className="flex flex-col rounded-3xl bg-zinc-950 p-5 text-white sm:p-6" aria-label="Revenue">
-          <Label className="text-zinc-400">Revenue · last {days} days</Label>
+          <Label className="text-zinc-400">Total revenue · all time</Label>
           <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <Num className="text-[2.6rem] leading-none text-[#D2EE5E] sm:text-5xl">{peso(k.revenue)}</Num>
+            <Num className="text-[2.6rem] leading-none text-[#D2EE5E] sm:text-5xl">{peso(k.revenueAllTime)}</Num>
+            <span className="text-xs font-medium text-zinc-500">
+              from {k.paidBookingsAllTime} paid booking{k.paidBookingsAllTime === 1 ? '' : 's'}
+            </span>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">Counted the moment a booking is paid, including walk-ins.</p>
+          <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-white/10 pt-4">
+            <span className="text-sm font-semibold text-zinc-300">Last {days} days</span>
+            <Num className="text-2xl leading-none text-white">{peso(k.revenue)}</Num>
             <Delta cur={k.revenue} prev={k.revenuePrev} days={days} dark />
           </div>
-          <p className="mt-1.5 text-xs text-zinc-500">Paid bookings, counted on the day they're played.</p>
           <div className="mt-6 flex-1">
             <ColumnChart
               tone="dark"
               fill
               height={150}
-              ariaLabel={`Revenue per day over the last ${days} days. Total ${peso(k.revenue)}.`}
+              ariaLabel={`Revenue paid per day over the last ${days} days. Total ${peso(k.revenue)}. All time ${peso(k.revenueAllTime)}.`}
               maxLabel={compactPeso(Math.max(...o.daily.map((d) => d.revenue)))}
               axis={[
                 fmtDate(o.daily[0].date, { month: 'short', day: 'numeric' }),

@@ -87,8 +87,6 @@ export const Shell: React.FC<ShellProps> = ({ tab, onTab, badges, onAdd, onSignO
             </button>
             <a
               href="/"
-              target="_blank"
-              rel="noreferrer"
               aria-label="Open the public site"
               title="Open the public site"
               className="hidden h-9 w-9 items-center justify-center rounded-lg text-zinc-400 hover:bg-white/10 hover:text-white sm:flex"

@@ -74,6 +74,9 @@ _event = core.record_event
 # Confirmed bookings, split the way the host talks about them. `{end}` is when the session finishes.
 _END_SQL = "strftime('%Y-%m-%dT%H:%M:%SZ', start_at, '+' || hours || ' hours')"
 _PLAYED = "status = 'confirmed' AND source != 'blocked'"
+# When the money came in: the receipt (or the host's confirmation, or the walk-in being added). Revenue is counted on
+# this day, not on the day the court is played, so a payment shows up the moment it is made.
+PAID_AT_SQL = "COALESCE(submitted_at, decided_at, created_at)"
 
 
 def _label_sql(label: str, now: datetime) -> tuple[str, list[object]]:
@@ -250,8 +253,7 @@ def _like(text: str) -> str:
 # ── Reads ─────────────────────────────────────────────────────────────────────
 def nav_counts(conn: sqlite3.Connection) -> NavCounts:
     now = clock.now()
-    with write_transaction(conn):
-        core.release_expired(conn, now)
+    core.sweep_if_due(conn, now)
     restorable_since = to_iso(now - timedelta(minutes=settings.restore_window_minutes))
     row = conn.execute(
         f"""SELECT (SELECT COUNT(*) FROM bookings WHERE {REVIEW_SQL}) AS to_review,
@@ -284,8 +286,7 @@ def list_bookings(
     page_size: int,
 ) -> AdminBookingList:
     now = clock.now()
-    with write_transaction(conn):
-        core.release_expired(conn, now)
+    core.sweep_if_due(conn, now)
 
     where: list[str] = []
     args: list[object] = []
@@ -362,8 +363,7 @@ def list_bookings(
 
 
 def get_detail(conn: sqlite3.Connection, code: str) -> AdminBookingDetail:
-    with write_transaction(conn):
-        core.release_expired(conn)
+    core.sweep_if_due(conn)
     return _detail(conn, _row(conn, code))
 
 
@@ -380,8 +380,7 @@ def receipt_file(conn: sqlite3.Connection, code: str):
 
 def schedule(conn: sqlite3.Connection, play_date: date) -> AdminSchedule:
     now = clock.now()
-    with write_transaction(conn):
-        core.release_expired(conn, now)
+    core.sweep_if_due(conn, now)
     first = to_iso(slot_start(play_date, DAY_START_HOUR))
     last = to_iso(slot_start(play_date, (DAY_START_HOUR - 1) % 24))  # final hour of the play day
     # A Late booking has given its hours up (no slot rows) but the host must still see it to restore it.
@@ -725,8 +724,7 @@ def _pct_or_none(num: int, den: int) -> float | None:
 
 def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
     now = clock.now()
-    with write_transaction(conn):
-        core.release_expired(conn, now)
+    core.sweep_if_due(conn, now)
     days = max(1, min(days, 365))
     today = current_play_date(now)
     start_date = today - timedelta(days=days - 1)
@@ -735,12 +733,16 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
     courts = [dict(c) for c in conn.execute("SELECT * FROM courts WHERE active = 1 ORDER BY sort_order")]
     rate_of = {c["id"]: (c["day_rate"], c["night_rate"]) for c in courts}
 
+    # Everything that was paid in this window (and the one before it, for the comparison). A booking paid today for
+    # next week counts today.
     sold = conn.execute(
-        "SELECT * FROM bookings WHERE status = 'confirmed' AND source != 'blocked' AND start_at >= ? AND start_at < ?",
-        (lo, hi),
+        f"""SELECT *, {PAID_AT_SQL} AS paid_on FROM bookings
+            WHERE status = 'confirmed' AND source != 'blocked' AND {PAID_AT_SQL} >= ?""",
+        (lo,),
     ).fetchall()
-    current = [r for r in sold if r["start_at"] >= mid]
-    previous = [r for r in sold if r["start_at"] < mid]
+    current = [r for r in sold if r["paid_on"] >= mid]
+    previous = [r for r in sold if r["paid_on"] < mid]
+    all_time = conn.execute(f"SELECT COALESCE(SUM(total), 0) AS revenue, COUNT(*) AS n FROM bookings WHERE {_PLAYED}").fetchone()
 
     daily = {start_date + timedelta(days=i): [0, 0, 0] for i in range(days)}  # revenue, bookings, hours
     by_hour = [0] * 24
@@ -748,13 +750,12 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
     by_court: dict[str, list[int]] = {c["id"]: [0, 0, 0] for c in courts}  # revenue, hours, bookings
     by_method: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     by_rate = {"standard": [0, 0], "night_owl": [0, 0]}  # revenue, hours
-    elapsed_hours = 0
     customers: dict[str, dict] = {}
 
     for r in current:
         start = from_iso(r["start_at"])
-        pd = play_date_of(start)
-        d = daily.setdefault(pd, [0, 0, 0])
+        pd = play_date_of(start)  # the day it is played: for "best days" and the busy hours
+        d = daily.setdefault(play_date_of(from_iso(r["paid_on"])), [0, 0, 0])  # the day it was paid: for the chart
         d[0] += r["total"]
         d[1] += 1
         d[2] += r["hours"]
@@ -772,13 +773,19 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
             by_hour[item.hour] += 1
             by_rate[item.rate_type][0] += item.rate
             by_rate[item.rate_type][1] += 1
-            if item.start < now:
-                elapsed_hours += 1
         key = r["customer_phone"] or r["customer_name"].lower()
         c = customers.setdefault(key, {"name": r["customer_name"], "phone": r["customer_phone"], "bookings": 0, "hours": 0, "spent": 0})
         c["bookings"] += 1
         c["hours"] += r["hours"]
         c["spent"] += r["total"]
+
+    # Utilisation is about the court being used, so it follows the day it is played, not the day it was paid.
+    elapsed_hours = 0
+    for r in conn.execute(
+        f"SELECT start_at, hours FROM bookings WHERE {_PLAYED} AND start_at >= ? AND start_at < ?", (mid, hi)
+    ):
+        seconds = (now - from_iso(r["start_at"])).total_seconds()
+        elapsed_hours += min(r["hours"], max(0, -int(-seconds // 3600)))  # hours that have started
 
     window_start = slot_start(start_date, 6)
     window_end = min(now, slot_start(today + timedelta(days=1), 6))
@@ -813,6 +820,8 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
         server_now=to_iso(now),
         kpis=Kpis(
             revenue=revenue,
+            revenue_all_time=all_time["revenue"],
+            paid_bookings_all_time=all_time["n"],
             revenue_prev=sum(r["total"] for r in previous),
             bookings=len(current),
             bookings_prev=len(previous),

@@ -256,7 +256,9 @@ class AdminSchedule(ApiModel):
 
 # ── Overview ──────────────────────────────────────────────────────────────────
 class Kpis(ApiModel):
-    revenue: int
+    revenue: int  # paid in the chosen range, counted on the day it was paid
+    revenue_all_time: int  # everything ever paid, whatever the range
+    paid_bookings_all_time: int
     revenue_prev: int
     bookings: int
     bookings_prev: int

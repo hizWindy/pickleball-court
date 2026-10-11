@@ -2,25 +2,43 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, serverNowMs } from '../lib/api';
 
 /**
- * Load data for a key and keep it fresh while the tab is visible.
- * Changing the key starts over; refreshing keeps the old result on screen so lists don't flash.
+ * What each screen last showed, kept in memory while the desk is open. Switching tabs, reopening a booking or
+ * changing a filter shows the previous result at once and refreshes it quietly, instead of starting from grey
+ * placeholders every time. It is cleared on sign-out, and never written to disk.
  */
-export function useRemote<T>(key: string, load: () => Promise<T>, { intervalMs = 0, enabled = true, version = 0 } = {}) {
-  const [data, setData] = useState<T | null>(null);
+const memory = new Map<string, unknown>();
+const MEMORY_LIMIT = 80;
+export const clearRemoteCache = () => memory.clear();
+function remember(key: string, value: unknown) {
+  memory.delete(key);
+  memory.set(key, value);
+  if (memory.size > MEMORY_LIMIT) memory.delete(memory.keys().next().value as string);
+}
+
+/**
+ * Load data for a key and keep it fresh while the tab is visible.
+ * Shows the last result for the key straight away (see above) and refreshes behind it: polling and "something
+ * changed" reloads never blink the screen. `keepPrevious` holds on to the old result while a new key (a filter, a
+ * range, "show more") loads, so lists don't empty out between two pages.
+ */
+export function useRemote<T>(key: string, load: () => Promise<T>, { intervalMs = 0, enabled = true, version = 0, keepPrevious = false } = {}) {
+  const [data, setDataState] = useState<T | null>(() => (memory.get(key) as T | undefined) ?? null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !memory.has(key));
   const loadRef = useRef(load);
   loadRef.current = load;
   const keyRef = useRef(key);
   keyRef.current = key;
 
-  const refresh = useCallback(async () => {
+  /** `background` reloads (polling, version bumps, a cached screen) don't raise the loading flag. */
+  const run = useCallback(async (background: boolean) => {
     const forKey = keyRef.current;
-    setLoading(true);
+    if (!background) setLoading(true);
     try {
       const result = await loadRef.current();
+      remember(forKey, result);
       if (keyRef.current === forKey) {
-        setData(result);
+        setDataState(result);
         setError(null);
       }
     } catch (e) {
@@ -30,28 +48,36 @@ export function useRemote<T>(key: string, load: () => Promise<T>, { intervalMs =
     }
   }, []);
 
+  const refresh = useCallback(() => run(false), [run]);
+  const setData = useCallback((value: T | null) => {
+    if (value !== null) remember(keyRef.current, value);
+    setDataState(value);
+  }, []);
+
   useEffect(() => {
     if (!enabled) return;
-    setData(null);
+    const cached = memory.get(key) as T | undefined;
+    setDataState((prev) => (cached !== undefined ? cached : keepPrevious ? prev : null));
     setError(null);
-    refresh();
+    run(cached !== undefined);
     if (!intervalMs) return;
-    const tick = () => document.visibilityState === 'visible' && refresh();
+    const tick = () => document.visibilityState === 'visible' && run(true);
     const id = window.setInterval(tick, intervalMs);
     document.addEventListener('visibilitychange', tick);
     return () => {
       window.clearInterval(id);
       document.removeEventListener('visibilitychange', tick);
     };
-  }, [key, enabled, intervalMs, refresh]);
+    // keepPrevious is a constant per call site
+  }, [key, enabled, intervalMs, run]);
 
   // A bumped `version` (something changed elsewhere) reloads in place, without clearing what's on screen.
   const seenVersion = useRef(version);
   useEffect(() => {
     if (seenVersion.current === version) return;
     seenVersion.current = version;
-    if (enabled) refresh();
-  }, [version, enabled, refresh]);
+    if (enabled) run(true);
+  }, [version, enabled, run]);
 
   return { data, error, loading, refresh, setData };
 }

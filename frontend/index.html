@@ -69,16 +69,11 @@
           window.addEventListener('load', () => {
             navigator.serviceWorker.register('/sw.js')
               .then((reg) => {
-                reg.onupdatefound = () => {
-                  const installingWorker = reg.installing;
-                  if (installingWorker) {
-                    installingWorker.onstatechange = () => {
-                      if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        console.log('[HousePickle] New content available; refreshing...');
-                      }
-                    };
-                  }
-                };
+                // An installed app comes back from the background without reloading, so look for a new
+                // version every time it is brought to the front (otherwise only on the next full load).
+                document.addEventListener('visibilitychange', () => {
+                  if (document.visibilityState === 'visible') reg.update().catch(() => {});
+                });
               })
               .catch((err) => {
                 console.warn('[HousePickle] ServiceWorker registration skipped:', err);

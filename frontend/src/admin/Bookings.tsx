@@ -111,7 +111,7 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
     };
   }, [q, status, courtId, pages, ignoreTime, time, today]);
   const key = JSON.stringify(query);
-  const { data, error, loading } = useRemote(`bookings-${key}`, () => adminApi.list(query), { intervalMs: 30000, version: desk.refreshKey, enabled: !!today });
+  const { data, error, loading } = useRemote(`bookings-${key}`, () => adminApi.list(query), { intervalMs: 90000, version: desk.refreshKey, enabled: !!today, keepPrevious: true });
 
   const items = data?.items ?? null;
 

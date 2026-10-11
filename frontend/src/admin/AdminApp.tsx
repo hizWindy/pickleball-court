@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import type { AppConfig } from '../types';
 import { Toast } from '../components/booking/Toast';
 import { adminApi, SIGNED_OUT_EVENT } from './api';
@@ -8,7 +8,7 @@ import { BookingDetail } from './BookingDetail';
 import { BookingForm, type FormMode } from './BookingForm';
 import { BookingsPage } from './Bookings';
 import { DeskContext, type Desk, type FormSeed } from './desk';
-import { useRemote, useTab } from './hooks';
+import { clearRemoteCache, useRemote, useTab } from './hooks';
 import { Login } from './Login';
 import { OverviewPage } from './Overview';
 import { SchedulePage } from './Schedule';
@@ -47,14 +47,28 @@ export default function AdminApp() {
 
   useEffect(() => {
     let alive = true;
-    adminApi.session().then(
-      (s) => alive && setAuthed(s.authenticated),
-      () => alive && setAuthed(false)
-    );
-    const out = () => setAuthed(false);
+    let timer: number | undefined;
+    // Only a real "not signed in" answer shows the sign-in screen. A dropped connection or a server that is
+    // still waking up (common right after switching apps) is retried, so the desk never asks to sign in again
+    // or sits empty until a manual refresh.
+    const check = () =>
+      adminApi.session().then(
+        (s) => alive && setAuthed(s.authenticated),
+        (e) => {
+          if (!alive) return;
+          if (e instanceof ApiError && (e.status === 0 || e.status >= 500)) timer = window.setTimeout(check, 2000);
+          else setAuthed(false);
+        }
+      );
+    check();
+    const out = () => {
+      clearRemoteCache(); // nothing from this session may show up for the next person who signs in
+      setAuthed(false);
+    };
     window.addEventListener(SIGNED_OUT_EVENT, out);
     return () => {
       alive = false;
+      window.clearTimeout(timer);
       window.removeEventListener(SIGNED_OUT_EVENT, out);
     };
   }, []);
@@ -87,8 +101,23 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
   const lastLate = useRef<number | null>(null);
   const lastRev = useRef<number | null>(null);
 
+  // The desk's lists wait for these settings, so a failed request is retried (it used to be dropped silently,
+  // leaving the lists on grey placeholders until a refresh).
   useEffect(() => {
-    api.config().then(setConfig, () => {});
+    let alive = true;
+    let timer: number | undefined;
+    const load = (wait: number) =>
+      api.config().then(
+        (c) => alive && setConfig(c),
+        () => {
+          if (alive) timer = window.setTimeout(() => load(Math.min(wait * 2, 15000)), wait);
+        }
+      );
+    load(2000);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
   }, []);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
@@ -175,6 +204,7 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
     try {
       await adminApi.logout();
     } finally {
+      clearRemoteCache();
       window.history.replaceState(null, '', '/admin');
       onSignedOut();
     }

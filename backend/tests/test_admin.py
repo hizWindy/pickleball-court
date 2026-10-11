@@ -369,7 +369,10 @@ def test_overview_numbers(admin, booking_payload, fake_now):
     assert o["pending"] == {"count": 0, "amount": 0, "flagged": 0}  # nothing short: nothing waits for the host
     assert o["funnel"]["confirmed"] == 1
     assert o["dateFrom"] == "2026-10-04" and o["dateTo"] == "2026-10-10" and len(o["daily"]) == 7
-    assert next(d for d in o["daily"] if d["date"] == "2026-10-08") == {"date": "2026-10-08", "revenue": 400, "bookings": 1, "hours": 2}
+    # Revenue is counted on the day it was PAID: all four were paid today, whatever day they are played.
+    assert next(d for d in o["daily"] if d["date"] == "2026-10-10") == {"date": "2026-10-10", "revenue": 1230, "bookings": 4, "hours": 5}
+    assert all(d["revenue"] == 0 for d in o["daily"] if d["date"] != "2026-10-10")
+    assert k["revenueAllTime"] == 1230 and k["paidBookingsAllTime"] == 4
     assert o["byHour"][9] == 1 and o["byHour"][10] == 1 and o["byHour"][22] == 1 and o["byHour"][18] == 1
     assert {c["courtId"]: c["revenue"] for c in o["byCourt"]} == {"court-1": 980, "court-2": 250}
     assert o["byMethod"][0]["method"] == "cash"
@@ -379,11 +382,50 @@ def test_overview_numbers(admin, booking_payload, fake_now):
     assert [b["customerName"] for b in o["upNext"]][:1] == ["Pedro Penduko"]  # 6 PM is the next session after 10 AM
 
 
-def test_overview_compares_with_the_previous_period(admin):
-    walk_in(admin, date="2026-10-08", hour=9)   # this week (9 AM = 200)
-    walk_in(admin, date="2026-10-02", hour=9)   # the week before (play dates Sep 27 - Oct 3)
+def test_overview_compares_with_the_previous_period(admin, fake_now):
+    walk_in(admin, date="2026-10-10", hour=11)  # paid Oct 10 (11 AM = 200): the week before the one below
+    fake_now.advance(days=8)                    # Oct 18, 10 AM: the 7-day window is Oct 12 - Oct 18
+    walk_in(admin, date="2026-10-18", hour=11)  # paid today
     k = admin.get("/api/admin/overview", params={"days": 7}).json()["kpis"]
     assert k["revenue"] == 200 and k["revenuePrev"] == 200 and k["bookingsPrev"] == 1
+    assert k["revenueAllTime"] == 400  # the headline number never depends on the range
+
+
+def test_a_payment_counts_the_moment_it_is_made_even_for_a_later_day(admin, booking_payload):
+    # Booked and paid today for TOMORROW: that money is in the till now, so it is revenue now.
+    before = admin.get("/api/admin/overview", params={"days": 7}).json()["kpis"]["revenueAllTime"]
+    code, headers = public_booking(admin, booking_payload, date="2026-10-11")
+    held = admin.get("/api/admin/overview", params={"days": 7}).json()["kpis"]
+    assert held["revenue"] == 0 and held["revenueAllTime"] == before  # not paid yet: nothing recorded
+    pay_by_receipt(admin, code, headers)
+    o = admin.get("/api/admin/overview", params={"days": 7}).json()
+    assert o["kpis"]["revenue"] == 250 and o["kpis"]["revenueAllTime"] == before + 250 and o["kpis"]["bookings"] == 1
+    assert next(d for d in o["daily"] if d["date"] == o["today"])["revenue"] == 250
+
+
+def test_a_walk_in_is_revenue_straight_away(admin):
+    walk_in(admin, date="2026-10-12", hour=9)  # for a later day, paid in cash now
+    k = admin.get("/api/admin/overview", params={"days": 7}).json()["kpis"]
+    assert k["revenue"] == 200 and k["revenueAllTime"] == 200
+
+
+def test_the_range_only_changes_the_window_never_the_all_time_total(admin, fake_now):
+    walk_in(admin, date="2026-10-10", hour=11)  # 200, paid Oct 10
+    fake_now.advance(days=40)                   # Nov 19
+    walk_in(admin, date="2026-11-19", hour=11)  # 200, paid today
+    totals = {}
+    for days in (7, 30, 90):
+        k = admin.get("/api/admin/overview", params={"days": days}).json()["kpis"]
+        totals[days] = (k["revenue"], k["revenueAllTime"])
+    assert totals == {7: (200, 400), 30: (200, 400), 90: (400, 400)}  # Oct 10 is 40 days ago: only the 90-day range has it
+
+
+def test_a_voided_booking_leaves_the_revenue(admin):
+    code = walk_in(admin, date="2026-10-10", hour=15).json()["code"]
+    assert admin.get("/api/admin/overview", params={"days": 7}).json()["kpis"]["revenueAllTime"] == 200
+    admin.post(f"/api/admin/bookings/{code}/cancel", json={})
+    k = admin.get("/api/admin/overview", params={"days": 7}).json()["kpis"]
+    assert k["revenue"] == 0 and k["revenueAllTime"] == 0 and k["paidBookingsAllTime"] == 0
 
 
 def test_overview_when_nothing_has_happened(admin):
@@ -454,3 +496,23 @@ def test_the_host_can_add_a_walk_in_longer_than_the_quick_picks(admin):
     res = walk_in(admin, hour=8, hours=10)
     assert res.status_code in (200, 201), res.text
     assert res.json()["hours"] == 10
+
+
+def test_reads_do_not_wait_behind_a_write(admin, booking_payload):
+    # A payment upload holds the database's write lock for a moment. Looking at the desk or the open slots at that
+    # same moment must not queue behind it (before, every read took the write lock just to check for overdue holds).
+    import time
+
+    from app.db import connect
+
+    public_booking(admin, booking_payload)
+    writer = connect()
+    writer.execute("BEGIN IMMEDIATE")  # someone else is mid-write
+    try:
+        started = time.perf_counter()
+        for path in ("/api/admin/counts", "/api/admin/overview?days=7", "/api/admin/bookings", "/api/availability?date=2026-10-10"):
+            assert admin.get(path).status_code == 200, path
+        assert time.perf_counter() - started < 2.0  # the old behaviour waited out the 10 s busy timeout, then failed
+    finally:
+        writer.execute("ROLLBACK")
+        writer.close()

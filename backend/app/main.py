@@ -10,12 +10,14 @@ import contextlib
 import logging
 from collections.abc import AsyncIterator
 
-from fastapi import FastAPI, Request
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import admin_auth, booking_service, notify
+from app import admin_auth, booking_service, notify, ocr
 from app.admin_api import router as admin_router
 from app.api import router
 from app.config import settings
@@ -61,12 +63,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if not admin_auth.configured():
         log.warning("Admin desk is locked: set ADMIN_PASSWORD_HASH (python -m app.admin_auth) or ADMIN_PASSWORD to sign in.")
     task = asyncio.create_task(_sweep_forever())
+    warm = asyncio.create_task(asyncio.to_thread(ocr.warm_up))  # in the background: the site is up straight away
     try:
         yield
     finally:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+        await asyncio.gather(warm, return_exceptions=True)
 
 
 app = FastAPI(title="HousePickle Club Booking API", version="1.0.0", lifespan=lifespan)
@@ -92,6 +96,15 @@ async def security_headers(request: Request, call_next):
     path = request.url.path
     if path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"  # availability and bookings must never be stale
+    elif path.startswith("/assets/") and response.status_code == 200:
+        # Build files have a hash in their name, so a changed file is a new URL: safe to keep for good.
+        # (Only a real file: a "not found" must never be remembered, or it would outlive the deploy that fixes it.)
+        response.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
+    else:
+        # The app page, service worker, manifests and images keep their names between deploys. "no-cache" means
+        # "ask the server first" (a cheap 304 when unchanged), so a phone never opens an old page that points
+        # to build files the new deploy already replaced: that's the blank screen until a manual refresh.
+        response.headers.setdefault("Cache-Control", "no-cache")
     if path.startswith("/api/admin") or path == "/admin" or path.startswith("/admin/"):
         response.headers["X-Robots-Tag"] = "noindex, nofollow"
     return response
@@ -100,14 +113,23 @@ async def security_headers(request: Request, call_next):
 app.include_router(admin_router)  # before the public router, whose catch-all would swallow /api/admin/*
 app.include_router(router)
 
-# In production, serve the built PWA from the same origin (no CORS, one deployment).
+
+def mount_frontend(application: FastAPI, dist: Path) -> None:
+    """Serve the built PWA from the same origin (no CORS, one deployment)."""
+    application.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+    @application.get("/{path:path}", include_in_schema=False)
+    def spa(path: str) -> FileResponse:
+        candidate = (dist / path).resolve()
+        if path and candidate.is_file() and dist.resolve() in candidate.parents:
+            return FileResponse(candidate)
+        if "." in path.rsplit("/", 1)[-1]:
+            # It looks like a file (an old image, a script): say it's missing instead of answering with the app page,
+            # which a service worker would then cache as if it were that file.
+            raise HTTPException(status_code=404, detail="Not found")
+        return FileResponse(dist / "index.html")
+
+
 _dist = settings.frontend_dist
 if (_dist / "index.html").exists():
-    app.mount("/assets", StaticFiles(directory=_dist / "assets"), name="assets")
-
-    @app.get("/{path:path}", include_in_schema=False)
-    def spa(path: str) -> FileResponse:
-        candidate = (_dist / path).resolve()
-        if path and candidate.is_file() and _dist.resolve() in candidate.parents:
-            return FileResponse(candidate)
-        return FileResponse(_dist / "index.html")
+    mount_frontend(app, _dist)

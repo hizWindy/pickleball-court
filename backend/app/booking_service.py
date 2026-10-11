@@ -122,6 +122,27 @@ def release_expired(conn: sqlite3.Connection, now: datetime | None = None) -> in
     return len(rows)
 
 
+def sweep_if_due(conn: sqlite3.Connection, now: datetime | None = None) -> None:
+    """For read-only requests: free what is overdue, but look first. Taking the database's write lock on every
+    read (the desk asks every few seconds) made reads queue behind real writes such as a payment upload; now the
+    lock is only taken when a hold has run out or a group has gone Late."""
+    now = now or clock.now()
+    due = conn.execute(
+        """SELECT 1 FROM bookings WHERE
+               (status = 'held' AND hold_expires_at <= ?)
+            OR (status = 'confirmed' AND source != 'blocked' AND arrived_at IS NULL AND late_at IS NULL
+                AND weather_hold_at IS NULL AND start_at <= ?)
+           LIMIT 1""",
+        (
+            to_iso(now - timedelta(seconds=settings.hold_grace_seconds)),
+            to_iso(now - timedelta(minutes=settings.late_after_minutes)),
+        ),
+    ).fetchone()
+    if due:
+        with write_transaction(conn):
+            release_expired(conn, now)
+
+
 def release_late(conn: sqlite3.Connection, now: datetime) -> int:
     """House rule: a group that isn't there `late_after_minutes` after its start is Late and its hours open up.
 
@@ -317,8 +338,7 @@ def _check_play_date(play_date: date, now: datetime) -> None:
 def availability(conn: sqlite3.Connection, play_date: date) -> AvailabilityOut:
     now = clock.now()
     _check_play_date(play_date, now)
-    with write_transaction(conn):
-        release_expired(conn, now)
+    sweep_if_due(conn, now)
 
     courts = _courts(conn)
     starts = {h: slot_start(play_date, h) for h in PLAY_DAY_HOURS}
@@ -353,8 +373,7 @@ def availability(conn: sqlite3.Connection, play_date: date) -> AvailabilityOut:
 
 def get_booking(conn: sqlite3.Connection, code: str, token: str | None) -> BookingOut:
     now = clock.now()
-    with write_transaction(conn):
-        release_expired(conn, now)
+    sweep_if_due(conn, now)
     return to_view(conn, _authorized(conn, code, token), now)
 
 

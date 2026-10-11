@@ -357,3 +357,35 @@ def test_payments_left_waiting_from_before_become_paid():
     db.apply_schema(conn)  # what the server does on start
     row = conn.execute("SELECT status, decided_at FROM bookings WHERE id = 'b1'").fetchone()
     assert (row["status"], row["decided_at"]) == ("confirmed", "2026-10-09T10:05:00Z")
+
+
+# ── Serving the installed app: what phones may keep, and what they must re-check ──
+def test_the_app_files_are_served_so_a_phone_never_keeps_a_stale_page(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app import main
+
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "app-abc123.js").write_text("console.log(1)")
+    (tmp_path / "images").mkdir()
+    (tmp_path / "images" / "qr.jpg").write_bytes(b"\xff\xd8\xff")
+    (tmp_path / "index.html").write_text("<div id=root></div>")
+    (tmp_path / "sw.js").write_text("// sw")
+    site = FastAPI()
+    site.middleware("http")(main.security_headers)
+    main.mount_frontend(site, tmp_path)
+    web = TestClient(site)
+
+    built = web.get("/assets/app-abc123.js")  # hashed name: a new build is a new URL, so it can be kept for good
+    assert built.status_code == 200 and "immutable" in built.headers["cache-control"]
+
+    for path in ("/", "/admin", "/admin/bookings", "/sw.js", "/images/qr.jpg"):  # always ask the server first
+        res = web.get(path)
+        assert res.status_code == 200 and res.headers["cache-control"] == "no-cache", path
+    assert web.get("/admin").text == "<div id=root></div>"  # the app page, for any route in the app
+
+    # a missing file is a real 404, not the app page (a service worker would cache that as the file)
+    for path in ("/images/old-qr.jpg", "/assets/gone-123.js", "/missing.webmanifest"):
+        res = web.get(path)
+        assert res.status_code == 404 and "immutable" not in res.headers["cache-control"], path  # never remember a "missing"

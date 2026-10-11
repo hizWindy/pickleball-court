@@ -211,7 +211,11 @@ export interface RainDelayResult {
 }
 
 export interface Kpis {
+  /** Paid in the chosen range, counted on the day it was paid. */
   revenue: number;
+  /** Everything ever paid, whatever the range. */
+  revenueAllTime: number;
+  paidBookingsAllTime: number;
   revenuePrev: number;
   bookings: number;
   bookingsPrev: number;

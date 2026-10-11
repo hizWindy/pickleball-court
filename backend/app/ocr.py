@@ -76,11 +76,30 @@ def _get_engine():
         _shapely_fallback()
         from rapidocr import RapidOCR
 
-        _engine = RapidOCR(params={"Global.log_level": "error"})
+        # No angle classifier: it only rights upside-down text lines, which a screenshot never has, and skipping it
+        # saves about a third of the time with identical results on GCash / GoTyme receipts.
+        _engine = RapidOCR(params={"Global.log_level": "error", "Global.use_cls": False})
     except Exception:  # missing package, blocked DLL, bad model file...
         _engine_failed = True
         log.exception("receipt OCR is unavailable; receipts will be flagged for a manual look")
     return _engine
+
+
+def warm_up() -> None:
+    """Load the engine and push one tiny image through it, so the first guest to upload a receipt after the server
+    starts doesn't pay for the model loading (several seconds on a small server)."""
+    if not settings.ocr_enabled:
+        return
+    engine = _get_engine()
+    if engine is None:
+        return
+    try:
+        import numpy as np
+
+        with _lock:
+            engine(np.full((96, 256, 3), 255, dtype=np.uint8))
+    except Exception:
+        log.exception("OCR warm-up failed (receipts will still be read, just slower the first time)")
 
 
 def available() -> bool:

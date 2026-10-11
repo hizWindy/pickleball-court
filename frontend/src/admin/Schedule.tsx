@@ -38,7 +38,7 @@ export const SchedulePage: React.FC = () => {
   const { q, problemDialog } = useQuickActions();
   const realToday = desk.config?.today ?? currentPlayDate(serverNowMs());
   const [date, setDate] = useState(realToday);
-  const { data, error } = useRemote(`schedule-${date}`, () => adminApi.schedule(date), { intervalMs: 20000, version: desk.refreshKey });
+  const { data, error } = useRemote(`schedule-${date}`, () => adminApi.schedule(date), { intervalMs: 60000, version: desk.refreshKey });
   const courts = desk.config?.courts ?? [];
   const nowMarker = useRef<HTMLDivElement>(null);
   const scrolledFor = useRef<string | null>(null);
