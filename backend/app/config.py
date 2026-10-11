@@ -104,7 +104,7 @@ class Settings:
             "GCash",
             _env("GCASH_ACCOUNT_NAME", "Reymark Vergara"),
             _env("GCASH_ACCOUNT_NUMBER", "09128285344"),
-            qr_image=_env("GCASH_QR_IMAGE", "/images/payment-qr-gcash.jpg"),
+            qr_image=_env("GCASH_QR_IMAGE", "/images/payment-qr-gcash.jpg?v=2"),
         )
     )
     gotyme: PaymentAccount = field(
