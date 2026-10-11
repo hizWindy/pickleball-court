@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     admin_note          TEXT,
     checked_at          TEXT,   -- when the host looked at an automatically confirmed payment
     review_flags        TEXT,   -- JSON list of {code, message}: what looked off about the proof
-    arrived_at          TEXT,   -- the group showed up (host tapped Arrived, or the guest checked in)
+    arrived_at          TEXT,   -- the group showed up (the host tapped Arrived)
     late_at             TEXT,   -- the group was not there in time: the hours were released and the booking is Late
     reschedule_count    INTEGER NOT NULL DEFAULT 0,  -- guest-initiated reschedules used (a weather delay is free)
     weather_hold_at     TEXT    -- the host called a rain delay: the hours are free, the guest picks a new time
@@ -120,11 +120,24 @@ CREATE TABLE IF NOT EXISTS receipt_scans (
     paid_at           TEXT,
     recipient_name    TEXT,
     recipient_number  TEXT,
+    sender_name       TEXT,               -- who paid, when the receipt shows it (GoTyme, Maya, banks)
+    sender_number     TEXT,
     success           INTEGER,            -- 1 / 0 / NULL (couldn't tell)
     raw_text          TEXT,
     duration_ms       INTEGER,
     created_at        TEXT NOT NULL
 );
+
+-- Goes up on every change to any booking (new hold, payment, release, sweep, host action), whoever made it.
+-- The admin desk polls this one number and reloads only when it moves, so it stays in sync within seconds.
+CREATE TABLE IF NOT EXISTS desk_rev (
+    id   INTEGER PRIMARY KEY CHECK (id = 1),
+    rev  INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO desk_rev (id, rev) VALUES (1, 0);
+CREATE TRIGGER IF NOT EXISTS trg_bookings_rev_ins AFTER INSERT ON bookings BEGIN UPDATE desk_rev SET rev = rev + 1 WHERE id = 1; END;
+CREATE TRIGGER IF NOT EXISTS trg_bookings_rev_upd AFTER UPDATE ON bookings BEGIN UPDATE desk_rev SET rev = rev + 1 WHERE id = 1; END;
+CREATE TRIGGER IF NOT EXISTS trg_bookings_rev_del AFTER DELETE ON bookings BEGIN UPDATE desk_rev SET rev = rev + 1 WHERE id = 1; END;
 
 -- Alerts already sent to the host (e.g. "rain expected on this day"), so each one goes out once.
 CREATE TABLE IF NOT EXISTS notices_sent (
@@ -143,6 +156,8 @@ MIGRATIONS = [
     ("bookings", "late_at", "TEXT"),
     ("bookings", "reschedule_count", "INTEGER NOT NULL DEFAULT 0"),
     ("bookings", "weather_hold_at", "TEXT"),
+    ("receipt_scans", "sender_name", "TEXT"),
+    ("receipt_scans", "sender_number", "TEXT"),
 ]
 
 SEED_COURTS = [
@@ -180,6 +195,10 @@ def apply_schema(conn: sqlite3.Connection) -> None:
         """INSERT INTO courts (id, name, day_rate, night_rate, sort_order) VALUES (?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET day_rate = excluded.day_rate, night_rate = excluded.night_rate""",
         SEED_COURTS,
+    )
+    # A receipt always confirms a booking now (Oct 2026: paid is Paid). Any left waiting from before are Paid too.
+    conn.execute(
+        "UPDATE bookings SET status = 'confirmed', decided_at = COALESCE(decided_at, submitted_at) WHERE status = 'pending_verification'"
     )
     # The player's IP is only needed to cap simultaneous holds, so it is dropped once a booking leaves 'held'.
     # This also tidies rows written before that rule existed.

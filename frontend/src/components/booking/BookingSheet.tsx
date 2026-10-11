@@ -69,7 +69,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
 
   // Hours after 5 AM roll into the next play day, so a 5 AM + 2 hr booking needs tomorrow's grid too.
   const hourIndex = avail && hour != null ? avail.slots.findIndex((s) => s.hour === hour) : -1;
-  const crossesDay = hourIndex >= 0 && hourIndex + (config?.maxHours ?? 5) > 24;
+  const crossesDay = hourIndex >= 0 && hourIndex + (config?.maxHours ?? 24) > 24;
   const { data: nextAvail } = useAvailability(crossesDay ? addDays(activeDate, 1) : null, {
     enabled: needsAvailability && crossesDay,
   });
@@ -611,8 +611,11 @@ function CourtStep({
     )
   );
 
-  // The stepper stops at the longest run the club can actually give you from this start time.
+  // The stepper stops at the longest run the club can actually give you from this start time; the chips are only shortcuts.
   const hoursLimit = loading ? config.maxHours : Math.max(1, Math.min(config.maxHours, maxContinuousOverall));
+  const quickHours = Math.min(config.quickHours ?? 5, config.maxHours);
+  // Only worth saying when it bites: a quick pick is blocked, or the stepper just hit the wall.
+  const showLimit = !loading && maxContinuousOverall > 0 && maxContinuousOverall < config.maxHours && (maxContinuousOverall < quickHours || hours >= hoursLimit);
 
   // Is another court available for all requested hours?
   const altCourt =
@@ -639,7 +642,7 @@ function CourtStep({
       <section>
         <div className="flex items-center justify-between mb-1.5">
           <Label>How long?</Label>
-          {maxContinuousOverall < config.maxHours && maxContinuousOverall > 0 && (
+          {showLimit && (
             <span className="text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
               Max {maxContinuousOverall} hr{maxContinuousOverall > 1 ? 's' : ''} available
             </span>
@@ -673,7 +676,7 @@ function CourtStep({
         </div>
 
         <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Quick pick">
-          {Array.from({ length: config.maxHours }, (_, i) => i + 1).map((n) => {
+          {Array.from({ length: quickHours }, (_, i) => i + 1).map((n) => {
             const anyFree = config.courts.some((c) => courtFreeFor(c.id, n));
             const isBlocked = !loading && !anyFree;
             return (
@@ -1012,7 +1015,7 @@ function ReviewStep(props: {
         <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
         <p>
           When you confirm, this slot is <strong>held for you for {config.holdMinutes} minutes</strong>. Send the <strong>full amount</strong> and
-          upload your receipt within that time, or the slot is released for others. Your booking is confirmed once the full payment is received.
+          upload your receipt within that time, or the slot is released for others. Your booking is confirmed as soon as you upload the receipt.
         </p>
       </div>
 

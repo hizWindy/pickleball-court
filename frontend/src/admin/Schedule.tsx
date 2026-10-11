@@ -16,7 +16,6 @@ const ROW = 56; // px per hour
 const TONE = {
   paid: 'border-emerald-600 bg-emerald-50 text-emerald-950 hover:bg-emerald-100',
   done: 'border-zinc-400 bg-zinc-100 text-zinc-600 hover:bg-zinc-200/70',
-  check: 'border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100',
   held: 'border-sky-500 bg-sky-50 text-sky-950 hover:bg-sky-100',
   blocked: 'border-zinc-500 bg-[repeating-linear-gradient(135deg,#f4f4f5,#f4f4f5_6px,#e4e4e7_6px,#e4e4e7_12px)] text-zinc-800 hover:brightness-95',
 } as const;
@@ -24,9 +23,7 @@ const TONE = {
 const toneOf = (b: AdminBooking): keyof typeof TONE =>
   b.source === 'blocked'
     ? 'blocked'
-    : b.status === 'pending_verification' || (b.needsReview && b.reviewFlags.length > 0)
-      ? 'check'
-      : b.status === 'held'
+    : b.status === 'held'
         ? 'held'
         : b.label === 'done'
           ? 'done'
@@ -215,9 +212,9 @@ export const SchedulePage: React.FC = () => {
                             <span className="truncate">{b.customerName}</span>
                           </span>
                           <span className="block truncate text-[11px] font-medium leading-tight opacity-75">{hourSpan(b.hour, b.hours)}</span>
-                          {tall && (tone === 'check' || tone === 'held') && (
+                          {tall && tone === 'held' && (
                             <span className="mt-1 inline-block rounded bg-white/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-                              {tone === 'check' ? (b.status === 'pending_verification' ? 'Needs check' : 'Check payment') : 'Paying now'}
+                              Paying now
                             </span>
                           )}
                         </button>

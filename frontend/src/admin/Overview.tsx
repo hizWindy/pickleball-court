@@ -54,8 +54,8 @@ const Section: React.FC<{ title: string; note?: string; children: React.ReactNod
 );
 
 /**
- * What can't wait: a Late booking the host can still restore, guests waiting to pick a new time after rain,
- * and payments to look at. Loads on its own, so it shows even if the analytics below are slow.
+ * What can't wait: a Late booking the host can still restore, and guests waiting to pick a new time after rain.
+ * Loads on its own, so it shows even if the analytics below are slow.
  */
 const NeedsYou: React.FC<{ o: Overview | null }> = ({ o }) => {
   const desk = useDesk();
@@ -71,11 +71,9 @@ const NeedsYou: React.FC<{ o: Overview | null }> = ({ o }) => {
   const lateNow = lateCount > 0 && late ? late.items.filter((b) => restoreLeft(b, now) !== null) : [];
 
   const rainWaiting = counts?.rainDelay ?? 0;
-  const payments = o?.pending.count ?? counts?.toReview ?? 0;
-  const flagged = o?.pending.flagged ?? counts?.flagged ?? 0;
 
   if (!counts && !o) return null;
-  if (lateNow.length === 0 && rainWaiting === 0 && payments === 0) {
+  if (lateNow.length === 0 && rainWaiting === 0) {
     return (
       <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm font-medium text-emerald-900">
         <CheckCircle2 className="h-5 w-5 shrink-0 text-[#15803D]" /> You're all caught up. Nothing needs you right now.
@@ -126,26 +124,6 @@ const NeedsYou: React.FC<{ o: Overview | null }> = ({ o }) => {
         </button>
       )}
 
-      {payments > 0 && (
-        <button
-          type="button"
-          onClick={() => desk.goto('bookings', { status: 'needs_check' })}
-          className="group flex w-full items-center gap-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-left transition hover:bg-amber-100/70 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-        >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-500 font-heading text-lg font-bold text-white">{payments}</span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-heading text-base font-bold text-amber-950">{payments === 1 ? '1 payment to check' : `${payments} payments to check`}</span>
-            <span className="block text-sm text-amber-900/80">
-              {flagged
-                ? `${flagged} ${flagged === 1 ? 'looks' : 'look'} off`
-                : o
-                  ? `${peso(o.pending.amount)} in total · all receipts matched the bookings`
-                  : 'All receipts matched the bookings'}
-            </span>
-          </span>
-          <ArrowRight className="h-5 w-5 shrink-0 text-amber-800 transition-transform group-hover:translate-x-0.5" />
-        </button>
-      )}
       {problemDialog}
     </section>
   );
@@ -334,7 +312,6 @@ const OverviewBody: React.FC<{ o: Overview; days: number; now: number }> = ({ o,
         <StackedBar
           parts={[
             { label: 'Paid', value: f.confirmed, className: 'bg-[#15803D]' },
-            { label: 'Needs check', value: f.pendingVerification, className: 'bg-amber-400' },
             { label: 'Paying now', value: f.held, className: 'bg-sky-400' },
             { label: 'Expired', value: f.expired, className: 'bg-zinc-300' },
             { label: 'Released or voided', value: f.cancelled, className: 'bg-zinc-400' },

@@ -57,14 +57,15 @@ class Settings:
     hold_minutes: int = field(default_factory=lambda: _env_int("HOLD_MINUTES", 10))
     # Silent server-side tolerance so a proof sent a second before the deadline isn't lost to network latency
     hold_grace_seconds: int = field(default_factory=lambda: _env_int("HOLD_GRACE_SECONDS", 10))
-    max_hours: int = field(default_factory=lambda: _env_int("MAX_HOURS", 5))
+    # The longest booking. Any length works as long as every hour is free (the slot table guarantees nobody
+    # is bumped); the quick-pick chips only offer the common lengths, the +/- stepper goes up to this.
+    max_hours: int = field(default_factory=lambda: _env_int("MAX_HOURS", 24))
+    quick_hours: int = field(default_factory=lambda: _env_int("QUICK_HOURS", 5))
     # House rule: a group that hasn't arrived this long after its start is Late and the slot is released.
     late_after_minutes: int = field(default_factory=lambda: _env_int("LATE_AFTER_MINUTES", 15))
     # Host-only grace after a booking turns Late: the host may still restore it for a guest who pleads.
     # Guests are never told about it (the published rule is just `late_after_minutes`).
     restore_window_minutes: int = field(default_factory=lambda: _env_int("RESTORE_WINDOW_MINUTES", 5))
-    # A guest may check in from this long before the start (so the host doesn't have to tap for everyone).
-    checkin_opens_minutes: int = field(default_factory=lambda: _env_int("CHECKIN_OPENS_MINUTES", 30))
     # Rescheduling: once per booking, at least this long before the start; the new date must be within
     # `reschedule_window_days` of the original one. Weather delays are exempt from the once-only rule.
     reschedule_min_hours: int = field(default_factory=lambda: _env_int("RESCHEDULE_MIN_HOURS", 48))
@@ -79,11 +80,11 @@ class Settings:
     telegram_bot_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN", ""))
     telegram_chat_id: str = field(default_factory=lambda: _env("TELEGRAM_CHAT_ID", ""))
     booking_window_days: int = field(default_factory=lambda: _env_int("BOOKING_WINDOW_DAYS", 30))
-    max_active_holds_per_phone: int = field(default_factory=lambda: _env_int("MAX_HOLDS_PER_PHONE", 1))
     max_active_holds_per_ip: int = field(default_factory=lambda: _env_int("MAX_HOLDS_PER_IP", 2))
     max_receipt_bytes: int = field(default_factory=lambda: _env_int("MAX_RECEIPT_BYTES", 8 * 1024 * 1024))
-    # Paid-time check for typed references: payment must fall inside the hold window ± this tolerance
-    paid_time_tolerance_minutes: int = field(default_factory=lambda: _env_int("PAID_TIME_TOLERANCE_MINUTES", 5))
+    # How far a receipt's payment time may sit outside the hold window (typed references must be inside it).
+    # Generous on purpose: phone clocks drift and some apps stamp the time the transfer settled.
+    paid_time_tolerance_minutes: int = field(default_factory=lambda: _env_int("PAID_TIME_TOLERANCE_MINUTES", 30))
     paddle_fee: int = field(default_factory=lambda: _env_int("PADDLE_FEE", 80))
     # Privacy Notice promise: a receipt image is deleted this many days after the host confirms or rejects the
     # payment, or after the hard cap below if nobody ever reviewed it. The hash is kept to block reuse.
@@ -104,7 +105,7 @@ class Settings:
             "GCash",
             _env("GCASH_ACCOUNT_NAME", "Reymark Vergara"),
             _env("GCASH_ACCOUNT_NUMBER", "09128285344"),
-            qr_image=_env("GCASH_QR_IMAGE", "/images/payment-qr-gcash.jpg"),
+            qr_image=_env("GCASH_QR_IMAGE", "/images/payment-qr-gcash.jpg?v=2"),
         )
     )
     gotyme: PaymentAccount = field(

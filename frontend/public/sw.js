@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'housepickle-v6'; // bumped: mobile PWA touch scrolling fix
+const CACHE_VERSION = 'housepickle-v7'; // bumped: payment QR changed back, so phones drop the cached test QR
 const STATIC_ASSETS = [
   '/',
   '/index.html',

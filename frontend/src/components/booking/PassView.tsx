@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { CalendarClock, CheckCircle2, Clock, CloudRain, Download, MapPin, MapPinCheck, Share2, X } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Clock, CloudRain, Download, MapPin, Share2, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { device } from '../../lib/device';
-import { canSharePass, downloadPass, passState, qrDataUrl, sharePass } from '../../lib/pass';
-import { fmtSchedule, peso, pesoAuto } from '../../lib/time';
+import { downloadPass, passFileName, passState, qrDataUrl, renderPassPng } from '../../lib/pass';
+import { isIOS, saveImage, saveLabel } from '../../lib/saveImage';
+import { fmtReference, fmtSchedule, peso, pesoAuto } from '../../lib/time';
 import { useConfig } from '../../hooks/useBookingData';
 import { COURT_DETAILS } from '../../data/mockData';
 import type { Booking } from '../../types';
@@ -34,8 +35,6 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedNote, setSavedNote] = useState<string | null>(null);
-  const [checkingIn, setCheckingIn] = useState(false);
-  const [checkInError, setCheckInError] = useState<string | null>(null);
   const lastStatus = useRef(initial?.status);
   const alive = useRef(true);
 
@@ -45,6 +44,29 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
   useEffect(() => {
     qrDataUrl(code, 360).then(setQr);
   }, [code]);
+
+  // The pass image is drawn ahead of time, so Save is instant and iOS still counts it as part of the tap.
+  // Redrawn only when something printed on it changes, not on every status poll.
+  const [passBlob, setPassBlob] = useState<Blob | null>(null);
+  const bookingNow = useRef(booking);
+  bookingNow.current = booking;
+  const passKey = booking
+    ? JSON.stringify([
+        booking.code, booking.status, booking.pendingReason, booking.late, booking.weatherHold, booking.arrived, booking.customerName,
+        booking.courtName, booking.startAt, booking.endAt, booking.hours, booking.total, booking.paddles, booking.paymentMethod, booking.paymentReference,
+      ])
+    : null;
+  useEffect(() => {
+    setPassBlob(null);
+    if (!passKey || !bookingNow.current) return;
+    let current = true;
+    renderPassPng(bookingNow.current)
+      .then((b) => current && setPassBlob(b))
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [passKey]);
 
   const load = useCallback(async () => {
     try {
@@ -96,32 +118,18 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
 
   const save = async () => {
     if (!booking) return;
+    const name = passFileName(booking);
     setSaving(true);
     try {
-      const shared = canSharePass() && (await sharePass(booking));
-      if (!shared) {
-        await downloadPass(booking);
-        setSavedNote('Downloaded. Check your Downloads or Files app.');
-      }
+      // Ready (the usual case): no waiting at all. Otherwise draw it now; Android still downloads, iOS may need a second tap.
+      const result = await saveImage(passBlob ?? (await renderPassPng(booking)), name);
+      if (result === 'downloaded') setSavedNote('Pass saved. Find it in your Downloads or Gallery.');
+      else if (result === 'shared') setSavedNote('Pass saved.');
+      else if (result === 'unsupported') setSavedNote('This app can’t save images. Take a screenshot of this pass, or open the page in Chrome or Safari.');
     } catch {
       setSavedNote('Could not save the image. Take a screenshot of this pass instead.');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const checkIn = async () => {
-    setCheckingIn(true);
-    setCheckInError(null);
-    try {
-      const b = await api.checkIn(code, token);
-      lastStatus.current = b.status;
-      setBooking(b);
-    } catch (e) {
-      setCheckInError(errorMessage(e));
-      load(); // the booking may have changed (e.g. it just went Late)
-    } finally {
-      setCheckingIn(false);
     }
   };
 
@@ -187,19 +195,6 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
                 </div>
               )}
 
-              {confirmed && booking.canCheckIn && !booking.arrived && (
-                <div className="rounded-3xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-emerald-50/60 p-4 shadow-xs">
-                  <p className="font-heading text-sm font-black uppercase tracking-tight text-emerald-950">Here already?</p>
-                  <p className="mt-1 text-sm leading-relaxed text-emerald-950/80">
-                    Tap this when you get to the court. It lets us know your group is here, so your booking stays yours.
-                  </p>
-                  <PrimaryButton className="mt-3 min-h-14 w-full text-base" loading={checkingIn} onClick={checkIn}>
-                    <MapPinCheck className="h-5 w-5" /> I've arrived
-                  </PrimaryButton>
-                  {checkInError && <div className="mt-3"><InlineError>{checkInError}</InlineError></div>}
-                </div>
-              )}
-
               {confirmed && booking.arrived && !rain && !late && (
                 <div className="flex items-center gap-3 rounded-3xl border border-emerald-300 bg-emerald-50 p-4">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white">
@@ -230,6 +225,11 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
                     <StatusBadge state={state} />
                     <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Reservation no.</p>
                     <p className="whitespace-nowrap font-mono text-[26px] font-bold leading-tight tracking-wide text-zinc-950">{booking.code}</p>
+                    {booking.paymentReference && (
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Payment ref <span className="font-mono font-semibold tracking-wide text-zinc-800">{fmtReference(booking.paymentReference)}</span>
+                      </p>
+                    )}
                   </div>
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
                     <Item label="Player" value={booking.customerName} wide />
@@ -262,8 +262,8 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
                   <PrimaryButton className="w-full" onClick={() => onResumePayment(booking)}>Continue payment</PrimaryButton>
                 ) : showSave ? (
                   <PrimaryButton className="w-full" loading={saving} onClick={save}>
-                    {canSharePass() ? <Share2 className="h-4 w-4" /> : <Download className="h-4 w-4" />}
-                    {canSharePass() ? 'Save to Photos' : 'Download pass'}
+                    {isIOS() ? <Share2 className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+                    {isIOS() ? saveLabel() : 'Download pass'}
                   </PrimaryButton>
                 ) : null}
                 <SecondaryButton className="w-full" onClick={onClose}>Done</SecondaryButton>

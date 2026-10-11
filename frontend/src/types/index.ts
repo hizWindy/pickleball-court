@@ -54,7 +54,10 @@ export interface AppConfig {
   paymentAccounts: PaymentAccount[];
   paddleFee: number;
   holdMinutes: number;
+  /** The longest booking: the +/- stepper goes up to this (as long as every hour is free). */
   maxHours: number;
+  /** Quick-pick chips for the common lengths: 1 to this many hours. */
+  quickHours: number;
   bookingWindowDays: number;
   /** House rule: a group not there this long after its start is Late and the court is released. */
   lateAfterMinutes: number;
@@ -115,20 +118,21 @@ export interface Booking {
   proofType: 'receipt' | 'reference' | null;
   closedAt: string | null;
   serverNow: string;
-  /** The group has checked in (on the pass, or the host marked them arrived). */
+  /** The host marked the group as here. */
   arrived: boolean;
   /** Not there in time: the court was released. Only the host can put it back. */
   late: boolean;
   /** The host called a rain delay: the guest picks a new time (free, doesn't use the one reschedule). */
   weatherHold: boolean;
   /** Check-in is open right now (from 30 min before the start until the session ends). */
-  canCheckIn: boolean;
   reschedule: RescheduleState;
   rescheduleCount: number;
   /** Set while status is `pending_verification`: why the payment is waiting for the host. */
   pendingReason: PendingReason | null;
   /** Pesos the receipt showed, if the server could read it. */
   amountPaid: number | null;
+  /** The GCash / GoTyme reference of the payment, once proof is in (read off the receipt, or typed in). */
+  paymentReference: string | null;
 }
 
 export interface BookingWithToken {

@@ -8,7 +8,7 @@ export type Source = 'online' | 'walk_in' | 'blocked';
  * The one word on a booking. Day to day it's Paid, Late, Done (and Rain delay when you've called one);
  * the rest are rare states. A Late or rain-delayed booking is still `status: 'confirmed'`.
  */
-export type AdminLabel = 'paid' | 'late' | 'done' | 'rain_delay' | 'blocked' | 'awaiting' | 'needs_check' | 'rejected' | 'expired' | 'cancelled';
+export type AdminLabel = 'paid' | 'late' | 'done' | 'rain_delay' | 'blocked' | 'awaiting' | 'rejected' | 'expired' | 'cancelled';
 
 export interface AdminBooking {
   code: string;
@@ -74,6 +74,9 @@ export interface ReceiptScan {
   paidAt: string | null;
   recipientName: string | null;
   recipientNumber: string | null;
+  /** Who paid, when the receipt shows it (GoTyme, Maya and bank receipts do; GCash does not). */
+  senderName: string | null;
+  senderNumber: string | null;
   success: boolean | null;
   rawText: string | null;
   durationMs: number | null;
@@ -137,6 +140,10 @@ export interface NavCounts {
   late: number;
   /** Guests waiting to pick a new time after a rain delay. */
   rainDelay: number;
+  /** Online payments received so far: the desk announces it when this goes up. */
+  payments: number;
+  /** Goes up whenever any booking changes (a new hold, a payment, a release...). */
+  rev: number;
 }
 
 export interface CreateBody {

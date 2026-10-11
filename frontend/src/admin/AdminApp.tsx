@@ -83,8 +83,9 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [form, setForm] = useState<FormMode | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [preset, setPreset] = useState<{ status: string; nonce: number } | undefined>();
-  const lastPending = useRef<number | null>(null);
+  const lastPayments = useRef<number | null>(null);
   const lastLate = useRef<number | null>(null);
+  const lastRev = useRef<number | null>(null);
 
   useEffect(() => {
     api.config().then(setConfig, () => {});
@@ -107,23 +108,24 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
         const c = await adminApi.counts();
         if (!alive) return;
         setCounts(c);
-        if (lastPending.current !== null && c.toReview > lastPending.current) {
-          setToast(c.toReview - lastPending.current === 1 ? 'New paid booking. Have a quick look at the receipt.' : 'New paid bookings. Have a quick look at the receipts.');
-          setRefreshKey((k) => k + 1);
+        if (lastPayments.current !== null && c.payments > lastPayments.current) {
+          setToast(c.payments - lastPayments.current === 1 ? 'New paid booking.' : 'New paid bookings.');
         }
-        lastPending.current = c.toReview;
+        lastPayments.current = c.payments;
         // A group that just didn't turn up: the quiet minutes to restore it are short, so say so right away.
         if (lastLate.current !== null && c.late > lastLate.current) {
           setToast(c.late - lastLate.current === 1 ? 'A booking just went Late. Restore it if the guest turns up.' : 'Bookings just went Late. Restore them if the guests turn up.');
-          setRefreshKey((k) => k + 1);
         }
         lastLate.current = c.late;
+        // Anything changed anywhere (a new hold, a payment, a guest letting a slot go): reload every open view.
+        if (lastRev.current !== null && c.rev !== lastRev.current) setRefreshKey((k) => k + 1);
+        lastRev.current = c.rev;
       } catch {
         // a dropped connection just skips this round
       }
     };
     poll();
-    const id = window.setInterval(poll, 20000);
+    const id = window.setInterval(poll, 4000); // one tiny query; the views reload only when something changed
     document.addEventListener('visibilitychange', poll);
     return () => {
       alive = false;
@@ -132,11 +134,10 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
     };
   }, [refreshKey]);
 
-  const pending = counts?.toReview ?? 0;
   const late = counts?.late ?? 0;
   const rainDelay = counts?.rainDelay ?? 0;
   const rainExpected = !!weatherReport?.available && weatherReport.atRisk.length > 0;
-  const attention = pending + late;
+  const attention = late;
   useEffect(() => {
     document.title = attention ? `(${attention}) HousePickle Desk` : 'HousePickle Desk';
   }, [attention]);
@@ -190,7 +191,7 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
       <Shell
         tab={tab}
         onTab={goTab}
-        badges={{ pending, late, rainDelay, rainExpected }}
+        badges={{ late, rainDelay, rainExpected }}
         onAdd={() => desk.addBooking()}
         onSignOut={signOut}
       >

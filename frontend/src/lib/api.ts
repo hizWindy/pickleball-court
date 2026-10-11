@@ -85,10 +85,6 @@ export const api = {
   release: (code: string, token: string) =>
     request<Booking>(`/api/bookings/${enc(code)}/release`, { method: 'POST', token }),
 
-  /** The group is here: stops the booking from going Late. Opens 30 min before the start. */
-  checkIn: (code: string, token: string) =>
-    request<Booking>(`/api/bookings/${enc(code)}/arrive`, { method: 'POST', token }),
-
   /** Find a booking to move by its code and the mobile number on it (or this device's token). */
   rescheduleFind: (code: string, customerPhone?: string, token?: string) =>
     request<RescheduleLookup>('/api/reschedule/find', { method: 'POST', json: { code, customerPhone: customerPhone || null }, token }),

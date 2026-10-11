@@ -91,12 +91,6 @@ def release_hold(code: str, token: str | None = TOKEN_HEADER, conn: sqlite3.Conn
     return svc.release_hold(conn, code, token)
 
 
-@router.post("/bookings/{code}/arrive", response_model=BookingOut, response_model_by_alias=True)
-def check_in(code: str, request: Request, token: str | None = TOKEN_HEADER, conn: sqlite3.Connection = Conn) -> BookingOut:
-    limit(request, "arrive", max_hits=30, window_seconds=600)
-    return svc.check_in(conn, code, token)
-
-
 @router.post("/reschedule/find", response_model=RescheduleLookupOut, response_model_by_alias=True)
 def reschedule_find(
     data: RescheduleLookupIn, request: Request, token: str | None = TOKEN_HEADER, conn: sqlite3.Connection = Conn

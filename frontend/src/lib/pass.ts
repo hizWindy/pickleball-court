@@ -1,7 +1,8 @@
 import QRCode from 'qrcode';
 import type { Booking, BookingStatus } from '../types';
 import { COURT_DETAILS } from '../data/mockData';
-import { fmtSchedule, peso } from './time';
+import { downloadBlob } from './saveImage';
+import { fmtReference, fmtSchedule, peso } from './time';
 
 export type PassTone = 'green' | 'amber' | 'red' | 'blue' | 'zinc';
 
@@ -158,6 +159,11 @@ export async function renderPassPng(booking: Booking): Promise<Blob> {
   ctx.fillStyle = INK;
   ctx.font = `800 96px ${heading}`;
   ctx.fillText(booking.code, 120, 660);
+  if (booking.paymentReference) {
+    ctx.fillStyle = MUTED;
+    ctx.font = `600 28px ${body}`;
+    ctx.fillText(`PAYMENT REF  ${fmtReference(booking.paymentReference)}`, 120, 712);
+  }
 
   // Details grid
   const sched = fmtSchedule(booking.startAt, booking.endAt);
@@ -206,31 +212,9 @@ export async function renderPassPng(booking: Booking): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('render failed'))), 'image/png'));
 }
 
-const fileName = (b: Booking) => `HousePickle-Pass-${b.code}.png`;
+export const passFileName = (b: Booking) => `HousePickle-Pass-${b.code}.png`;
 
+/** Download the pass without asking (the automatic save right after payment). Saving on tap uses saveImage. */
 export async function downloadPass(booking: Booking): Promise<void> {
-  const blob = await renderPassPng(booking);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName(booking);
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  downloadBlob(await renderPassPng(booking), passFileName(booking));
 }
-
-/** iPhone/Android share sheet ("Save Image" lands it in Photos). Returns false if unsupported. */
-export async function sharePass(booking: Booking): Promise<boolean> {
-  const blob = await renderPassPng(booking);
-  const file = new File([blob], fileName(booking), { type: 'image/png' });
-  if (!navigator.canShare?.({ files: [file] })) return false;
-  try {
-    await navigator.share({ files: [file], title: `HousePickle pass ${booking.code}` });
-  } catch {
-    // user closed the share sheet
-  }
-  return true;
-}
-
-export const canSharePass = () => typeof navigator !== 'undefined' && typeof navigator.canShare === 'function';

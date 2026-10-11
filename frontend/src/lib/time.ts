@@ -81,3 +81,10 @@ export const isNightHour = (hour: number) => hour >= 18 || hour < 5;
 
 /** "1 hr", "2 hrs" */
 export const hrsLabel = (n: number) => `${n} hr${n === 1 ? '' : 's'}`;
+
+/** A payment reference as the receipt prints it: GCash's 13 digits as "8046 020 281757", anything else in fours. */
+export function fmtReference(ref: string): string {
+  const r = ref.replace(/\s+/g, '');
+  if (/^\d{13}$/.test(r)) return `${r.slice(0, 4)} ${r.slice(4, 7)} ${r.slice(7)}`;
+  return r.replace(/(.{4})(?=.)/g, '$1 ');
+}
