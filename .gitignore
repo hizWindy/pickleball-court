@@ -1,0 +1,10 @@
+# Contract and sensitive legal documents
+CONTRACT*
+*.pdf
+generate_contract_pdf.py
+
+# Environment & OS
+.env
+*.env.local
+.DS_Store
+Thumbs.db

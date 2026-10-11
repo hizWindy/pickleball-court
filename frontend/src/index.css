@@ -51,13 +51,32 @@
     color-scheme: light;
   }
 
+  html {
+    width: 100%;
+    min-height: 100%;
+    overflow-x: clip;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y pinch-zoom;
+  }
+
   body {
+    width: 100%;
+    min-height: 100%;
     font-family: var(--font-sans);
     background-color: var(--paper);
     color: var(--ink);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    overflow-x: hidden;
+    overflow-x: clip;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y pinch-zoom;
+  }
+
+  #root {
+    width: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   h1, h2, h3, h4, h5, h6 {

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'housepickle-v5'; // bumped: new colours, rules and booking screens
+const CACHE_VERSION = 'housepickle-v6'; // bumped: mobile PWA touch scrolling fix
 const STATIC_ASSETS = [
   '/',
   '/index.html',
