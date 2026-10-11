@@ -49,7 +49,7 @@ from app.admin_schemas import (
     WeekdayPoint,
 )
 from app.schemas import LineItemOut
-from app.slots import current_play_date, play_date_of, price_hours, slot_start
+from app.slots import DAY_START_HOUR, current_play_date, play_date_of, price_hours, slot_start
 from app.validation import normalize_ph_mobile
 
 STATUSES = ("held", "pending_verification", "confirmed", "rejected", "expired", "cancelled")
@@ -308,10 +308,10 @@ def list_bookings(
         where.append("(" + " OR ".join(clauses) + ")")
     if date_from:
         where.append("start_at >= ?")
-        args.append(to_iso(slot_start(date_from, 6)))
+        args.append(to_iso(slot_start(date_from, DAY_START_HOUR)))
     if date_to:
         where.append("start_at < ?")
-        args.append(to_iso(slot_start(date_to + timedelta(days=1), 6)))
+        args.append(to_iso(slot_start(date_to + timedelta(days=1), DAY_START_HOUR)))
     if court_id:
         where.append("court_id = ?")
         args.append(court_id)
@@ -382,8 +382,8 @@ def schedule(conn: sqlite3.Connection, play_date: date) -> AdminSchedule:
     now = clock.now()
     with write_transaction(conn):
         core.release_expired(conn, now)
-    first = to_iso(slot_start(play_date, 6))
-    last = to_iso(slot_start(play_date, 5))  # 5 AM next calendar day is the final hour of the play day
+    first = to_iso(slot_start(play_date, DAY_START_HOUR))
+    last = to_iso(slot_start(play_date, (DAY_START_HOUR - 1) % 24))  # final hour of the play day
     # A Late booking has given its hours up (no slot rows) but the host must still see it to restore it.
     rows = conn.execute(
         f"""SELECT * FROM bookings WHERE id IN (
@@ -726,7 +726,7 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
     today = current_play_date(now)
     start_date = today - timedelta(days=days - 1)
     prev_start = start_date - timedelta(days=days)
-    lo, mid, hi = (to_iso(slot_start(d, 6)) for d in (prev_start, start_date, today + timedelta(days=1)))
+    lo, mid, hi = (to_iso(slot_start(d, DAY_START_HOUR)) for d in (prev_start, start_date, today + timedelta(days=1)))
     courts = [dict(c) for c in conn.execute("SELECT * FROM courts WHERE active = 1 ORDER BY sort_order")]
     rate_of = {c["id"]: (c["day_rate"], c["night_rate"]) for c in courts}
 

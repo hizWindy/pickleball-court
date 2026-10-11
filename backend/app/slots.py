@@ -1,7 +1,7 @@
 """Court day model and pricing.
 
-The venue is open 24/7, but players think of 12 AM - 5 AM as the tail of the
-previous night. So a "play day" D runs from 6:00 AM on D to 5:59 AM on D+1:
+The venue is open 24/7, but players think of 12 AM - 4 AM as the tail of the
+previous night. So a "play day" D runs from 5:00 AM on D to 4:59 AM on D+1:
 picking Saturday and 1:00 AM means early Sunday morning.
 
 All slots are one hour long and start on the hour (Manila time).
@@ -14,19 +14,19 @@ from datetime import date, datetime, time, timedelta
 
 from app.clock import MANILA, UTC
 
-DAY_START_HOUR = 6
-NIGHT_START_HOUR = 22  # 10 PM - 6 AM is the night-owl promo rate
+DAY_START_HOUR = 5
+NIGHT_START_HOUR = 18  # 6 PM - 5 AM is the night lights rate (₱250/hr); 5 AM - 6 PM is daytime promo (₱200/hr)
 
-# Display order within a play day: 6 AM ... 11 PM, 12 AM ... 5 AM
+# Display order within a play day: 5 AM ... 11 PM, 12 AM ... 4 AM
 PLAY_DAY_HOURS: list[int] = list(range(DAY_START_HOUR, 24)) + list(range(0, DAY_START_HOUR))
 
 
 def period_for_hour(hour: int) -> str:
-    if 6 <= hour <= 11:
+    if 5 <= hour <= 11:
         return "morning"
-    if 12 <= hour <= 16:
+    if 12 <= hour <= 17:
         return "afternoon"
-    if 17 <= hour <= 21:
+    if 18 <= hour <= 21:
         return "evening"
     return "night_owl"
 
@@ -59,7 +59,7 @@ class LineItem:
 
 
 def price_hours(start: datetime, hours: int, day_rate: int, night_rate: int) -> list[LineItem]:
-    """Each hour is priced by its own start time, so 9 PM - 11 PM = ₱250 + ₱200."""
+    """Each hour is priced by its own start time, so 5 PM - 7 PM = ₱200 + ₱250."""
     items = []
     for i in range(hours):
         s = start + timedelta(hours=i)

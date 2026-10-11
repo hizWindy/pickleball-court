@@ -146,8 +146,8 @@ MIGRATIONS = [
 ]
 
 SEED_COURTS = [
-    ("court-1", "Court 1", 250, 200, 1),
-    ("court-2", "Court 2", 250, 200, 2),
+    ("court-1", "Court 1", 200, 250, 1),
+    ("court-2", "Court 2", 200, 250, 2),
 ]
 
 
@@ -177,7 +177,8 @@ def apply_schema(conn: sqlite3.Connection) -> None:
             (to_iso(clock.now()),),
         )
     conn.executemany(
-        "INSERT OR IGNORE INTO courts (id, name, day_rate, night_rate, sort_order) VALUES (?, ?, ?, ?, ?)",
+        """INSERT INTO courts (id, name, day_rate, night_rate, sort_order) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET day_rate = excluded.day_rate, night_rate = excluded.night_rate""",
         SEED_COURTS,
     )
     # The player's IP is only needed to cap simultaneous holds, so it is dropped once a booking leaves 'held'.

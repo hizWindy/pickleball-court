@@ -222,7 +222,7 @@ def test_walk_in_is_confirmed_priced_and_blocks_the_slot(admin):
     assert res.status_code == 201, res.text
     b = res.json()
     assert b["status"] == "confirmed" and b["source"] == "walk_in" and b["paymentMethod"] == "cash"
-    assert b["total"] == 580 and b["customPrice"] is False  # 2 x 250 + 80
+    assert b["total"] == 480 and b["customPrice"] is False  # 2 x 200 + 80
     assert b["customerPhone"] == "09185550101"
     assert slot_state(admin, "2026-10-10", 15) == "booked" and slot_state(admin, "2026-10-10", 16) == "booked"
     assert walk_in(admin, hour=16).json()["error"]["code"] == "slot_taken"
@@ -241,15 +241,15 @@ def test_block_holds_the_court_but_is_not_a_sale(admin):
 
 
 def test_edit_details_and_keep_a_custom_price_when_rescheduling(admin):
-    code = walk_in(admin, total=200).json()["code"]
-    res = admin.patch(f"/api/admin/bookings/{code}", json={"customerName": "Maria S. Santos", "note": "Pays at the desk", "hour": 17})
+    code = walk_in(admin, total=180).json()["code"]
+    res = admin.patch(f"/api/admin/bookings/{code}", json={"customerName": "Maria S. Santos", "note": "Pays at the desk", "hour": 18})
     b = res.json()
     assert b["customerName"] == "Maria S. Santos" and b["adminNote"] == "Pays at the desk"
-    assert b["hour"] == 17 and b["total"] == 200  # the host's price survives the move
+    assert b["hour"] == 18 and b["total"] == 180  # the host's price survives the move
     assert {"name", "schedule", "note"} <= set(b["events"][0]["detail"].split(", "))
-    assert slot_state(admin, "2026-10-10", 15) == "available" and slot_state(admin, "2026-10-10", 17) == "booked"
+    assert slot_state(admin, "2026-10-10", 15) == "available" and slot_state(admin, "2026-10-10", 18) == "booked"
 
-    b = admin.patch(f"/api/admin/bookings/{code}", json={"total": None}).json()  # back to the rate card
+    b = admin.patch(f"/api/admin/bookings/{code}", json={"total": None}).json()  # back to the rate card (6 PM = ₱250)
     assert b["total"] == 250 and b["customPrice"] is False
 
 
@@ -266,7 +266,7 @@ def test_reschedule_into_a_taken_hour_changes_nothing(admin):
 def test_extending_a_booking_claims_the_extra_hours(admin):
     code = walk_in(admin, hour=15).json()["code"]
     b = admin.patch(f"/api/admin/bookings/{code}", json={"hours": 3}).json()
-    assert b["hours"] == 3 and b["total"] == 750
+    assert b["hours"] == 3 and b["total"] == 600  # 3 x 200
     assert all(slot_state(admin, "2026-10-10", h) == "booked" for h in (15, 16, 17))
 
 
@@ -354,35 +354,35 @@ def test_schedule_includes_after_midnight_hours_of_the_play_day(admin):
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
 def test_overview_numbers(admin, booking_payload, fake_now):
-    walk_in(admin, date="2026-10-08", hour=9, hours=2, customerName="Maria Santos")          # 500
-    walk_in(admin, date="2026-10-09", hour=22, customerName="Maria Santos", courtId="court-2")  # 200 (night rate)
-    walk_in(admin, date="2026-10-10", hour=18, customerName="Pedro Penduko", customerPhone="0999 888 7777", paddles=True)  # 330
+    walk_in(admin, date="2026-10-08", hour=9, hours=2, customerName="Maria Santos")          # 400 (2 x 200)
+    walk_in(admin, date="2026-10-09", hour=22, customerName="Maria Santos", courtId="court-2")  # 250 (night rate)
+    walk_in(admin, date="2026-10-10", hour=18, customerName="Pedro Penduko", customerPhone="0999 888 7777", paddles=True)  # 330 (250 + 80)
     code, headers = public_booking(admin, booking_payload)       # 7 PM online: 250, confirmed, not yet looked at
     pay_by_receipt(admin, code, headers)
 
     o = admin.get("/api/admin/overview", params={"days": 7}).json()
     k = o["kpis"]
-    assert k["revenue"] == 1280 and k["bookings"] == 4 and k["hours"] == 5
-    assert k["avgBooking"] == 320 and k["paddleRevenue"] == 80 and k["customers"] == 3 and k["repeatCustomers"] == 1
+    assert k["revenue"] == 1230 and k["bookings"] == 4 and k["hours"] == 5
+    assert k["avgBooking"] == 308 and k["paddleRevenue"] == 80 and k["customers"] == 3 and k["repeatCustomers"] == 1
     assert k["revenuePrev"] == 0
     assert o["pending"] == {"count": 1, "amount": 250, "flagged": 1}
     assert o["funnel"]["confirmed"] == 1
     assert o["dateFrom"] == "2026-10-04" and o["dateTo"] == "2026-10-10" and len(o["daily"]) == 7
-    assert next(d for d in o["daily"] if d["date"] == "2026-10-08") == {"date": "2026-10-08", "revenue": 500, "bookings": 1, "hours": 2}
+    assert next(d for d in o["daily"] if d["date"] == "2026-10-08") == {"date": "2026-10-08", "revenue": 400, "bookings": 1, "hours": 2}
     assert o["byHour"][9] == 1 and o["byHour"][10] == 1 and o["byHour"][22] == 1 and o["byHour"][18] == 1
-    assert {c["courtId"]: c["revenue"] for c in o["byCourt"]} == {"court-1": 1080, "court-2": 200}
+    assert {c["courtId"]: c["revenue"] for c in o["byCourt"]} == {"court-1": 980, "court-2": 250}
     assert o["byMethod"][0]["method"] == "cash"
-    assert {r["rateType"]: r["hours"] for r in o["byRate"]} == {"standard": 4, "night_owl": 1}
-    assert o["topCustomers"][0]["name"] == "Maria Santos" and o["topCustomers"][0]["spent"] == 700
+    assert {r["rateType"]: r["hours"] for r in o["byRate"]} == {"standard": 2, "night_owl": 3}
+    assert o["topCustomers"][0]["name"] == "Maria Santos" and o["topCustomers"][0]["spent"] == 650
     assert o["kpis"]["utilisationPct"] > 0
     assert [b["customerName"] for b in o["upNext"]][:1] == ["Pedro Penduko"]  # 6 PM is the next session after 10 AM
 
 
 def test_overview_compares_with_the_previous_period(admin):
-    walk_in(admin, date="2026-10-08", hour=9)   # this week
+    walk_in(admin, date="2026-10-08", hour=9)   # this week (9 AM = 200)
     walk_in(admin, date="2026-10-02", hour=9)   # the week before (play dates Sep 27 - Oct 3)
     k = admin.get("/api/admin/overview", params={"days": 7}).json()["kpis"]
-    assert k["revenue"] == 250 and k["revenuePrev"] == 250 and k["bookingsPrev"] == 1
+    assert k["revenue"] == 200 and k["revenuePrev"] == 200 and k["bookingsPrev"] == 1
 
 
 def test_overview_when_nothing_has_happened(admin):

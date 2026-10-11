@@ -8,7 +8,7 @@ export interface OpenPick {
   freeCourts: CourtConfig[];
 }
 
-export const isNightHour = (hour: number) => hour >= 22 || hour < 6;
+export const isNightHour = (hour: number) => hour >= 18 || hour < 5;
 
 export function toPicks(date: string, slots: SlotAvailability[] | undefined, courts: CourtConfig[]): OpenPick[] {
   return (slots ?? [])
@@ -25,7 +25,7 @@ export function dayLabel(date: string, today: string, hour: number): string {
 /** Whole minutes until the slot starts, on the server's clock. */
 export const minutesUntil = (startAt: string) => Math.round((Date.parse(startAt) - serverNowMs()) / 60000);
 
-/** Free hours left in today's prime time (5-10 PM), out of the hours that haven't passed yet. */
+/** Free hours left in today's prime time (6-10 PM), out of the hours that haven't passed yet. */
 export function primeTime(slots: SlotAvailability[] | undefined, courts: CourtConfig[]) {
   const states = (slots ?? []).filter((s) => s.period === 'evening').flatMap((s) => courts.map((c) => s.courts[c.id]));
   return { free: states.filter((s) => s === 'available').length, total: states.filter((s) => s !== 'past').length };

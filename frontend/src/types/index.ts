@@ -8,8 +8,8 @@ export interface Court {
   type: CourtType;
   surface: string;
   image: string;
-  dayRate: number; // 6 AM - 10 PM
-  nightRate: number; // 10 PM - 6 AM
+  dayRate: number; // 5 AM - 6 PM (₱200/hr)
+  nightRate: number; // 6 PM - 5 AM (₱250/hr)
   badge: string;
   features: string[];
   dimensions: string;

@@ -57,7 +57,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
   const selectedState = selectedSlot ? slotState(selectedSlot.hour) : null;
   const activeSlot = selectedState && selectedState !== 'available' ? null : selectedSlot;
 
-  const isNight = activeSlot?.period === 'night_owl';
+  const isNight = activeSlot ? (activeSlot.period === 'night_owl' || activeSlot.period === 'evening' || activeSlot.rateType === 'night_owl') : false;
   const hourlyRate = isNight ? selectedCourt.nightRate : selectedCourt.dayRate;
   const seed = (): BookingDraftSeed => ({ date: selectedDate, hour: activeSlot?.hour, courtId: selectedCourt.id });
 
@@ -195,7 +195,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
               <Clock className="w-3.5 h-3.5 shrink-0" /> Court 1 & 2 (24/7)
             </span>
             <span className="px-2.5 sm:px-3 py-1 rounded-full bg-white border border-emerald-200 shadow-xs flex items-center gap-1.5 text-zinc-800">
-              <Zap className="w-3.5 h-3.5 text-[#84CC16] shrink-0" /> Standard ₱250 • Promo ₱200/hr
+              <Zap className="w-3.5 h-3.5 text-[#84CC16] shrink-0" /> Daytime ₱200 • Night Lights ₱250/hr
             </span>
             <span className="px-2.5 sm:px-3 py-1 rounded-full bg-white border border-emerald-200 shadow-xs flex items-center gap-1.5 text-[#15803D]">
               <ShieldCheck className="w-3.5 h-3.5 shrink-0" /> Quick GCash Pay
@@ -297,10 +297,10 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 text-xs bg-zinc-100/90 p-1 rounded-xl border border-zinc-200/80 relative w-full sm:w-auto">
                     {(
                       [
-                        { key: 'morning', label: 'Morning (6A-12P)' },
-                        { key: 'afternoon', label: 'Afternoon (12P-5P)' },
-                        { key: 'evening', label: 'Evening (5P-10P)' },
-                        { key: 'night_owl', label: 'Night ₱200 (10P-6A)' }
+                        { key: 'morning', label: 'Morning (5A-12P)' },
+                        { key: 'afternoon', label: 'Afternoon (12P-6P)' },
+                        { key: 'evening', label: 'Evening (6P-10P)' },
+                        { key: 'night_owl', label: 'Night (10P-5A)' }
                       ] as const
                     ).map((tab) => {
                       const isActive = timeFilter === tab.key;
@@ -355,13 +355,13 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                         <div className="text-[10px] mt-0.5 font-sport uppercase tracking-wider">
                           {isBooked ? (
                             state === 'held' ? 'On hold' : state === 'past' ? 'Passed' : 'Reserved'
-                          ) : slot.period === 'night_owl' ? (
-                            <span className={isSelected ? 'text-[#D2EE5E]' : 'text-[#15803D] font-bold'}>
-                              ₱200 Promo
+                          ) : slot.rateType === 'night_owl' || slot.period === 'night_owl' || slot.period === 'evening' ? (
+                            <span className={isSelected ? 'text-[#D2EE5E]' : 'text-zinc-600 font-bold'}>
+                              ₱250 Night
                             </span>
                           ) : (
-                            <span className={isSelected ? 'text-white' : 'text-zinc-500'}>
-                              ₱250 Standard
+                            <span className={isSelected ? 'text-white' : 'text-[#15803D] font-bold'}>
+                              ₱200 Day
                             </span>
                           )}
                         </div>
@@ -422,9 +422,13 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
                       <div className="font-heading font-black text-zinc-950 text-base flex items-baseline sm:justify-end gap-1">
                         <span>₱{hourlyRate}</span>
                         <span className="text-xs text-zinc-500 font-normal">/hour</span>
-                        {isNight && (
+                        {isNight ? (
+                          <span className="text-[10px] px-2 py-0.2 rounded-full bg-zinc-900 text-[#D2EE5E] font-sport font-bold uppercase">
+                            ₱250 Night Lights
+                          </span>
+                        ) : (
                           <span className="text-[10px] px-2 py-0.2 rounded-full bg-emerald-100 text-[#15803D] font-sport font-bold uppercase">
-                            ₱200 Promo Rate
+                            ₱200 Daytime Promo
                           </span>
                         )}
                       </div>

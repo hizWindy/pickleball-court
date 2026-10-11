@@ -658,7 +658,7 @@ function TimeStep({
           </div>
           {active === 'night_owl' && (
             <p className="text-xs text-zinc-500">
-              12 AM – 5 AM are the early hours of {fmtDate(addDays(date, 1))}. Night Owl rate applies 10 PM – 6 AM.
+              12 AM – 4 AM are the early hours of {fmtDate(addDays(date, 1))}. Night lights rate (₱250/hr) applies 6 PM – 5 AM.
             </p>
           )}
           <p className="text-xs leading-relaxed text-zinc-500">

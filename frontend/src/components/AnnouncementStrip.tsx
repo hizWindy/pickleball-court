@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ChevronRight, Clock, Flame, Moon, Sparkles, X, Zap, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Clock, Flame, Sparkles, Sun, X, Zap, type LucideIcon } from 'lucide-react';
 import { useAvailability, useConfig } from '../hooks/useBookingData';
 import { serverNowMs } from '../lib/api';
 import { dayLabel, minutesUntil, primeTime, toPicks, type OpenPick } from '../lib/openSlots';
@@ -95,16 +95,16 @@ export const AnnouncementStrip: React.FC<AnnouncementStripProps> = ({ onBook }) 
       });
     }
 
-    // 4. Night Owl promo, when a night hour is actually bookable.
-    const night = picks.find((p) => p.slot.rateType === 'night_owl');
-    const save = courts[0].dayRate - courts[0].nightRate;
-    if (night && save > 0) {
+    // 4. Daytime promo, when a daytime hour is actually bookable.
+    const day = picks.find((p) => p.slot.rateType === 'standard');
+    const save = courts[0].nightRate - courts[0].dayRate;
+    if (day && save > 0) {
       out.push({
-        id: 'night-owl',
-        Icon: Moon,
-        tag: 'Night Owl',
-        text: `${peso(courts[0].nightRate)}/hr from 10 PM to 6 AM · save ${peso(save)} every hour`,
-        seed: seedOf(night),
+        id: 'day-promo',
+        Icon: Sun,
+        tag: 'Day Promo',
+        text: `${peso(courts[0].dayRate)}/hr from 5 AM to 6 PM · save ${peso(save)} every hour`,
+        seed: seedOf(day),
       });
     }
 

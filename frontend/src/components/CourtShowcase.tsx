@@ -188,24 +188,24 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                       <div className="p-3 rounded-2xl bg-zinc-50 border border-zinc-200/80 flex items-center justify-between">
                         <div>
-                          <div className="flex items-center gap-1 text-[11px] font-sport font-bold uppercase text-zinc-500">
-                            <Sun className="w-3.5 h-3.5 text-amber-500" />
-                            Standard (6A-10P)
+                          <div className="flex items-center gap-1 text-[11px] font-sport font-bold uppercase text-[#15803D]">
+                            <Sun className="w-3.5 h-3.5 text-[#15803D]" />
+                            Daytime Promo (5A-6P)
                           </div>
-                          <div className="text-lg font-heading font-black text-zinc-900 mt-0.5">
-                            ₱{court.dayRate}<span className="text-xs font-normal text-zinc-500">/hr</span>
+                          <div className="text-lg font-heading font-black text-[#15803D] mt-0.5">
+                            ₱{court.dayRate}<span className="text-xs font-normal text-emerald-700">/hr</span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="p-3 rounded-2xl bg-[#F0FDF4] border border-emerald-200 flex items-center justify-between">
+                      <div className="p-3 rounded-2xl bg-zinc-50 border border-zinc-200 flex items-center justify-between">
                         <div>
-                          <div className="flex items-center gap-1 text-[11px] font-sport font-bold uppercase text-[#15803D]">
-                            <Moon className="w-3.5 h-3.5 text-[#15803D]" />
-                            Promo (10P-6A)
+                          <div className="flex items-center gap-1 text-[11px] font-sport font-bold uppercase text-zinc-600">
+                            <Moon className="w-3.5 h-3.5 text-zinc-700" />
+                            Night Lights (6P-5A)
                           </div>
-                          <div className="text-lg font-heading font-black text-[#15803D] mt-0.5">
-                            ₱{court.nightRate}<span className="text-xs font-normal text-emerald-700">/hr</span>
+                          <div className="text-lg font-heading font-black text-zinc-900 mt-0.5">
+                            ₱{court.nightRate}<span className="text-xs font-normal text-zinc-500">/hr</span>
                           </div>
                         </div>
                       </div>

@@ -106,15 +106,15 @@ def test_exactly_48_hours_ahead_is_still_allowed(client, booking_payload, fake_n
 
 
 def test_a_slot_that_costs_more_is_refused_and_a_cheaper_one_keeps_what_was_paid(admin, booking_payload):
-    night, _ = paid(admin, booking_payload, date="2026-10-14", hour=23)  # night rate ₱200
-    res = move(admin, night, "2026-10-15", 19)  # 7 PM costs ₱250
+    day, _ = paid(admin, booking_payload, date="2026-10-14", hour=10)  # daytime promo rate ₱200
+    res = move(admin, day, "2026-10-15", 19)  # 7 PM costs ₱250 (night lights rate)
     assert res.status_code == 400 and res.json()["error"]["code"] == "costs_more"
     assert "₱50" in res.json()["error"]["message"]
 
-    day, _ = paid(admin, booking_payload, date="2026-10-14", hour=19, customerPhone="09181112222")
-    ok = move(admin, day, "2026-10-15", 23, phone="0918 111 2222")
+    night, _ = paid(admin, booking_payload, date="2026-10-14", hour=19, customerPhone="09181112222")
+    ok = move(admin, night, "2026-10-15", 10, phone="0918 111 2222")  # move from ₱250 to ₱200
     assert ok.status_code == 200 and ok.json()["total"] == 250  # no refund of the difference
-    d = admin.get(f"/api/admin/bookings/{day}").json()
+    d = admin.get(f"/api/admin/bookings/{night}").json()
     assert d["total"] == 250 and "kept ₱250 paid" in d["events"][0]["detail"]
 
 

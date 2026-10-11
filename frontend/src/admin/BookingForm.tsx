@@ -16,8 +16,8 @@ export type FormMode = { type: 'create'; seed?: FormSeed } | { type: 'edit'; cod
 const BLOCK_REASONS = ['Maintenance', 'Tournament', 'Private event', 'Lessons'];
 
 const pad = (n: number) => String(n).padStart(2, '0');
-/** The absolute start of an hour on a play day (12-5 AM belong to the previous day's date). */
-const slotMs = (date: string, hour: number) => Date.parse(`${hour < 6 ? addDays(date, 1) : date}T${pad(hour)}:00:00+08:00`);
+/** The absolute start of an hour on a play day (12-4 AM belong to the previous day's date). */
+const slotMs = (date: string, hour: number) => Date.parse(`${hour < 5 ? addDays(date, 1) : date}T${pad(hour)}:00:00+08:00`);
 
 function priceOf(config: AppConfig, courtId: string, hour: number, hours: number, paddles: boolean) {
   const court = config.courts.find((c) => c.id === courtId) ?? config.courts[0];

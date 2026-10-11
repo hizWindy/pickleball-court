@@ -47,13 +47,13 @@ export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
   });
   if (picks.length < MAX_CARDS) picks = [...picks, ...all.filter((p) => !picks.includes(p))];
   picks = picks.slice(0, MAX_CARDS).sort((a, b) => (a.slot.startAt < b.slot.startAt ? -1 : 1));
-  // Make sure the cheaper Night Owl rate is on show if it isn't already.
-  const nightPick = all.find((p) => p.slot.rateType === 'night_owl');
-  if (nightPick && !picks.some((p) => p.slot.rateType === 'night_owl')) {
-    picks = [...picks.slice(0, MAX_CARDS - 1), nightPick];
+  // Make sure the cheaper Daytime Promo rate is on show if it isn't already.
+  const promoPick = all.find((p) => p.slot.rateType === 'standard');
+  if (promoPick && !picks.some((p) => p.slot.rateType === 'standard')) {
+    picks = [...picks.slice(0, MAX_CARDS - 1), promoPick];
   }
 
-  // Prime-time scarcity: real numbers for today's 5-10 PM, or tomorrow's once tonight's have passed.
+  // Prime-time scarcity: real numbers for today's 6-10 PM, or tomorrow's once tonight's have passed.
   const primeToday = primeTime(todayAvail?.slots, courts);
   const prime = primeToday.total > 0 ? { ...primeToday, when: 'tonight' } : { ...primeTime(tomorrowAvail?.slots, courts), when: 'tomorrow' };
 
@@ -83,7 +83,7 @@ export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
                 prime.free <= 3 ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-white border-emerald-200 text-[#15803D]'
               }`}
             >
-              Prime time {prime.when} (5–10 PM): {prime.free === 0 ? 'fully booked' : `${prime.free} of ${prime.total} hours left`}
+              Prime time {prime.when} (6–10 PM): {prime.free === 0 ? 'fully booked' : `${prime.free} of ${prime.total} hours left`}
             </span>
           )}
         </motion.div>
@@ -124,9 +124,14 @@ function SlotCard({ pick, today, courts, onBook }: { pick: OpenPick; today: stri
         night ? 'border-zinc-800 bg-zinc-950 text-white hover:border-[#D2EE5E]' : 'border-emerald-200 bg-white hover:border-[#15803D]'
       }`}
     >
+      {!night && (
+        <span className="absolute right-3 top-3 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-sport font-extrabold uppercase tracking-wider text-[#15803D]">
+          ₱200 Promo
+        </span>
+      )}
       {night && (
-        <span className="absolute right-3 top-3 rounded-full bg-[#D2EE5E] px-2 py-0.5 text-[10px] font-sport font-extrabold uppercase tracking-wider text-zinc-950">
-          Promo
+        <span className="absolute right-3 top-3 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-sport font-extrabold uppercase tracking-wider text-[#D2EE5E]">
+          Night Lights
         </span>
       )}
       <div>

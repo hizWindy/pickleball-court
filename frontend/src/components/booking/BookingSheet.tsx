@@ -527,9 +527,9 @@ function TimeStep({
                     )}
                   </span>
 
-                  {slot.rateType === 'night_owl' && isAvail && (
+                  {slot.rateType === 'standard' && isAvail && (
                     <span className={cx('absolute right-1.5 top-1.5 rounded-full px-1.5 text-[9px] font-bold', isSel ? 'bg-[#D2EE5E] text-zinc-900' : 'bg-emerald-100 text-emerald-800')}>
-                      PROMO
+                      ₱200
                     </span>
                   )}
                   {isBooked && (
@@ -543,7 +543,7 @@ function TimeStep({
           </div>
           {active === 'night_owl' && (
             <p className="text-xs text-zinc-500">
-              12 AM – 5 AM are the early hours of {fmtDate(addDays(date, 1))}. Night Owl rate applies 10 PM – 6 AM.
+              12 AM – 4 AM are the early hours of {fmtDate(addDays(date, 1))}. Night lights rate (₱250/hr) applies 6 PM – 5 AM.
             </p>
           )}
           <Legend holdMinutes={holdMinutes} />

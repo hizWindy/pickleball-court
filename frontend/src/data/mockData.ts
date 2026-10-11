@@ -9,8 +9,8 @@ export const COURTS: Court[] = [
     type: 'standard',
     surface: 'Dual-Tone Pro Blue Acrylic Non-Slip Surface',
     image: '/images/housepickle-arena-court-clean.webp',
-    dayRate: 250,
-    nightRate: 200,
+    dayRate: 200,
+    nightRate: 250,
     badge: 'Court 1',
     features: [
       'Standard full-size court (20 x 44 ft)',
@@ -28,8 +28,8 @@ export const COURTS: Court[] = [
     type: 'standard',
     surface: 'Dual-Tone Pro Blue Acrylic Non-Slip Surface',
     image: '/images/housepickle-arena-court-clean.webp',
-    dayRate: 250,
-    nightRate: 200,
+    dayRate: 200,
+    nightRate: 250,
     badge: 'Court 2',
     features: [
       'Standard full-size court (20 x 44 ft)',
@@ -69,12 +69,13 @@ export const GENERATE_TIME_SLOTS = (): TimeSlot[] => {
       time,
       hour,
       period,
-      isPeak: hour >= 17 && hour <= 21,
-      rateType: period === 'night_owl' ? 'night_owl' : 'standard'
+      isPeak: hour >= 18 || hour < 5,
+      rateType: period === 'night_owl' || period === 'evening' ? 'night_owl' : 'standard'
     });
   };
 
-  // Morning: 06:00 to 11:00
+  // Morning: 05:00 to 11:00 (5 AM – 12 PM)
+  addSlot('slot-05', '05:00 AM', 5, 'morning');
   addSlot('slot-06', '06:00 AM', 6, 'morning');
   addSlot('slot-07', '07:00 AM', 7, 'morning');
   addSlot('slot-08', '08:00 AM', 8, 'morning');
@@ -82,21 +83,21 @@ export const GENERATE_TIME_SLOTS = (): TimeSlot[] => {
   addSlot('slot-10', '10:00 AM', 10, 'morning');
   addSlot('slot-11', '11:00 AM', 11, 'morning');
 
-  // Afternoon: 12:00 to 16:00
+  // Afternoon: 12:00 to 17:00 (12 PM – 6 PM)
   addSlot('slot-12', '12:00 PM', 12, 'afternoon');
   addSlot('slot-13', '01:00 PM', 13, 'afternoon');
   addSlot('slot-14', '02:00 PM', 14, 'afternoon');
   addSlot('slot-15', '03:00 PM', 15, 'afternoon');
   addSlot('slot-16', '04:00 PM', 16, 'afternoon');
+  addSlot('slot-17', '05:00 PM', 17, 'afternoon');
 
-  // Evening: 17:00 to 21:00
-  addSlot('slot-17', '05:00 PM', 17, 'evening');
+  // Evening: 18:00 to 21:00 (6 PM – 10 PM)
   addSlot('slot-18', '06:00 PM', 18, 'evening');
   addSlot('slot-19', '07:00 PM', 19, 'evening');
   addSlot('slot-20', '08:00 PM', 20, 'evening');
   addSlot('slot-21', '09:00 PM', 21, 'evening');
 
-  // Night Owl: 22:00 to 05:00
+  // Night Owl: 22:00 to 04:00 (10 PM – 5 AM)
   addSlot('slot-22', '10:00 PM', 22, 'night_owl');
   addSlot('slot-23', '11:00 PM', 23, 'night_owl');
   addSlot('slot-00', '12:00 AM', 0, 'night_owl');
@@ -104,7 +105,6 @@ export const GENERATE_TIME_SLOTS = (): TimeSlot[] => {
   addSlot('slot-02', '02:00 AM', 2, 'night_owl');
   addSlot('slot-03', '03:00 AM', 3, 'night_owl');
   addSlot('slot-04', '04:00 AM', 4, 'night_owl');
-  addSlot('slot-05', '05:00 AM', 5, 'night_owl');
 
   return slots;
 };

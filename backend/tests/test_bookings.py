@@ -29,10 +29,10 @@ def test_create_holds_slot_for_10_minutes(client, booking_payload):
 
 
 def test_multi_hour_booking_blocks_every_hour_and_prices_each_hour(client, booking_payload):
-    b = create(client, booking_payload, hour=21, hours=3).json()["booking"]  # 9 PM - 12 AM
-    assert [i["rate"] for i in b["lineItems"]] == [250, 200, 200]
-    assert b["courtCost"] == 650 and b["total"] == 650
-    for hour in (21, 22, 23):
+    b = create(client, booking_payload, hour=17, hours=3).json()["booking"]  # 5 PM - 8 PM: 5 PM (200), 6 PM & 7 PM (250, 250)
+    assert [i["rate"] for i in b["lineItems"]] == [200, 250, 250]
+    assert b["courtCost"] == 700 and b["total"] == 700
+    for hour in (17, 18, 19):
         assert slot_state(client, "2026-10-10", hour) == "held"
 
 

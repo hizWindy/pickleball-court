@@ -36,8 +36,8 @@ Tests: `pytest` (they use a throwaway database and a fake clock).
 | **Rescheduling by the guest**: once, at least 48 h before the start, same length, new date within 30 days of the original, never to a slot that costs more than was paid (cheaper is allowed, no refund). Proof of ownership = booking code + mobile number (or the device's token). | `reschedule.py` |
 | **Rain delay** (host): gives the hours of paid bookings in a window back and sets `weather_hold_at`. The guest then picks a new time themselves (any time, free, doesn't use their one reschedule). The host can undo it with Restore. | `admin_service.rain_delay` |
 | One active hold per mobile number, two per IP. Rate limits on create and proof. The player's IP is stored only while the booking is `held`, then erased. | `create_booking`, `ratelimit.py` |
-| Each hour is priced by its own rate (₱250 standard, ₱200 from 10 PM to 6 AM), plus ₱80 for paddles. Totals are computed on the server only. | `slots.price_hours` |
-| 12 AM–5 AM belong to the previous night's "play day". All times are Manila time. | `slots.py` |
+| Each hour is priced by its own rate (₱200 daytime from 5 AM to 6 PM, ₱250 night lights from 6 PM to 5 AM), plus ₱80 for paddles. Totals are computed on the server only. | `slots.price_hours` |
+| 12 AM–4 AM belong to the previous night's "play day". All times are Manila time. | `slots.py` |
 | Consent is required, versioned and timestamped per booking. Receipt images are deleted 7 days after the host decides (14 days at most if nobody ever reviews them); the hash is kept. | `CONSENT_VERSION`, `purge_old_receipts` |
 
 Status flow: `held → confirmed` (on full payment) | `pending_verification` (receipt short or amount unreadable: the host decides), then possibly `rejected` by the host; plus `expired` (hold ran out) and `cancelled` (released unpaid hold, or voided by the host).

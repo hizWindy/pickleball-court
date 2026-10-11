@@ -44,8 +44,8 @@ function buildFaq(config: AppConfig | null): AccordionItem[] {
     {
       id: 'night-owl',
       category: 'Hours & Rates',
-      question: 'What are the night hours and rates?',
-      answer: 'We are open 24 hours non-stop, 7 days a week! From 10:00 PM to 6:00 AM, our late-night promo gives you a ₱200/hr rate (standard daytime rate is ₱250/hr). The super bright night lights stay on all night so you can play anytime with zero blinding glare.'
+      question: 'What are the hours and rates?',
+      answer: 'We are open 24 hours non-stop, 7 days a week! Daytime rate is ₱200/hr from 5:00 AM to 6:00 PM, and night lights rate is ₱250/hr from 6:00 PM to 5:00 AM. Our super bright night floodlights stay on all night so you can play anytime with zero blinding glare.'
     },
     {
       id: 'kitchen-rule',

@@ -120,7 +120,7 @@ export const FramerBentoFeatures: React.FC = () => {
             {/* Card Footer with Live Clock */}
             <div className="p-6 text-white pt-0 relative z-10">
               <p className="text-xs text-zinc-200 leading-relaxed max-w-lg mb-4 font-medium">
-                Play anytime! Late night promo rate is only <strong>₱200/hr from 10:00 PM to 6:00 AM</strong> (₱250 standard daytime), with super bright lights so you can see the ball clearly without hurting your eyes.
+                Play anytime! Daytime promo rate is only <strong>₱200/hr from 5:00 AM to 6:00 PM</strong> (₱250 night lights from 6:00 PM to 5:00 AM), with super bright lights so you can see the ball clearly without hurting your eyes.
               </p>
               <div className="pt-3 border-t border-white/20 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2">

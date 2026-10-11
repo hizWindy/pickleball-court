@@ -25,12 +25,12 @@ export const PROVIDER_LABEL: Record<string, string> = { gcash: 'GCash', gotyme: 
 
 export const METHOD_LABEL: Record<AdminPayment, string> = { gcash: 'GCash', gotyme: 'GoTyme', cash: 'Cash', none: '—' };
 
-/** Play-day order: the club's day runs 6 AM to 5:59 AM. */
-export const PLAY_HOURS = [...Array.from({ length: 18 }, (_, i) => i + 6), ...Array.from({ length: 6 }, (_, i) => i)];
+/** Play-day order: the club's day runs 5 AM to 4:59 AM. */
+export const PLAY_HOURS = [...Array.from({ length: 19 }, (_, i) => i + 5), ...Array.from({ length: 5 }, (_, i) => i)];
 
 export const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-export const isNight = (hour: number) => hour >= 22 || hour < 6;
+export const isNight = (hour: number) => hour >= 18 || hour < 5;
 
 const manilaHourFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', hourCycle: 'h23' });
 /** Clock hour (0-23, Manila) of an instant. */

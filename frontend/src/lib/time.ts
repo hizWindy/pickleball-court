@@ -40,11 +40,11 @@ export function daysBetween(a: string, b: string): number {
 /** Manila calendar date of an instant. */
 export const manilaYmd = (iso: string | number | Date) => ymdFmt.format(new Date(iso));
 
-/** Today's play day: 12 AM - 5:59 AM still belongs to the previous night. */
+/** Today's play day: 12 AM - 4:59 AM still belongs to the previous night. */
 export function currentPlayDate(nowMs: number): string {
   const ymd = manilaYmd(nowMs);
   const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', hourCycle: 'h23' }).format(nowMs));
-  return hour < 6 ? addDays(ymd, -1) : ymd;
+  return hour < 5 ? addDays(ymd, -1) : ymd;
 }
 
 /** "Sat, Oct 10 · 7:00 – 9:00 PM", noting when the session runs past midnight. */
@@ -59,7 +59,7 @@ export function fmtSchedule(startAt: string, endAt: string): { day: string; time
 
 /** For after-midnight starts on a play day: "Early Sun, Oct 11". */
 export function afterMidnightNote(playDate: string, hour: number): string | undefined {
-  if (hour >= 6) return undefined;
+  if (hour >= 5) return undefined;
   return `Early ${fmtDate(addDays(playDate, 1))}`;
 }
 
@@ -76,8 +76,8 @@ export const pesoExact = (n: number) => `₱${n.toLocaleString('en-PH', { minimu
 /** "₱500" for whole pesos, "₱500.50" when there are centavos (receipt amounts can have them). */
 export const pesoAuto = (n: number) => (Number.isInteger(n) ? peso(n) : pesoExact(n));
 
-/** 10 PM - 5:59 AM is the night-owl rate. */
-export const isNightHour = (hour: number) => hour >= 22 || hour < 6;
+/** 6 PM - 4:59 AM is the night lights rate. */
+export const isNightHour = (hour: number) => hour >= 18 || hour < 5;
 
 /** "1 hr", "2 hrs" */
 export const hrsLabel = (n: number) => `${n} hr${n === 1 ? '' : 's'}`;
