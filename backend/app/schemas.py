@@ -42,7 +42,8 @@ class ConfigOut(ApiModel):
     payment_accounts: list[PaymentAccountOut]
     paddle_fee: int
     hold_minutes: int
-    max_hours: int
+    max_hours: int  # the stepper's limit
+    quick_hours: int  # how many quick-pick chips (1..n hours) to show
     booking_window_days: int
     late_after_minutes: int
     reschedule_min_hours: int
@@ -72,7 +73,7 @@ class CreateBookingIn(ApiModel):
     court_id: str
     date: date
     hour: int = Field(ge=0, le=23)
-    hours: int = Field(ge=1, le=12)
+    hours: int = Field(ge=1, le=24)
     paddles: bool = False
     customer_name: str
     customer_phone: str
@@ -137,15 +138,16 @@ class BookingOut(ApiModel):
     closed_at: str | None
     server_now: str
     # What the pass needs to know once the booking is paid
-    arrived: bool  # the group has checked in
+    arrived: bool  # the host marked the group as here
     late: bool  # not there in time: the hours were released (the host may still sort it out)
     weather_hold: bool  # the host called a rain delay: pick a new time
-    can_check_in: bool
     reschedule: RescheduleState
     reschedule_count: int
     # Why a payment is waiting for the host instead of confirming, and what the receipt showed
     pending_reason: PendingReason | None = None
     amount_paid: float | None = None
+    # The GCash / GoTyme reference of the payment behind this booking (read off the receipt, or typed in)
+    payment_reference: str | None = None
 
 
 class BookingWithTokenOut(ApiModel):

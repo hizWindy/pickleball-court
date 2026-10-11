@@ -78,8 +78,6 @@ export const adminApi = {
   create: (body: CreateBody) => call<AdminBookingDetail>('/api/admin/bookings', { method: 'POST', json: body }),
   update: (code: string, body: UpdateBody) => call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}`, { method: 'PATCH', json: body }),
   confirm: (code: string) => call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/confirm`, { method: 'POST' }),
-  /** "Looks good": the host checked an automatically confirmed payment. */
-  check: (code: string) => call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/check`, { method: 'POST' }),
   /** "They're here": the group is on site, so the booking never goes Late. */
   arrived: (code: string) => call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/arrived`, { method: 'POST' }),
   /** Put a Late booking (inside the quiet window) or a rain-delayed one back on court. */

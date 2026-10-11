@@ -59,11 +59,10 @@ def test_other_court_same_time_is_fine(client, booking_payload):
     assert create(client, booking_payload, courtId="court-2", customerPhone="09181112222").status_code == 201
 
 
-def test_one_active_hold_per_phone(client, booking_payload):
+def test_one_mobile_number_can_hold_several_times(client, booking_payload):
+    # Families and groups share a number, so the same number may book other hours while one hold is unpaid.
     assert create(client, booking_payload).status_code == 201
-    res = create(client, booking_payload, hour=12)
-    assert res.status_code == 429
-    assert res.json()["error"]["code"] == "hold_exists"
+    assert create(client, booking_payload, hour=12).status_code == 201
 
 
 def test_past_slot_and_far_future_rejected(client, booking_payload):
@@ -189,13 +188,22 @@ def test_proof_needs_valid_token(client, booking_payload):
 
 
 # ── Releasing a hold (there is no cancelling a paid booking) ─────────────────
-def test_releasing_an_unpaid_hold_frees_the_slot(client, booking_payload):
+def test_releasing_an_unpaid_hold_frees_the_slot_and_leaves_no_record(client, booking_payload):
     body = create(client, booking_payload).json()
-    res = client.post(f"/api/bookings/{body['booking']['code']}/release", headers=auth(body["accessToken"]))
+    code, headers = body["booking"]["code"], auth(body["accessToken"])
+    res = client.post(f"/api/bookings/{code}/release", headers=headers)
     assert res.json()["status"] == "cancelled"
     assert slot_state(client, "2026-10-10", 19) == "available"
-    # and the phone can hold again right away
-    assert create(client, booking_payload).status_code == 201
+    assert client.get(f"/api/bookings/{code}", headers=headers).status_code == 404  # the row is gone
+    from app.db import connect
+
+    conn = connect()
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM bookings").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM admin_events WHERE booking_code = ?", (code,)).fetchone()[0] == 0
+    finally:
+        conn.close()
+    assert create(client, booking_payload).status_code == 201  # the hour can be held again right away
 
 
 def test_a_paid_booking_cannot_be_cancelled_or_released(client, booking_payload):
@@ -257,7 +265,7 @@ def test_method_with_only_a_qr_image_is_offered(client, booking_payload, monkeyp
 def test_config_exposes_rules(client):
     cfg = client.get("/api/config").json()
     assert cfg["holdMinutes"] == 10
-    assert cfg["maxHours"] == 5 and cfg["lateAfterMinutes"] == 15
+    assert cfg["maxHours"] == 24 and cfg["quickHours"] == 5 and cfg["lateAfterMinutes"] == 15
     assert cfg["rescheduleMinHours"] == 48 and cfg["rescheduleWindowDays"] == 30
     assert [c["id"] for c in cfg["courts"]] == ["court-1", "court-2"]
     gotyme = next(a for a in cfg["paymentAccounts"] if a["method"] == "gotyme")
@@ -270,7 +278,8 @@ def _ip_of(code):
 
     conn = connect()
     try:
-        return conn.execute("SELECT client_ip FROM bookings WHERE code = ?", (code,)).fetchone()[0]
+        row = conn.execute("SELECT client_ip FROM bookings WHERE code = ?", (code,)).fetchone()
+        return "gone" if row is None else row[0]
     finally:
         conn.close()
 
@@ -286,7 +295,7 @@ def test_ip_is_kept_only_while_the_hold_is_open(client, booking_payload):
 def test_ip_is_dropped_when_a_hold_is_cancelled_or_expires(client, booking_payload, fake_now):
     a = create(client, booking_payload).json()
     client.post(f"/api/bookings/{a['booking']['code']}/cancel", headers=auth(a["accessToken"]))
-    assert _ip_of(a["booking"]["code"]) is None
+    assert _ip_of(a["booking"]["code"]) == "gone"  # a released hold is erased, IP and all
 
     b = create(client, booking_payload, hour=20).json()
     fake_now.advance(minutes=16)
@@ -315,3 +324,36 @@ def test_old_rows_are_cleaned_and_new_indexes_exist():
     plan = " ".join(r[3] for r in conn.execute("EXPLAIN QUERY PLAN SELECT booking_id FROM booking_slots WHERE slot_start BETWEEN 'a' AND 'b'"))
     assert "idx_slots_start" in plan
     conn.close()
+
+
+def test_a_guest_can_book_well_past_the_quick_pick_lengths(client, booking_payload):
+    # 7 PM for 8 hours runs to 3 AM: every hour is free, so the length is fine.
+    res = create(client, booking_payload, hours=8)
+    assert res.status_code == 201, res.text
+    assert res.json()["booking"]["hours"] == 8
+    assert slot_state(client, "2026-10-10", 2) == "held"
+
+
+def test_a_long_booking_still_cannot_take_someone_elses_hour(client, booking_payload):
+    assert create(client, booking_payload, hour=23, hours=1).status_code == 201
+    res = create(client, booking_payload, customerPhone="09181112222", hours=8)  # 7 PM-3 AM runs into 11 PM
+    assert res.status_code == 409 and res.json()["error"]["code"] == "slot_taken"
+
+
+def test_payments_left_waiting_from_before_become_paid():
+    import sqlite3
+
+    from app import db
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    db.apply_schema(conn)
+    conn.execute(
+        """INSERT INTO bookings (id, code, status, court_id, start_at, hours, customer_name, customer_phone, payment_method,
+               court_cost, addons_cost, total, consent_at, consent_version, created_at, hold_expires_at, submitted_at)
+           VALUES ('b1', 'HPC-AAAA-BBBB', 'pending_verification', 'court-1', '2026-10-10T10:00:00Z', 1, 'A B', '09171234567',
+               'gcash', 200, 0, 200, '2026-10-09T10:00:00Z', 'v', '2026-10-09T10:00:00Z', '2026-10-09T10:10:00Z', '2026-10-09T10:05:00Z')"""
+    )
+    db.apply_schema(conn)  # what the server does on start
+    row = conn.execute("SELECT status, decided_at FROM bookings WHERE id = 'b1'").fetchone()
+    assert (row["status"], row["decided_at"]) == ("confirmed", "2026-10-09T10:05:00Z")

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, BookOpen, Clock, Download, ImagePlus, Keyboard, Maximize2, QrCode, RefreshCw, Upload } from 'lucide-react';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { prepareReceipt } from '../../lib/image';
+import { isIOS, saveImage, saveLabel, usePrefetchedImage } from '../../lib/saveImage';
 import { fmtCountdown, fmtSchedule, fmtTime, pesoExact } from '../../lib/time';
 import { useConfig, useCountdown } from '../../hooks/useBookingData';
 import { HOUSE_RULES, policiesFor, type HouseRule } from '../../data/houseRules';
@@ -75,6 +76,37 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   }, [preview]);
 
   const account = config?.paymentAccounts.find((a) => a.method === booking?.paymentMethod);
+
+  // The QR is fetched as soon as this screen opens, so Save is instant (and iOS lets the share sheet open).
+  const qrBlob = usePrefetchedImage(account?.qrImage);
+  const [qrNote, setQrNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!qrNote) return;
+    const t = window.setTimeout(() => setQrNote(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [qrNote]);
+
+  const saveQr = () => {
+    if (!account?.qrImage) return;
+    const name = `HousePickle-${account.label}-QR.${qrBlob?.type === 'image/png' ? 'png' : 'jpg'}`;
+    if (!qrBlob) {
+      // Still loading on a slow connection: Android can download the file directly; on iPhone, show it to press and hold.
+      if (isIOS()) setQrOpen(true);
+      else {
+        const a = Object.assign(document.createElement('a'), { href: account.qrImage, download: name });
+        a.click();
+      }
+      return;
+    }
+    saveImage(qrBlob, name).then((r) => {
+      if (r === 'downloaded') setQrNote('QR saved. Find it in your Downloads or Gallery.');
+      else if (r === 'shared') setQrNote('QR saved. Upload it in your app’s Scan QR.');
+      else if (r === 'unsupported') {
+        setQrOpen(true);
+        setQrNote('Press and hold the QR, then choose Save image.');
+      }
+    });
+  };
 
   const pickFile = (f: File | undefined) => {
     setError(null);
@@ -228,13 +260,18 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                           <Maximize2 className="h-3 w-3" />
                         </span>
                       </button>
-                      <a
-                        href={account.qrImage}
-                        download={`HousePickle-${account.label}-QR.jpg`}
-                        className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-white px-4 text-sm font-semibold text-zinc-800 ring-1 ring-zinc-200 hover:bg-zinc-100"
+                      <button
+                        type="button"
+                        onClick={saveQr}
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-white px-4 text-sm font-semibold text-zinc-800 ring-1 ring-zinc-200 hover:bg-zinc-100 active:scale-[0.98] cursor-pointer"
                       >
                         <Download className="h-4 w-4" /> Save QR image
-                      </a>
+                      </button>
+                      {qrNote && !qrOpen && (
+                        <p role="status" className="text-xs font-medium text-emerald-800">
+                          {qrNote}
+                        </p>
+                      )}
                     </div>
                   )}
                   <Row label="Account name" value={account?.accountName ?? '—'} />
@@ -245,7 +282,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                   ) : null}
                   <Row label="Exact amount" value={pesoExact(booking.total)} strong copy={booking.total.toFixed(2)} />
                   <p className="rounded-2xl bg-amber-50 px-3 py-2.5 text-xs font-medium leading-relaxed text-amber-950 ring-1 ring-amber-100">
-                    Send the full amount. A receipt that is short is held for the host, and your booking isn't confirmed until it's paid in full.
+                    Send the exact amount shown. The host checks every receipt.
                   </p>
                   <p className="rounded-2xl bg-zinc-50 px-3 py-2.5 text-xs leading-relaxed text-zinc-600">
                     {account?.qrImage ? (
@@ -271,17 +308,21 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                   >
                     <div className="max-h-full w-full max-w-xs overflow-y-auto rounded-3xl bg-white p-3 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                       <img src={account.qrImage} alt={`${account.label} QR code`} className="w-full rounded-2xl" />
-                      <p className="mt-2 px-2 text-center text-xs text-zinc-500">
-                        On iPhone, press and hold the image and choose <strong>Save to Photos</strong>.
+                      <p role="status" className="mt-2 px-2 text-center text-xs text-zinc-500">
+                        {qrNote ?? (
+                          <>
+                            Or press and hold the image and choose <strong>{isIOS() ? 'Save to Photos' : 'Download image'}</strong>.
+                          </>
+                        )}
                       </p>
                       <div className="mt-3 flex gap-2">
-                        <a
-                          href={account.qrImage}
-                          download={`HousePickle-${account.label}-QR.jpg`}
-                          className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-[#15803D] text-sm font-semibold text-white hover:bg-[#166534]"
+                        <button
+                          type="button"
+                          onClick={saveQr}
+                          className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-[#15803D] text-sm font-semibold text-white hover:bg-[#166534] active:scale-[0.98] cursor-pointer"
                         >
-                          <Download className="h-4 w-4" /> Save
-                        </a>
+                          <Download className="h-4 w-4" /> {saveLabel()}
+                        </button>
                         <SecondaryButton className="flex-1" onClick={() => setQrOpen(false)}>Close</SecondaryButton>
                       </div>
                     </div>

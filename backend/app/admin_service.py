@@ -8,13 +8,14 @@ double book a court-hour: a clash raises Conflict and the whole change is rolled
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
 from app import booking_service as core
-from app import clock, receipts, weather
+from app import clock, receipt_reader, receipts, weather
 from app.clock import MANILA, from_iso, to_iso
 from app.config import settings
 from app.db import write_transaction
@@ -55,12 +56,9 @@ from app.validation import normalize_ph_mobile
 STATUSES = ("held", "pending_verification", "confirmed", "rejected", "expired", "cancelled")
 ACTIVE = core.ACTIVE_STATUSES
 PAGE_SIZE_MAX = 200
-# Paid online and confirmed automatically, but the host hasn't looked yet (plus any left over
-# from before automatic confirmation).
-REVIEW_SQL = (
-    "((status = 'confirmed' AND source = 'online' AND submitted_at IS NOT NULL AND checked_at IS NULL)"
-    " OR status = 'pending_verification')"
-)
+# Payments waiting for the host. Always empty now: a receipt confirms the booking and the host looks at
+# receipts anyway, so there is no "to check" queue (kept so older clients and filters still answer).
+REVIEW_SQL = "(status = 'pending_verification')"
 FLAGGED_SQL = f"({REVIEW_SQL} AND review_flags IS NOT NULL AND review_flags != '[]')"
 
 SORTS = {
@@ -96,9 +94,7 @@ def label_of(row: sqlite3.Row, now: datetime) -> str:
     status = row["status"]
     if status == "held":
         return "awaiting"
-    if status == "pending_verification":
-        return "needs_check"
-    if status != "confirmed":
+    if status not in ("confirmed", "pending_verification"):  # (the second is no longer used: a receipt confirms)
         return status
     if row["source"] == "blocked":
         return "blocked"
@@ -157,9 +153,8 @@ def _flags(row: sqlite3.Row) -> list[FlagOut]:
 
 
 def _needs_review(row: sqlite3.Row) -> bool:
-    if row["status"] == "pending_verification":
-        return True
-    return row["status"] == "confirmed" and row["source"] == "online" and bool(row["submitted_at"]) and not row["checked_at"]
+    """Nothing waits for the host any more: a receipt confirms the booking."""
+    return row["status"] == "pending_verification"
 
 
 def to_admin(row: sqlite3.Row, courts: dict[str, str], now: datetime | None = None) -> AdminBookingOut:
@@ -226,7 +221,7 @@ def _detail(conn: sqlite3.Connection, row: sqlite3.Row) -> AdminBookingDetail:
             engine=s["engine"], provider=s["provider"],
             amount=s["amount_centavos"] / 100 if s["amount_centavos"] is not None else None,
             reference=s["reference"], paid_at=s["paid_at"], recipient_name=s["recipient_name"],
-            recipient_number=s["recipient_number"], success=None if s["success"] is None else bool(s["success"]),
+            recipient_number=s["recipient_number"], sender_name=s["sender_name"], sender_number=s["sender_number"], success=None if s["success"] is None else bool(s["success"]),
             raw_text=s["raw_text"], duration_ms=s["duration_ms"],
         )
     return AdminBookingDetail(
@@ -263,11 +258,14 @@ def nav_counts(conn: sqlite3.Connection) -> NavCounts:
                    (SELECT COUNT(*) FROM bookings WHERE {FLAGGED_SQL}) AS flagged,
                    (SELECT COUNT(*) FROM bookings WHERE status = 'held') AS held,
                    (SELECT COUNT(*) FROM bookings WHERE {_PLAYED} AND weather_hold_at IS NULL AND late_at >= ?) AS late,
-                   (SELECT COUNT(*) FROM bookings WHERE {_PLAYED} AND weather_hold_at IS NOT NULL) AS rain_delay""",
+                   (SELECT COUNT(*) FROM bookings WHERE {_PLAYED} AND weather_hold_at IS NOT NULL) AS rain_delay,
+                   (SELECT COUNT(*) FROM bookings WHERE source = 'online' AND submitted_at IS NOT NULL) AS payments,
+                   (SELECT rev FROM desk_rev WHERE id = 1) AS rev""",
         (restorable_since,),
     ).fetchone()
     return NavCounts(
-        to_review=row["to_review"], flagged=row["flagged"], held=row["held"], late=row["late"], rain_delay=row["rain_delay"]
+        to_review=row["to_review"], flagged=row["flagged"], held=row["held"], late=row["late"], rain_delay=row["rain_delay"],
+        payments=row["payments"], rev=row["rev"] or 0,
     )
 
 
@@ -294,10 +292,12 @@ def list_bookings(
     if q and q.strip():
         term = q.strip()
         clauses = [
-            "code LIKE ? ESCAPE '\\'", "customer_name LIKE ? ESCAPE '\\'",
+            "REPLACE(code, '-', '') LIKE ? ESCAPE '\\'", "customer_name LIKE ? ESCAPE '\\'",
             "customer_phone LIKE ? ESCAPE '\\'", "reference_number LIKE ? ESCAPE '\\'",
         ]
-        args += [_like(term.upper()), _like(term), _like(term), _like(term)]
+        # Codes and references match however they're typed: "hpc j94v-tb23", "J94VTB23", "8046 020 281757".
+        code_term = re.sub(r"[^A-Z0-9]", "", term.upper()) or term.upper()
+        args += [_like(code_term), _like(term), _like(term), _like(receipt_reader.clean_reference(term))]
         try:  # "+63 917 123 4567" should find 09171234567
             phone = normalize_ph_mobile(term)
         except ValueError:
@@ -564,6 +564,10 @@ def cancel(conn: sqlite3.Connection, code: str, reason: str | None) -> AdminBook
             (to_iso(now), row["id"]),
         )
         core.release_slots(conn, row["id"])
+        if row["status"] == "held":  # released before anything was paid: it was never a booking, keep no trace
+            last = _refreshed(conn, code)
+            core.forget_hold(conn, row["id"])
+            return last
         _event(conn, row["code"], "cancelled", (reason or "").strip() or None, now)
     return _refreshed(conn, code)
 
@@ -708,7 +712,8 @@ def delete(conn: sqlite3.Connection, code: str) -> None:
         row = _row(conn, code)
         summary = f"{row['customer_name']} · {play_date_of(from_iso(row['start_at']))} · ₱{row['total']} · was {row['status']}"
         conn.execute("DELETE FROM bookings WHERE id = ?", (row["id"],))  # slots and access tokens cascade
-        _event(conn, row["code"], "deleted", summary, now)
+        if row["status"] != "held":  # an unpaid hold leaves no trace
+            _event(conn, row["code"], "deleted", summary, now)
     if row["receipt_path"]:
         receipts.delete(row["receipt_path"])
 

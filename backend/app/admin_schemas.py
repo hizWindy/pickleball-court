@@ -14,7 +14,7 @@ AdminPayment = Literal["gcash", "gotyme", "cash", "none"]
 Source = Literal["online", "walk_in", "blocked"]
 # What the host sees on a booking. Day to day only the first four matter: Paid, Late, Done, Rain delay.
 AdminLabel = Literal[
-    "paid", "late", "done", "rain_delay", "blocked", "awaiting", "needs_check", "rejected", "expired", "cancelled"
+    "paid", "late", "done", "rain_delay", "blocked", "awaiting", "rejected", "expired", "cancelled"
 ]
 
 
@@ -49,6 +49,8 @@ class ScanOut(ApiModel):
     paid_at: str | None
     recipient_name: str | None
     recipient_number: str | None
+    sender_name: str | None
+    sender_number: str | None
     success: bool | None
     raw_text: str | None  # erased with the image
     duration_ms: int | None
@@ -94,7 +96,7 @@ class AdminBookingOut(ApiModel):
     admin_note: str | None
     checked_at: str | None
     review_flags: list[FlagOut]
-    needs_review: bool  # paid online, confirmed automatically, not looked at yet
+    needs_review: bool  # always false now: a receipt confirms the booking
     arrived_at: str | None
     late_at: str | None
     weather_hold_at: str | None
@@ -141,6 +143,8 @@ class NavCounts(ApiModel):
     held: int
     late: int  # Late bookings the host can still restore
     rain_delay: int  # guests waiting to pick a new time
+    payments: int  # online payments received so far: the desk says so when it goes up
+    rev: int  # changes whenever any booking changes: the desk reloads its views when it moves
 
 
 class AdminCreateIn(ApiModel):
@@ -148,7 +152,7 @@ class AdminCreateIn(ApiModel):
     court_id: str
     date: Day
     hour: int = Field(ge=0, le=23)
-    hours: int = Field(ge=1, le=12)
+    hours: int = Field(ge=1, le=24)
     paddles: bool = False
     customer_name: str  # for a block, the reason ("Maintenance")
     customer_phone: str = ""
@@ -173,7 +177,7 @@ class AdminUpdateIn(ApiModel):
     court_id: str | None = None
     date: Day | None = None
     hour: int | None = Field(default=None, ge=0, le=23)
-    hours: int | None = Field(default=None, ge=1, le=12)
+    hours: int | None = Field(default=None, ge=1, le=24)
     paddles: bool | None = None
     customer_name: str | None = None
     customer_phone: str | None = None

@@ -8,6 +8,14 @@ from conftest import ADMIN_PASSWORD
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 
 
+def _counts(admin):
+    """The queue sizes, without `rev` and `payments` (running totals that move on every change)."""
+    c = admin.get("/api/admin/counts").json()
+    c.pop("rev")
+    c.pop("payments")
+    return c
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def public_booking(client, payload, **overrides):
     res = client.post("/api/bookings", json=payload(**overrides))
@@ -124,15 +132,17 @@ def test_admin_is_locked_when_no_password_is_configured(client, monkeypatch):
 
 
 # ── Reviewing payments ────────────────────────────────────────────────────────
-def test_paid_booking_is_confirmed_at_once_and_waits_for_a_look(admin, booking_payload):
+def test_paid_booking_is_simply_paid(admin, booking_payload):
     code, headers = public_booking(admin, booking_payload)
-    assert admin.get("/api/admin/counts").json() == {"toReview": 0, "flagged": 0, "held": 1, "late": 0, "rainDelay": 0}
+    assert _counts(admin) == {"toReview": 0, "flagged": 0, "held": 1, "late": 0, "rainDelay": 0}
+    payments = admin.get("/api/admin/counts").json()["payments"]
     pay_by_receipt(admin, code, headers)
-    # OCR is off in this test, so the receipt couldn't be read: confirmed, but flagged for a look.
-    assert admin.get("/api/admin/counts").json() == {"toReview": 1, "flagged": 1, "held": 0, "late": 0, "rainDelay": 0}
+    # OCR is off in this test, so the receipt couldn't be read: still Paid, with a note. There is no "to check" queue.
+    counts = admin.get("/api/admin/counts").json()
+    assert counts["toReview"] == 0 and counts["held"] == 0 and counts["payments"] == payments + 1
 
     detail = admin.get(f"/api/admin/bookings/{code}").json()
-    assert detail["status"] == "confirmed" and detail["needsReview"] is True and detail["checkedAt"] is None
+    assert detail["status"] == "confirmed" and detail["label"] == "paid" and detail["needsReview"] is False
     assert [f["code"] for f in detail["reviewFlags"]] == ["unreadable"]
     assert detail["hasReceipt"] is True and detail["customerPhone"] == "09171234567"
     assert detail["total"] == 250 and detail["lineItems"][0]["rate"] == 250
@@ -142,10 +152,6 @@ def test_paid_booking_is_confirmed_at_once_and_waits_for_a_look(admin, booking_p
     assert img.status_code == 200 and img.headers["content-type"] == "image/png" and img.content == PNG
     assert "no-store" in img.headers["cache-control"]
 
-    done = admin.post(f"/api/admin/bookings/{code}/check").json()
-    assert done["status"] == "confirmed" and done["checkedAt"] and done["needsReview"] is False
-    assert done["events"][0]["action"] == "checked"
-    assert admin.get("/api/admin/counts").json() == {"toReview": 0, "flagged": 0, "held": 0, "late": 0, "rainDelay": 0}
 
 
 def test_rejecting_frees_the_slot_and_confirming_again_takes_it_back(admin, booking_payload):
@@ -310,14 +316,9 @@ def test_list_filters_search_and_counts(admin, booking_payload):
     assert everything["total"] == 3
     assert everything["counts"] == {
         "all": 3, "held": 1, "pendingVerification": 0, "confirmed": 2, "rejected": 0, "expired": 0, "cancelled": 0,
-        "toReview": 1, "flagged": 1, "paid": 2, "late": 0, "done": 0, "rainDelay": 0,
+        "toReview": 0, "flagged": 0, "paid": 2, "late": 0, "done": 0, "rainDelay": 0,
     }
-    to_review = admin.get("/api/admin/bookings", params={"review": "unchecked"}).json()
-    assert [b["code"] for b in to_review["items"]] == [code]  # the walk-in needs no review
-    assert to_review["counts"]["all"] == 3  # chips keep showing the totals
-    assert admin.get("/api/admin/bookings", params={"review": "flagged"}).json()["total"] == 1
-    admin.post(f"/api/admin/bookings/{code}/check")
-    assert admin.get("/api/admin/bookings", params={"review": "unchecked"}).json()["total"] == 0
+    assert admin.get("/api/admin/bookings", params={"review": "unchecked"}).json()["total"] == 0  # paid is just Paid
 
     by_name = admin.get("/api/admin/bookings", params={"q": "penduko"}).json()
     assert [b["customerName"] for b in by_name["items"]] == ["Pedro Penduko"]
@@ -365,7 +366,7 @@ def test_overview_numbers(admin, booking_payload, fake_now):
     assert k["revenue"] == 1230 and k["bookings"] == 4 and k["hours"] == 5
     assert k["avgBooking"] == 308 and k["paddleRevenue"] == 80 and k["customers"] == 3 and k["repeatCustomers"] == 1
     assert k["revenuePrev"] == 0
-    assert o["pending"] == {"count": 1, "amount": 250, "flagged": 1}
+    assert o["pending"] == {"count": 0, "amount": 0, "flagged": 0}  # nothing short: nothing waits for the host
     assert o["funnel"]["confirmed"] == 1
     assert o["dateFrom"] == "2026-10-04" and o["dateTo"] == "2026-10-10" and len(o["daily"]) == 7
     assert next(d for d in o["daily"] if d["date"] == "2026-10-08") == {"date": "2026-10-08", "revenue": 400, "bookings": 1, "hours": 2}
@@ -408,3 +409,48 @@ def test_migration_adds_new_columns_to_an_old_database():
     db.apply_schema(conn)  # running it twice is harmless
     assert {"decided_at", "admin_note"} <= {r["name"] for r in conn.execute("PRAGMA table_info(bookings)")}
     conn.close()
+
+
+# ── Unpaid holds that are let go, and keeping the desk in sync ────────────────
+def test_a_released_hold_vanishes_from_the_desk_and_the_counter_moves(admin, booking_payload):
+    rev = admin.get("/api/admin/counts").json()["rev"]
+    code, headers = public_booking(admin, booking_payload)
+    after_hold = admin.get("/api/admin/counts").json()
+    assert after_hold["held"] == 1 and after_hold["rev"] > rev
+
+    admin.post(f"/api/bookings/{code}/release", headers=headers)
+    counts = admin.get("/api/admin/counts").json()
+    assert counts["held"] == 0 and counts["rev"] > after_hold["rev"]
+    assert admin.get(f"/api/admin/bookings/{code}").status_code == 404
+    assert admin.get("/api/admin/bookings", params={"q": code}).json()["total"] == 0
+    assert admin.get("/api/admin/bookings", params={"status": "cancelled"}).json()["total"] == 0
+
+
+def test_the_host_releasing_a_hold_also_leaves_no_record(admin, booking_payload):
+    code, _ = public_booking(admin, booking_payload)
+    assert admin.post(f"/api/admin/bookings/{code}/cancel", json={}).status_code == 200
+    assert admin.get(f"/api/admin/bookings/{code}").status_code == 404
+    assert slot_state(admin, "2026-10-10", 19) == "available"
+
+
+def test_both_references_are_on_the_pass_and_findable_as_printed(admin, booking_payload, monkeypatch):
+    from app import ocr
+
+    lines = ["HA••ZD.", "+63 9••2753", "Sent via GCash", "Total Amount Sent  P250.00", "Ref No. 8046 020 281757", "Oct 10, 2026 10:00 AM"]
+    monkeypatch.setattr(ocr, "read_lines", lambda data: [ocr.Line(t, i * 30.0, 20.0, 0.99) for i, t in enumerate(lines)])
+    code, headers = public_booking(admin, booking_payload)
+    pay_by_receipt(admin, code, headers)
+    assert admin.get(f"/api/bookings/{code}", headers=headers).json()["paymentReference"] == "8046020281757"
+    detail = admin.get(f"/api/admin/bookings/{code}").json()
+    assert detail["referenceNumber"] == "8046020281757"
+    assert (detail["scan"]["recipientName"], detail["scan"]["recipientNumber"]) == ("HA••Z D.", "+63 9•••••2753")
+    found = admin.get("/api/admin/bookings", params={"q": "8046 020 281757"}).json()["items"]
+    assert [b["code"] for b in found] == [code]
+    for typed in (code.lower(), code.replace("-", " "), code.replace("-", "")[3:]):  # however the code is typed
+        assert [b["code"] for b in admin.get("/api/admin/bookings", params={"q": typed}).json()["items"]] == [code], typed
+
+
+def test_the_host_can_add_a_walk_in_longer_than_the_quick_picks(admin):
+    res = walk_in(admin, hour=8, hours=10)
+    assert res.status_code in (200, 201), res.text
+    assert res.json()["hours"] == 10

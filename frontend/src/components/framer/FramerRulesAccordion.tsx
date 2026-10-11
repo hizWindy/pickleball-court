@@ -95,7 +95,7 @@ function buildFaq(config: AppConfig | null): AccordionItem[] {
       id: 'late',
       category: 'Bookings',
       question: "What happens if I'm late?",
-      answer: `Be on the court within ${late} minutes of your start time. After that the booking is marked Late, the court is released to other players, and there are no refunds, credits or extensions. When you arrive, tap "I've arrived" on your pass (it opens 30 minutes before your start) so we know your group is here. Arriving late doesn't extend your time: every session ends at its scheduled hour.`
+      answer: `Be on the court within ${late} minutes of your start time. After that the booking is marked Late, the court is released to other players, and there are no refunds, credits or extensions. When you arrive, let the host know so we know your group is here. Arriving late doesn't extend your time: every session ends at its scheduled hour.`
     },
     {
       id: 'equipment-rental',

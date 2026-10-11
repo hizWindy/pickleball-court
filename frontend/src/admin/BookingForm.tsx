@@ -76,8 +76,8 @@ const FormBody: React.FC<{
 
   // Who is already on the courts that day, so a clash shows before saving.
   const { data: day } = useRemote(`form-day-${date}`, () => adminApi.schedule(date));
-  const { clash, nextHourClash } = useMemo(() => {
-    if (!day) return { clash: null, nextHourClash: null };
+  const { clash, nextHourClash, freeRun } = useMemo(() => {
+    if (!day) return { clash: null, nextHourClash: null, freeRun: config.maxHours };
     const taken = new Map<string, string>();
     for (const b of day.bookings) {
       if (b.code === existing?.code) continue;
@@ -97,8 +97,12 @@ const FormBody: React.FC<{
       ? `Cannot add another hour: ${config.courts.find((c) => c.id === courtId)?.name} at ${hourLabel((hour + hours) % 24)} is already booked by ${nextWho}.`
       : null;
 
-    return { clash: currentClash, nextHourClash: nextClash };
-  }, [day, courtId, date, hour, hours, existing?.code, config.courts]);
+    // How many hours in a row are free from the start time (the quick picks past it are greyed out).
+    let run = 0;
+    while (run < config.maxHours && !taken.has(`${courtId}|${slotMs(date, hour) + run * 3_600_000}`)) run++;
+
+    return { clash: currentClash, nextHourClash: nextClash, freeRun: run };
+  }, [day, courtId, date, hour, hours, existing?.code, config.courts, config.maxHours]);
 
   const nameError = tried && name.trim().length < 2 ? (block ? 'Say what the block is for.' : 'Enter the player’s name.') : null;
   const phoneError = tried && !block && phone.trim() && !normalizePhone(phone) ? 'Enter a PH mobile number like 0912 345 6789, or leave it empty.' : null;
@@ -247,9 +251,9 @@ const FormBody: React.FC<{
               <button
                 type="button"
                 aria-label="One hour more"
-                disabled={hours >= 12 || !!nextHourClash}
+                disabled={hours >= config.maxHours || !!nextHourClash}
                 title={nextHourClash ?? undefined}
-                onClick={() => setHours((h) => Math.min(12, h + 1))}
+                onClick={() => setHours((h) => Math.min(config.maxHours, h + 1))}
                 className={cx(
                   "flex h-11 w-11 items-center justify-center rounded-lg transition cursor-pointer disabled:cursor-not-allowed",
                   nextHourClash
@@ -259,6 +263,25 @@ const FormBody: React.FC<{
               >
                 {nextHourClash ? <Lock className="h-4 w-4 text-rose-600" /> : <Plus className="h-5 w-5" />}
               </button>
+            </div>
+
+            {/* Shortcuts for the usual lengths; the stepper above goes further when the hours are free. */}
+            <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Quick pick">
+              {Array.from({ length: Math.min(config.quickHours ?? 5, config.maxHours) }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setHours(n)}
+                  disabled={n > freeRun}
+                  aria-pressed={hours === n}
+                  className={cx(
+                    'min-h-10 min-w-[3rem] flex-1 rounded-lg border px-1 text-[13px] font-bold transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 disabled:line-through',
+                    hours === n ? 'border-[#15803D] bg-emerald-50 text-zinc-950 ring-2 ring-emerald-200' : 'border-zinc-200 bg-white text-zinc-700 hover:border-emerald-300'
+                  )}
+                >
+                  {n} h
+                </button>
+              ))}
             </div>
 
             {nextHourClash && !clash && (

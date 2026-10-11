@@ -155,33 +155,14 @@ def test_guests_are_told_it_is_late_but_never_about_the_restore_window(client, b
     assert "lateAt" not in body
 
 
-# ── Checking in ───────────────────────────────────────────────────────────────
-def test_a_guest_can_check_in_shortly_before_the_start(client, booking_payload, fake_now):
+# ── Guests cannot check in ────────────────────────────────────────────────────
+def test_a_guest_has_no_way_to_check_in(client, booking_payload, fake_now):
     code, headers = paid(client, booking_payload, hour=19)
-    assert client.get(f"/api/bookings/{code}", headers=headers).json()["canCheckIn"] is False
-    early = client.post(f"/api/bookings/{code}/arrive", headers=headers)
-    assert early.status_code == 409 and early.json()["error"]["code"] == "too_early"
-
-    at(fake_now, 18, 40)
-    assert client.get(f"/api/bookings/{code}", headers=headers).json()["canCheckIn"] is True
-    done = client.post(f"/api/bookings/{code}/arrive", headers=headers).json()
-    assert done["arrived"] is True and done["canCheckIn"] is False
-    at(fake_now, 19, 30)
-    assert client.get(f"/api/bookings/{code}", headers=headers).json()["late"] is False
-
-
-def test_a_guest_cannot_check_in_once_late(client, booking_payload, fake_now):
-    code, headers = paid(client, booking_payload, hour=19)
-    at(fake_now, 19, 16)
-    res = client.post(f"/api/bookings/{code}/arrive", headers=headers)
-    assert res.status_code == 409 and res.json()["error"]["code"] == "late"
-    assert "contact the host" in res.json()["error"]["message"].lower()
-
-
-def test_check_in_needs_the_bookings_own_token(client, booking_payload, fake_now):
-    code, _ = paid(client, booking_payload, hour=19)
     at(fake_now, 18, 45)
-    assert client.post(f"/api/bookings/{code}/arrive", headers={"X-Booking-Token": "nope"}).status_code == 404
+    assert "canCheckIn" not in client.get(f"/api/bookings/{code}", headers=headers).json()
+    assert client.post(f"/api/bookings/{code}/arrive", headers=headers).status_code in (404, 405)
+    at(fake_now, 19, 16)  # only the host's Arrived button stops the Late release
+    assert client.get(f"/api/bookings/{code}", headers=headers).json()["late"] is True
 
 
 # ── Marking arrived by hand ───────────────────────────────────────────────────

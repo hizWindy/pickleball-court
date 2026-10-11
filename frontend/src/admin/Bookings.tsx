@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, Ban, Check, ChevronDown, ChevronRight, Plus, Search, X } from 'lucide-react';
-import { addDays, fmtTime, peso } from '../lib/time';
+import { Ban, Check, ChevronDown, ChevronRight, Plus, Search, X } from 'lucide-react';
+import { addDays, fmtReference, fmtTime, peso } from '../lib/time';
 import { adminApi } from './api';
 import { useDesk } from './desk';
-import { ago, METHOD_LABEL, when } from './format';
+import { METHOD_LABEL, when } from './format';
 import { useNow, useRemote } from './hooks';
 import { RowActions } from './QuickActions';
 import { Btn, Card, cx, LabelBadge, Num, SelectInput } from './ui';
@@ -13,7 +13,7 @@ import type { AdminBooking, StatusCounts } from './types';
 const PAGE = 25;
 const MAX_PAGES = 8;
 
-type FilterKey = 'all' | 'paid' | 'late' | 'done' | 'rain_delay' | 'needs_check' | 'held' | 'rejected' | 'expired' | 'cancelled';
+type FilterKey = 'all' | 'paid' | 'late' | 'done' | 'rain_delay' | 'held' | 'rejected' | 'expired' | 'cancelled';
 type Time = 'upcoming' | 'past' | 'all';
 
 interface Chip {
@@ -30,8 +30,6 @@ const MAIN: Chip[] = [
   { key: 'done', label: 'Done', count: (c) => c.done },
   { key: 'rain_delay', label: 'Rain delay', count: (c) => c.rainDelay },
 ];
-// Payments waiting for the host's eyes (a receipt that fell short, or one that confirmed on its own and hasn't been looked at).
-const CHECK: Chip = { key: 'needs_check', label: 'Needs check', count: (c) => c.toReview };
 // Rare states, tucked away.
 const MORE: Chip[] = [
   { key: 'held', label: 'Paying now', count: (c) => c.held },
@@ -41,11 +39,10 @@ const MORE: Chip[] = [
 ];
 const MORE_KEYS = new Set<FilterKey>(MORE.map((c) => c.key));
 const LABEL_KEYS = new Set<FilterKey>(['paid', 'late', 'done', 'rain_delay']);
-const ALL_KEYS = new Set<FilterKey>([...MAIN, CHECK, ...MORE].map((c) => c.key));
+const ALL_KEYS = new Set<FilterKey>([...MAIN, ...MORE].map((c) => c.key));
 
-/** Shortcuts from other screens ("flagged", "to_review", …) land on the closest filter. */
+/** Shortcuts from other screens land on the matching filter. */
 function filterFrom(raw: string): FilterKey {
-  if (raw === 'to_review' || raw === 'flagged' || raw === 'pending_verification') return 'needs_check';
   return ALL_KEYS.has(raw as FilterKey) ? (raw as FilterKey) : 'all';
 }
 
@@ -72,17 +69,32 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
 
   useEffect(() => setPages(1), [status, time, courtId, q]);
 
+  // Enter searches at once; a pasted ref no. or booking code that matches one booking opens it straight away.
+  const searchNow = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const term = text.trim();
+    if (e.key !== 'Enter' || !term) return;
+    setQ(term);
+    try {
+      const found = await adminApi.list({ q: term, status: 'all', sort: 'created_desc', pageSize: 1 });
+      if (found.total === 1) {
+        (e.target as HTMLInputElement).blur(); // put the phone keyboard away
+        desk.openBooking(found.items[0].code);
+      }
+    } catch {
+      // the list below still shows what matched
+    }
+  };
+
   // Things that still need the host's attention are shown whatever their date.
-  const ignoreTime = !!q || status === 'needs_check' || status === 'held' || LABEL_KEYS.has(status);
+  const ignoreTime = !!q || status === 'held' || LABEL_KEYS.has(status);
   const today = desk.config?.today;
   const query = useMemo(() => {
-    const soonestFirst = status === 'needs_check' || status === 'paid' || status === 'rain_delay';
+    const soonestFirst = status === 'paid' || status === 'rain_delay';
     const latestFirst = status === 'late' || status === 'done';
     return {
       q,
       status: MORE_KEYS.has(status) ? status : 'all',
       label: LABEL_KEYS.has(status) ? (status as 'paid' | 'late' | 'done' | 'rain_delay') : undefined,
-      review: status === 'needs_check' ? ('unchecked' as const) : undefined,
       courtId,
       pageSize: PAGE * pages,
       sort: soonestFirst
@@ -101,12 +113,7 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
   const key = JSON.stringify(query);
   const { data, error, loading } = useRemote(`bookings-${key}`, () => adminApi.list(query), { intervalMs: 30000, version: desk.refreshKey, enabled: !!today });
 
-  // Payments that fell short come first: they aren't confirmed until the host decides.
-  const items = useMemo(() => {
-    if (!data) return null;
-    if (status !== 'needs_check') return data.items;
-    return [...data.items].sort((a, b) => Number(b.status === 'pending_verification') - Number(a.status === 'pending_verification'));
-  }, [data, status]);
+  const items = data?.items ?? null;
 
   const filtered = status !== 'all' || !!q || !!courtId || (!ignoreTime && time !== 'all');
   const clear = () => {
@@ -124,7 +131,6 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
   const moreSelected = MORE.find((c) => c.key === status);
   const showMore = moreOpen || !!moreSelected;
   const moreTotal = counts ? MORE.reduce((n, c) => n + c.count(counts), 0) : 0;
-  const decisions = counts?.pendingVerification ?? 0;
 
   const chipClass = (on: boolean, tone: 'plain' | 'amber' = 'plain') =>
     cx(
@@ -163,7 +169,8 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
             type="search"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Search name, phone or code"
+            onKeyDown={searchNow}
+            placeholder="Search name, phone, booking code or ref no."
             aria-label="Search bookings"
             enterKeyHint="search"
             className="h-12 w-full rounded-xl border border-zinc-300 bg-white pl-10 pr-10 text-base placeholder:text-zinc-400 focus:border-[#15803D] focus:outline-none focus:ring-2 focus:ring-emerald-200 sm:text-sm"
@@ -176,10 +183,7 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
         </div>
 
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-0.5 sm:mx-0 sm:flex-wrap sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Filter bookings">
-          {chip(MAIN[0])}
-          {/* Quiet, and only there when something needs a look. Right after "All" so it isn't off-screen on a phone. */}
-          {counts && (CHECK.count(counts) > 0 || status === CHECK.key) && chip(CHECK, 'amber')}
-          {MAIN.slice(1).map((c) => {
+          {MAIN.map((c) => {
             // Rain delay only shows up once there is one to look at.
             if (c.key === 'rain_delay' && counts && !c.count(counts) && status !== c.key) return null;
             return chip(c);
@@ -212,21 +216,6 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
           ))}
         </SelectInput>
       </div>
-
-      {decisions > 0 && status !== 'needs_check' && (
-        <button
-          type="button"
-          onClick={() => pick('needs_check')}
-          className="group flex w-full items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 text-left transition hover:bg-amber-100/70 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-        >
-          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-700" />
-          <span className="min-w-0 flex-1 text-sm font-semibold text-amber-950">
-            {decisions === 1 ? '1 payment is waiting for your decision' : `${decisions} payments are waiting for your decision`}
-            <span className="block text-xs font-medium text-amber-900/80">Not confirmed yet, usually because the receipt is less than the total.</span>
-          </span>
-          <ArrowRight className="h-5 w-5 shrink-0 text-amber-800 transition-transform group-hover:translate-x-0.5" />
-        </button>
-      )}
 
       {error && !data && (
         <Card className="p-5 text-sm text-zinc-600">
@@ -285,32 +274,26 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
 };
 
 /** The small grey line under the badge: how they paid, who they are, or what is happening. */
-function detailLine(b: AdminBooking, now: number): string {
+function detailLine(b: AdminBooking): string {
   if (b.source === 'blocked') return 'Court blocked';
   if (b.label === 'late' && b.lateAt) return `Went Late at ${fmtTime(b.lateAt)}`;
   if (b.label === 'rain_delay') return 'Waiting to pick a new time';
-  if (b.needsReview && b.submittedAt) return `Paid ${ago(b.submittedAt, now)} · ${b.proofType === 'receipt' ? 'receipt' : 'typed reference'}`;
   return [b.source === 'walk_in' && 'Walk-in', b.customPrice && 'Custom price', METHOD_LABEL[b.paymentMethod], b.customerPhone].filter((p) => p && p !== '—').join(' · ');
 }
 
 const Row: React.FC<{ b: AdminBooking; now: number; q: QuickApi; onOpen: () => void }> = ({ b, now, q, onOpen }) => {
   const blocked = b.source === 'blocked';
-  const checking = b.status === 'pending_verification';
-  const flagged = (b.needsReview && b.reviewFlags.length > 0) || checking;
-  const review = b.needsReview;
   const late = b.label === 'late';
-  const lead = b.reviewFlags[0];
 
   return (
     <div
       className={cx(
         'relative overflow-hidden rounded-2xl border bg-white transition',
         'hover:border-zinc-300 hover:shadow-sm',
-        late ? 'border-dashed border-amber-400 bg-amber-50/40' : flagged ? 'border-amber-300' : 'border-zinc-200',
+        late ? 'border-dashed border-amber-400 bg-amber-50/40' : 'border-zinc-200',
         blocked && 'bg-[repeating-linear-gradient(135deg,var(--color-white),var(--color-white)_8px,#f4f4f5_8px,#f4f4f5_16px)]'
       )}
     >
-      {review && <span className={cx('absolute inset-y-0 left-0 w-1', flagged ? 'bg-amber-400' : 'bg-emerald-400')} aria-hidden />}
       <button
         type="button"
         onClick={onOpen}
@@ -329,25 +312,26 @@ const Row: React.FC<{ b: AdminBooking; now: number; q: QuickApi; onOpen: () => v
             <span className="text-zinc-300">•</span>
             <span>{b.courtName}</span>
           </span>
+          {!blocked && (
+            <span className="mt-1 flex flex-wrap items-center gap-x-2 font-mono text-[11px] tracking-wide text-zinc-500">
+              <span>{b.code}</span>
+              {b.referenceNumber && (
+                <>
+                  <span className="text-zinc-300">•</span>
+                  <span>Ref {fmtReference(b.referenceNumber)}</span>
+                </>
+              )}
+            </span>
+          )}
           <span className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
             <LabelBadge label={b.label} />
-            <span className="text-xs text-zinc-500">{detailLine(b, now)}</span>
+            <span className="text-xs text-zinc-500">{detailLine(b)}</span>
             {b.arrivedAt && !blocked && (
               <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-700">
                 <Check className="h-3 w-3" strokeWidth={3} /> arrived
               </span>
             )}
           </span>
-          {review && lead && (
-            <span className={cx('mt-2 flex items-start gap-1.5 text-xs font-medium', lead.code === 'amount_short' ? 'text-red-700' : 'text-amber-800')}>
-              <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
-              <span>
-                {checking && <strong className="font-bold">Not confirmed. </strong>}
-                {lead.message}
-                {b.reviewFlags.length > 1 && <span className="text-amber-700/80"> +{b.reviewFlags.length - 1} more</span>}
-              </span>
-            </span>
-          )}
         </span>
         <ChevronRight className="h-5 w-5 shrink-0 text-zinc-300 transition-transform group-hover:translate-x-0.5 group-hover:text-zinc-500" />
       </button>

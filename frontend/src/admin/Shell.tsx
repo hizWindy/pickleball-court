@@ -14,8 +14,6 @@ const NAV: { tab: Tab; label: string; Icon: typeof LayoutDashboard }[] = [
 const clockFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 export interface NavBadges {
-  /** Paid bookings still waiting for a look. */
-  pending: number;
   /** Late bookings the host can still restore. */
   late: number;
   /** Guests waiting to pick a new time after a rain delay. */
@@ -51,12 +49,8 @@ const Badge: React.FC<{ n: number; label: string; tone?: 'amber' | 'blue'; class
 const Marker: React.FC<{ tab: Tab; badges: NavBadges; floating?: boolean }> = ({ tab, badges, floating }) => {
   if (tab === 'bookings') {
     const className = floating ? 'absolute -right-3 -top-2' : undefined;
-    // A Late booking can only be restored for a few minutes, so it outranks payments to look at.
-    return badges.late > 0 ? (
-      <Badge n={badges.late} label={`${badges.late} late, can be restored`} className={className} />
-    ) : (
-      <Badge n={badges.pending} label={`${badges.pending} to review`} className={className} />
-    );
+    // A Late booking can only be restored for a few minutes: that's the one thing worth a number here.
+    return <Badge n={badges.late} label={`${badges.late} late, can be restored`} className={className} />;
   }
   if (tab === 'weather') {
     if (badges.rainDelay > 0) {

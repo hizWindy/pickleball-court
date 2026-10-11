@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Ban, Check, CheckCircle2, CloudRain, ImageOff, Info, Maximize2, Pencil, Phone, RotateCcw, ScanText, Trash2, X } from 'lucide-react';
 import { CopyButton } from '../components/booking/ui';
 import { errorMessage } from '../lib/api';
-import { fmtDate, fmtTime, peso } from '../lib/time';
+import { fmtDate, fmtReference, fmtTime, peso } from '../lib/time';
 import { adminApi } from './api';
 import { useDesk } from './desk';
 import { arrivable, clock, manilaHour, METHOD_LABEL, PROVIDER_LABEL, restoreLeft, stamp, hourSpan, telHref } from './format';
@@ -13,7 +13,11 @@ import { Btn, Card, CopyBtn, cx, Dialog, ErrorNote, Label, LabelBadge, Sheet, Ta
 import { useQuickActions } from './useQuickActions';
 import type { AdminBookingDetail } from './types';
 
-const REJECT_REASONS = ["Amount doesn't match", 'Reference not found', 'Paid to a different account', 'Receipt is unreadable', 'Payment is from a different time'];
+// What the receipt reading may say on a paid booking. Only these are worth showing; a field that couldn't be
+// read just says "Not found" in its row. None of them changes the booking: paid is Paid.
+const NOTE_CODES = new Set(['amount_short', 'amount_over', 'recipient_mismatch', 'time_outside', 'not_successful', 'no_text', 'unreadable']);
+
+const REJECT_REASONS =["Amount doesn't match", 'Reference not found', 'Paid to a different account', 'Receipt is unreadable', 'Payment is from a different time'];
 
 type Ask = 'reject' | 'cancel' | 'delete' | 'confirm-unpaid' | null;
 
@@ -62,6 +66,14 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
   const now = useNow(5000);
   const { q, problemDialog } = useQuickActions();
 
+  // An unpaid hold leaves no record once it's let go, so the booking on screen can vanish under us.
+  const gone = error?.status === 404;
+  useEffect(() => {
+    if (!gone) return;
+    desk.notify(b?.status === 'held' ? 'The player let this slot go. The hours are free again.' : 'This booking no longer exists.');
+    onClose();
+  }, [gone]);
+
   const run =async (action: () => Promise<AdminBookingDetail | void>, done: string, closeAfter = false) => {
     setBusy(true);
     setProblem(null);
@@ -98,29 +110,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
   let footer: React.ReactNode = null;
   if (b) {
     const confirmed = b.status === 'confirmed';
-    if (confirmed && b.needsReview) {
-      footer = (
-        <div className="flex gap-2">
-          <Btn variant="danger" size="lg" onClick={() => setAsk('reject')} disabled={busy}>
-            Reject
-          </Btn>
-          <Btn variant="primary" size="lg" className="flex-1" loading={busy} onClick={() => run(() => adminApi.check(code), 'Marked as looked at.')}>
-            <Check className="h-5 w-5" /> Looks good
-          </Btn>
-        </div>
-      );
-    } else if (b.status === 'pending_verification') {
-      footer = (
-        <div className="flex gap-2">
-          <Btn variant="danger" size="lg" onClick={() => setAsk('reject')} disabled={busy}>
-            Reject
-          </Btn>
-          <Btn variant="primary" size="lg" className="flex-1" loading={busy} onClick={() => run(() => adminApi.confirm(code), 'Payment confirmed. The booking is locked in.')}>
-            <Check className="h-5 w-5" /> Confirm payment
-          </Btn>
-        </div>
-      );
-    } else if (b.status === 'held') {
+    if (b.status === 'held') {
       footer = (
         <div className="flex gap-2">
           <Btn variant="danger" size="lg" onClick={() => setAsk('cancel')} disabled={busy}>
@@ -139,12 +129,21 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
         ) : arrivable(b, now) ? (
           <ArrivedBtn b={b} q={q} now={now} size="lg" className="w-full" />
         ) : null;
+      // A paid online booking is confirmed straight away; if the receipt turns out to be fake, the host rejects it.
+      const paidOnline = b.source === 'online' && !!b.submittedAt;
       // The thing to do now is the big button at the bottom, where a thumb rests; voiding sits quietly above it.
       footer = (
         <div className="flex flex-col gap-2">
-          <Btn variant="danger" size={main ? 'md' : 'lg'} className="w-full" onClick={() => setAsk('cancel')} disabled={busy}>
-            <Ban className="h-4 w-4" /> Void booking
-          </Btn>
+          <div className="flex gap-2">
+            {paidOnline && (
+              <Btn variant="danger" size={main ? 'md' : 'lg'} className="flex-1" onClick={() => setAsk('reject')} disabled={busy}>
+                Reject payment
+              </Btn>
+            )}
+            <Btn variant="danger" size={main ? 'md' : 'lg'} className="flex-1" onClick={() => setAsk('cancel')} disabled={busy}>
+              <Ban className="h-4 w-4" /> Void booking
+            </Btn>
+          </div>
           {main}
         </div>
       );
@@ -184,7 +183,8 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
                 )}
               </div>
 
-              {b.status === 'pending_verification' && <NotConfirmed b={b} />}
+              {b.source !== 'blocked' && <References b={b} />}
+
               {b.label === 'late' && <LateNote b={b} now={now} minutes={desk.config?.lateAfterMinutes ?? 15} />}
               {b.label === 'rain_delay' && <RainNote b={b} />}
 
@@ -324,7 +324,8 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
                 onClick={() =>
                   run(
                     () => adminApi.cancel(code, reason.trim()),
-                    b.source === 'blocked' ? 'Block lifted.' : b.status === 'held' ? 'Hold released. The hours are free again.' : 'Booking voided. The hours are free again.'
+                    b.source === 'blocked' ? 'Block lifted.' : b.status === 'held' ? 'Hold released. The hours are free again.' : 'Booking voided. The hours are free again.',
+                    b.status === 'held' // an unpaid hold is erased, so there's nothing left to show
                   )
                 }
               >
@@ -336,7 +337,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
           {b.source === 'blocked' ? (
             <p>The court opens up for booking again.</p>
           ) : b.status === 'held' ? (
-            <p>The player hasn't paid yet. The hours go back on sale right away.</p>
+            <p>The player hasn't paid yet. The hours go back on sale right away, and the hold is erased: no record is kept.</p>
           ) : (
             <p>Guests can't cancel. Use this only for mistakes, duplicates or a refund you've decided to give. The hours go back on sale.</p>
           )}
@@ -406,6 +407,35 @@ const ReadRow: React.FC<{ label: string; ok?: boolean; children: React.ReactNode
   </div>
 );
 
+/** The two numbers the host matches up: the booking's code (on the guest's pass) and the payment's reference (in the GCash / GoTyme app). */
+const References: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
+  const paymentRef = b.referenceNumber ?? b.scan?.reference ?? null;
+  const noRef =
+    b.status === 'held' ? 'Not paid yet' : b.paymentMethod === 'cash' ? 'Paid in cash' : b.proofType === 'receipt' ? 'Not found on the receipt' : '—';
+  return (
+    <Card className="grid grid-cols-2 divide-x divide-zinc-100">
+      <div className="min-w-0 px-4 py-3">
+        <Label>Booking ref</Label>
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <span className="truncate font-mono text-base font-bold tracking-wide text-zinc-950">{b.code}</span>
+          <CopyButton value={b.code} />
+        </div>
+      </div>
+      <div className="min-w-0 px-4 py-3">
+        <Label>Payment ref{b.proofType === 'receipt' && paymentRef ? ' · from receipt' : ''}</Label>
+        {paymentRef ? (
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <span className="truncate font-mono text-base font-bold tracking-wide text-zinc-950">{fmtReference(paymentRef)}</span>
+            <CopyButton value={paymentRef} />
+          </div>
+        ) : (
+          <p className="mt-1.5 text-sm font-medium text-zinc-400">{noRef}</p>
+        )}
+      </div>
+    </Card>
+  );
+};
+
 /**
  * The payment behind an online booking: what the server read off the receipt, compared with the
  * booking, and anything that didn't match. The booking is already confirmed; this is the host's
@@ -418,56 +448,32 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
   const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' });
   const from = fmt.format(new Date(b.createdAt));
   const to = b.submittedAt ? fmt.format(new Date(b.submittedAt)) : null;
-  const waiting = b.status === 'pending_verification'; // a short or unreadable amount: not confirmed until the host decides
   const over = codes.has('amount_over'); // more than the total: for information only
-  const issues = b.reviewFlags.filter((f) => f.code !== 'amount_over');
-  const flagged = issues.length > 0;
   const shortBy = codes.has('amount_short') && scan?.amount != null ? b.total - scan.amount : null;
-
-  const tone = waiting ? 'red' : !b.needsReview ? 'zinc' : flagged ? 'amber' : 'green';
-  const head = {
-    zinc: { box: 'border-zinc-200', bar: 'bg-zinc-50', label: 'Payment proof', text: b.checkedAt ? `You looked at this on ${stamp(b.checkedAt)}.` : 'Checked.' },
-    red: {
-      box: 'border-red-300',
-      bar: 'bg-red-50',
-      label: 'Waiting for your decision',
-      text: "This payment isn't confirmed. The hours stay held for the player until you confirm or reject it.",
-    },
-    amber: {
-      box: 'border-amber-300',
-      bar: 'bg-amber-50',
-      label: issues.length === 1 ? '1 thing to check' : `${issues.length} things to check`,
-      text: 'The booking was confirmed automatically. Open your app and make sure this payment really arrived.',
-    },
-    green: {
-      box: 'border-emerald-200',
-      bar: 'bg-emerald-50',
-      label: over ? 'Receipt is more than the total' : 'Receipt matches the booking',
-      text: 'Confirmed automatically. A quick look in your app, then tap Looks good.',
-    },
-  }[tone];
+  // A paid booking is just Paid. Only notes that tell the host something new are shown; a field that couldn't be
+  // read already says "Not found" in its row below.
+  const notes = b.reviewFlags.filter((f) => NOTE_CODES.has(f.code));
+  const provider = PROVIDER_LABEL[scan?.provider ?? b.paymentMethod] ?? METHOD_LABEL[b.paymentMethod];
+  const sender = scan ? [scan.senderName, scan.senderNumber].filter(Boolean).join(' · ') : '';
+  const player = [b.payerName || b.customerName, b.customerPhone && b.customerPhone.replace(/(\d{4})(\d{3})(\d{4})/, '$1 $2 $3')].filter(Boolean).join(' · ');
 
   return (
-    <Card className={cx('overflow-hidden', head.box)}>
-      <div className={cx('px-4 py-3', head.bar)}>
-        <Label className={tone === 'amber' ? '!text-amber-800' : tone === 'green' ? '!text-emerald-800' : tone === 'red' ? '!text-red-800' : undefined}>{head.label}</Label>
-        <p className="mt-1 text-sm text-zinc-800">{head.text}</p>
-        {b.reviewFlags.length > 0 && (
-          <ul className="mt-2.5 space-y-1.5">
-            {b.reviewFlags.map((f) =>
-              f.code === 'amount_over' ? (
-                <li key={f.code} className="flex items-start gap-2 text-sm font-medium text-sky-900">
-                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" /> {f.message} For your information.
-                </li>
-              ) : (
-                <li key={f.code} className={cx('flex items-start gap-2 text-sm font-medium', f.code === 'amount_short' ? 'text-red-800' : 'text-amber-900')}>
-                  <AlertTriangle className={cx('mt-0.5 h-4 w-4 shrink-0', f.code === 'amount_short' ? 'text-red-600' : 'text-amber-600')} /> {f.message}
-                </li>
-              )
-            )}
-          </ul>
-        )}
-      </div>
+    <Card className="overflow-hidden border-zinc-200">
+      {notes.length > 0 && (
+        <ul className="space-y-1.5 border-b border-zinc-100 px-4 py-3">
+          {notes.map((f) =>
+            f.code === 'amount_over' ? (
+              <li key={f.code} className="flex items-start gap-2 text-sm font-medium text-sky-900">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" /> {f.message}
+              </li>
+            ) : (
+              <li key={f.code} className="flex items-start gap-2 text-sm font-medium text-amber-900">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /> {f.message}
+              </li>
+            )
+          )}
+        </ul>
+      )}
 
       {b.proofType === 'receipt' && (
         <div className="border-b border-zinc-100 p-3">
@@ -502,19 +508,20 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
               {scan.amount != null ? peso(scan.amount) : 'Not found'}
             </ReadRow>
             <ReadRow label="Reference" ok={!codes.has('reference_missing')} action={scan.reference ? <CopyButton value={scan.reference} /> : undefined}>
-              <span className="font-mono tracking-wide">{scan.reference ?? 'Not found'}</span>
+              <span className="font-mono tracking-wide">{scan.reference ? fmtReference(scan.reference) : 'Not found'}</span>
             </ReadRow>
             <ReadRow label="Paid" ok={!codes.has('time_outside') && !codes.has('time_missing')} hint={`Booking window ${to ? `${from} – ${to}` : `from ${from}`}`}>
               {scan.paidAt ? stamp(scan.paidAt) : 'Not found'}
             </ReadRow>
-            <ReadRow label="Sent to" ok={!codes.has('recipient_mismatch') && !codes.has('recipient_missing')}>
-              {[scan.recipientName, scan.recipientNumber].filter(Boolean).join(' · ') || 'Not found'}
+            {/* GCash prints only who the money went to (the club), never who sent it: then it's the player who booked. */}
+            <ReadRow label="Sent by" hint={sender ? `From the ${provider} receipt` : `The player who booked · ${provider} receipts don’t show the sender`}>
+              {sender || player}
             </ReadRow>
           </>
         ) : b.proofType === 'reference' ? (
           <>
             <ReadRow label="Reference" action={b.referenceNumber ? <CopyButton value={b.referenceNumber} /> : undefined}>
-              <span className="font-mono tracking-wide">{b.referenceNumber}</span>
+              <span className="font-mono tracking-wide">{b.referenceNumber ? fmtReference(b.referenceNumber) : ''}</span>
             </ReadRow>
             {b.paidAt && <ReadRow label="Paid at" hint={`Booking window ${to ? `${from} – ${to}` : `from ${from}`}`}>{stamp(b.paidAt)}</ReadRow>}
             {b.payerName && <ReadRow label="Sent by">{b.payerName}</ReadRow>}
@@ -532,25 +539,6 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
       )}
       <p className="px-4 pb-3 text-xs text-zinc-500">
         Paid with the {METHOD_LABEL[b.paymentMethod]} QR. The reading is automatic and can be wrong, so trust your {METHOD_LABEL[b.paymentMethod]} app over it.
-      </p>
-    </Card>
-  );
-};
-
-/** A payment that fell short (or could not be read) is not confirmed: say so loudly, with the numbers. */
-const NotConfirmed: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
-  const short = b.reviewFlags.find((f) => f.code === 'amount_short');
-  const paid = b.scan?.amount ?? null;
-  const gap = short && paid != null ? b.total - paid : null;
-  return (
-    <Card role="alert" className="border-red-300 bg-red-50 p-4">
-      <p className="flex items-center gap-2 font-heading text-lg font-bold text-red-900">
-        <AlertTriangle className="h-5 w-5 shrink-0" />
-        {gap != null ? `Short by ${peso(gap)}` : short ? 'Short payment' : "Amount couldn't be confirmed"}
-      </p>
-      <p className="mt-1 text-sm font-medium text-red-900">
-        {gap != null ? `(receipt ${peso(paid!)} / total ${peso(b.total)}). ` : short ? `${short.message} ` : ''}
-        Not confirmed. {short ? "Confirm only after you've received the rest." : 'Check your payment app before you confirm.'} Or reject it to put the hours back on sale.
       </p>
     </Card>
   );
@@ -599,7 +587,7 @@ const Timeline: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
   if (b.submittedAt && b.source === 'online')
     items.push({
       at: b.submittedAt,
-      title: `${b.proofType === 'receipt' ? 'Receipt uploaded' : 'Reference typed in'} · ${b.reviewFlags.some((f) => f.code === 'amount_short' || f.code === 'amount_missing') ? 'held for your decision' : 'confirmed automatically'}`,
+      title: `${b.proofType === 'receipt' ? 'Receipt uploaded' : 'Reference typed in'} · confirmed automatically`,
     });
   if (b.status === 'expired' && b.closedAt) items.push({ at: b.closedAt, title: 'Payment window ran out' });
   if (b.status === 'cancelled' && b.closeReason === 'customer' && b.closedAt) items.push({ at: b.closedAt, title: 'Released by the player before paying' });

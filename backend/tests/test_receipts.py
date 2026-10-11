@@ -47,6 +47,14 @@ def expected(total=250, start=datetime(2026, 10, 10, 10, 0, tzinfo=MANILA)):
     )
 
 
+def _counts(admin):
+    """The queue sizes, without `rev` (which moves on every change)."""
+    c = admin.get("/api/admin/counts").json()
+    c.pop("rev")
+    c.pop("payments")
+    return c
+
+
 # ── Reading ───────────────────────────────────────────────────────────────────
 def test_reads_a_gcash_receipt():
     r = rr.read(GCASH)
@@ -56,6 +64,106 @@ def test_reads_a_gcash_receipt():
     assert r.paid_at == datetime(2026, 10, 6, 20, 47, tzinfo=MANILA)
     assert r.recipient_name == "KH••••A P." and r.recipient_number == "+63 962 411 5061"
     assert r.success is True
+
+
+def test_reads_a_gcash_receipt_whose_mask_dots_ocr_merged():
+    # Exactly what the engine returned for an Oct 11 sample: "+63 9•••••2753" came back with two dots,
+    # and the space before the surname initial of "HA••Z D." was lost.
+    r = rr.read([
+        "HA••ZD.", "+63 9••2753", "Sent via GCash", "Amount  250.00", "Total Amount Sent  P250.00",
+        "Ref No. 8046 020 281757", "Oct 11, 2026 10:58 PM", "279g (gco2e)",
+    ])
+    assert (r.provider, r.amount_centavos, r.reference) == ("gcash", 25_000, "8046020281757")
+    assert r.paid_at == datetime(2026, 10, 11, 22, 58, tzinfo=MANILA)
+    assert r.recipient_name == "HA••Z D." and r.recipient_number == "+63 9•••••2753"  # as GCash prints it
+    flags = {f.code for f in rr.assess(r, expected(start=datetime(2026, 10, 11, 22, 55, tzinfo=MANILA)))}
+    assert flags == {"recipient_mismatch"}  # 2753 isn't one of the club's accounts
+
+
+NOW = datetime(2026, 10, 11, 23, 0, tzinfo=MANILA)
+
+
+@pytest.mark.parametrize(
+    "lines, when",
+    [
+        (["Oct 11, 2026 10:58 PM"], (2026, 10, 11, 22, 58)),
+        (["October 11th, 2026 at 10:58 p.m."], (2026, 10, 11, 22, 58)),
+        (["0ct 11, 2026 1O:58 PM"], (2026, 10, 11, 22, 58)),  # OCR read O as 0 and 0 as O
+        (["Oct 11 2026 10.58 PM"], (2026, 10, 11, 22, 58)),  # colon read as a dot
+        (["10:58 PM | 11 Oct 2026"], (2026, 10, 11, 22, 58)),  # time first
+        (["11-Oct-2026 22:58:07"], (2026, 10, 11, 22, 58)),
+        (["Date  Oct 11, 2026", "Time  10:58 PM"], (2026, 10, 11, 22, 58)),  # split over two rows
+        (["10:58 PM", "Oct 11, 2026"], (2026, 10, 11, 22, 58)),  # time on the row above
+        (["Date & Time", "2026/10/11 22:58"], (2026, 10, 11, 22, 58)),
+        (["10/11/26 10:58PM"], (2026, 10, 11, 22, 58)),
+        (["25/10/2025 9:05 AM"], (2025, 10, 25, 9, 5)),  # day first: 25 can't be a month
+        (["Oct 11, 10:58 PM"], (2026, 10, 11, 22, 58)),  # no year: this year
+        (["Dec 30, 9:00 AM"], (2025, 12, 30, 9, 0)),  # no year, and this year's would be in the future
+    ],
+)
+def test_reads_the_payment_date_and_time_in_many_layouts(lines, when):
+    assert rr.read(lines, now=NOW).paid_at == datetime(*when, tzinfo=MANILA)
+
+
+def test_an_amount_or_the_status_bar_clock_is_never_a_payment_time():
+    assert rr.read(["10:59", "Total Amount Sent  P250.00", "Fee  PHP 0.00"], now=NOW).paid_at is None
+
+
+def test_reads_sender_and_recipient_on_a_maya_receipt():
+    r = rr.read([
+        "Maya", "Sent money successfully", "₱250.00", "To", "REYMARK VERGARA", "+63 912 *** 5344",
+        "From", "JUAN DELA CRUZ", "+63 917 *** 1234", "Date  Oct 11, 2026, 10:58 PM", "Reference ID  A1B2C3D4E5F6",
+    ], now=NOW)
+    assert (r.recipient_name, r.recipient_number) == ("REYMARK VERGARA", "+63 912 *** 5344")
+    assert (r.sender_name, r.sender_number) == ("JUAN DELA CRUZ", "+63 917 *** 1234")
+    assert r.amount_centavos == 25_000 and r.reference == "A1B2C3D4E5F6"
+
+
+def test_reads_a_bank_transfer_receipt_with_account_name_and_sender():
+    r = rr.read([
+        "Transfer successful", "Sender  MARIA SANTOS", "Account number  XXXX-XXXX-5678",
+        "Receiver  GoTyme Bank", "Account name  REY MARK VERGARA", "Account number  •••• 1204",
+        "Amount  PHP 250", "Transaction date  11 Oct 2026 22:58", "Reference No.  BDO20261011ABC",
+    ], now=NOW)
+    assert (r.sender_name, r.sender_number) == ("MARIA SANTOS", "XXXX-XXXX-5678")
+    assert (r.recipient_name, r.recipient_number) == ("REY MARK VERGARA", "•••• 1204")
+    assert r.amount_centavos == 25_000 and r.paid_at == datetime(2026, 10, 11, 22, 58, tzinfo=MANILA)
+
+
+def test_gotyme_sender_section_keeps_its_own_account_number():
+    r = rr.read(GOTYME)
+    assert r.sender_name is None and r.sender_number == "8910"  # "My Everyday Account" is an account, not a person
+
+
+def test_a_sentence_starting_with_from_is_not_a_sender():
+    r = rr.read(GCASH)
+    assert r.sender_name is None and r.sender_number is None
+
+
+def test_lenient_checks():
+    good = ["RE••••K V.", "+63 912 828 5344", "Sent via GCash", "Total Amount Sent  P250.00", "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM"]
+    # the labelled amount was misread, but the right total is printed elsewhere on the receipt
+    misread = [ln.replace("Total Amount Sent  P250.00", "Total Amount Sent  P25.00") for ln in good] + ["Amount  250.00"]
+    assert rr.assess(rr.read(misread), expected()) == []
+    # "failed" in the small print doesn't undo a receipt that says it was sent
+    assert rr.read(good + ["If the transfer failed, contact support"]).success is True
+    # nobody to compare against isn't a problem in itself
+    no_recipient = [ln for ln in good if ln not in ("RE••••K V.", "+63 912 828 5344")]
+    assert rr.assess(rr.read(no_recipient), expected()) == []
+    # an amount that couldn't be read is a note, not a reason to hold the booking
+    no_amount = [ln for ln in good if "Amount" not in ln]
+    codes = {f.code for f in rr.assess(rr.read(no_amount), expected())}
+    assert codes == {"amount_missing"}
+
+
+def test_a_merged_mask_on_the_clubs_own_account_still_matches():
+    r = rr.read(["RE••KV.", "+63 9•5344", "Sent via GCash", "Total Amount Sent  P250.00", "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM"])
+    assert r.recipient_name == "RE••K V." and rr.assess(r, expected()) == []
+
+
+def test_a_reference_line_is_never_read_as_the_recipients_number():
+    r = rr.read(["Sent via GCash", "Total Amount Sent  P250.00", "Ref No. 8046 090 281757", "Oct 10, 2026 10:02 AM"])
+    assert r.recipient_number is None and r.reference == "8046090281757"
 
 
 def test_reads_a_gotyme_receipt_and_ignores_the_fee_and_the_senders_account():
@@ -117,7 +225,7 @@ def test_the_sample_receipts_are_flagged_for_the_right_reasons():
 
 def test_unreadable_receipt_is_one_clear_flag():
     assert [f.code for f in rr.assess(None, expected())] == ["unreadable"]  # OCR wasn't available: can't judge
-    assert [f.code for f in rr.assess(None, expected(), engine_ran=True)] == ["amount_missing"]  # OCR worked, no text
+    assert [f.code for f in rr.assess(None, expected(), engine_ran=True)] == ["no_text"]  # OCR worked, no text
 
 
 @pytest.mark.parametrize(
@@ -128,7 +236,6 @@ def test_the_amount_is_checked_against_the_checkout_total(amount, code):
     lines = ["RE••••K V.", "+63 912 828 5344", "Sent via GCash", f"Total Amount Sent  {amount}", "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM"]
     flags = [f.code for f in rr.assess(rr.read(lines), expected())]
     assert flags == ([code] if code else [])
-    assert (code in rr.HOLD_FOR_HOST) is (code == "amount_short")  # only a short payment is held back; too much is not
 
 
 # ── The upload flow (OCR stubbed with known text) ─────────────────────────────
@@ -164,11 +271,11 @@ def test_matching_receipt_confirms_with_nothing_to_look_at(admin, booking_payloa
     assert res.status_code == 200 and res.json()["status"] == "confirmed"
 
     d = admin.get(f"/api/admin/bookings/{code}").json()
-    assert d["reviewFlags"] == [] and d["needsReview"] is True  # nothing odd, but nobody has looked yet
+    assert d["reviewFlags"] == [] and d["needsReview"] is False and d["label"] == "paid"
     assert d["referenceNumber"] == "1234567890123"
     assert d["scan"]["amount"] == 250 and d["scan"]["provider"] == "gcash" and d["scan"]["engine"] == "rapidocr"
     assert d["scan"]["recipientNumber"] == "+63 912 828 5344"
-    assert admin.get("/api/admin/counts").json() == {"toReview": 1, "flagged": 0, "held": 0, "late": 0, "rainDelay": 0}
+    assert _counts(admin) == {"toReview": 0, "flagged": 0, "held": 0, "late": 0, "rainDelay": 0}
 
 
 def test_suspicious_receipt_still_confirms_but_is_flagged(admin, booking_payload, ocr_reads):
@@ -177,7 +284,7 @@ def test_suspicious_receipt_still_confirms_but_is_flagged(admin, booking_payload
     assert _upload(admin, code, headers).json()["status"] == "confirmed"
     d = admin.get(f"/api/admin/bookings/{code}").json()
     assert {f["code"] for f in d["reviewFlags"]} == {"amount_over", "time_outside", "recipient_mismatch"}
-    assert admin.get("/api/admin/bookings", params={"review": "flagged"}).json()["total"] == 1
+    assert d["label"] == "paid"  # notes for the host, but the booking is simply Paid
 
     rejected = admin.post(f"/api/admin/bookings/{code}/reject", json={"reason": "Not paid to us"}).json()
     assert rejected["status"] == "rejected"  # host can still undo an automatic confirmation
@@ -188,37 +295,36 @@ def _slot_state(client, hour=19, court="court-1"):
     return next(s for s in data["slots"] if s["hour"] == hour)["courts"][court]
 
 
-def test_a_short_payment_keeps_the_slot_but_waits_for_the_host(admin, booking_payload, ocr_reads, fake_now):
+def test_a_short_payment_is_paid_with_a_note_for_the_host(admin, booking_payload, ocr_reads, fake_now):
+    # Paid is Paid: the host looks at every receipt and settles any balance with the guest.
     ocr_reads([line.replace("P250.00", "P200.00") for line in GOOD])
     code, headers = _book(admin, booking_payload)
     fake_now.advance(minutes=3)
     b = _upload(admin, code, headers).json()
-    assert b["status"] == "pending_verification"
-    assert b["pendingReason"] == "amount_short" and b["amountPaid"] == 200 and b["total"] == 250
-    assert _slot_state(admin) == "booked"  # nobody else can take it while the host sorts out the balance
-
-    d = admin.get(f"/api/admin/bookings/{code}").json()
-    assert d["label"] == "needs_check" and d["needsReview"] is True
-    assert [f["code"] for f in d["reviewFlags"]] == ["amount_short"]
-    assert d["reviewFlags"][0]["message"] == "Receipt shows ₱200, ₱50 short of the ₱250 total."
-    fake_now.advance(hours=3)  # the 10-minute hold doesn't apply any more: the host decides
+    assert b["status"] == "confirmed" and b["pendingReason"] is None
     assert _slot_state(admin) == "booked"
 
-    # the guest sent the missing ₱50 by GCash: the host confirms
-    assert admin.post(f"/api/admin/bookings/{code}/confirm").json()["status"] == "confirmed"
+    d = admin.get(f"/api/admin/bookings/{code}").json()
+    assert d["label"] == "paid" and d["needsReview"] is False
+    assert [f["code"] for f in d["reviewFlags"]] == ["amount_short"]
+    assert d["reviewFlags"][0]["message"] == "Receipt shows ₱200, ₱50 short of the ₱250 total."
+    assert admin.get("/api/admin/counts").json()["toReview"] == 0
 
 
-def test_a_receipt_with_no_readable_amount_waits_for_the_host(admin, booking_payload, ocr_reads):
+def test_a_receipt_whose_amount_couldnt_be_read_still_confirms_with_a_note(admin, booking_payload, ocr_reads):
+    # Not strict: everything else on it is a payment, so the guest isn't kept waiting; the host gets a note.
     ocr_reads(["RE••••K V.", "Sent via GCash", "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM"])
     code, headers = _book(admin, booking_payload)
     b = _upload(admin, code, headers).json()
-    assert b["status"] == "pending_verification" and b["pendingReason"] == "amount_unreadable"
+    assert b["status"] == "confirmed" and b["pendingReason"] is None
+    assert "amount_missing" in [f["code"] for f in admin.get(f"/api/admin/bookings/{code}").json()["reviewFlags"]]
 
 
-def test_an_image_with_no_text_is_not_a_payment(admin, booking_payload, ocr_reads):
-    ocr_reads([])  # the OCR worked and found nothing: a photo of something else
+def test_an_image_with_no_text_still_confirms_with_a_note(admin, booking_payload, ocr_reads):
+    ocr_reads([])  # the OCR worked and found nothing: the host will see the image and the note
     code, headers = _book(admin, booking_payload)
-    assert _upload(admin, code, headers).json()["status"] == "pending_verification"
+    assert _upload(admin, code, headers).json()["status"] == "confirmed"
+    assert [f["code"] for f in admin.get(f"/api/admin/bookings/{code}").json()["reviewFlags"]] == ["no_text"]
 
 
 def test_exact_and_over_payments_confirm_straight_away(admin, booking_payload, ocr_reads):

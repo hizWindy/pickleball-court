@@ -13,7 +13,6 @@ export const LABEL: Record<AdminLabel, { label: string; tone: Tone }> = {
   late: { label: 'Late', tone: 'amber' },
   done: { label: 'Done', tone: 'zinc' },
   rain_delay: { label: 'Rain delay', tone: 'blue' },
-  needs_check: { label: 'Needs check', tone: 'amber' },
   awaiting: { label: 'Paying now', tone: 'zinc' },
   blocked: { label: 'Blocked', tone: 'zinc' },
   rejected: { label: 'Rejected', tone: 'zinc' },
