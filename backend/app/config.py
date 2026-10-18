@@ -92,6 +92,8 @@ class Settings:
     receipt_retention_days: int = field(default_factory=lambda: _env_int("RECEIPT_RETENTION_DAYS", 14))
     # Read amount / reference / date / recipient off uploaded receipts (on this server; see app/ocr.py).
     ocr_enabled: bool = field(default_factory=lambda: _env("OCR_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off"))
+    # A receipt that takes longer than this to read (model loading included) is abandoned and flagged for the host.
+    ocr_timeout_seconds: int = field(default_factory=lambda: _env_int("OCR_TIMEOUT_SECONDS", 60))
     # Admin desk. With neither password set the admin API stays locked and no one can sign in.
     # ADMIN_PASSWORD_HASH (made with `python -m app.admin_auth`) is preferred over a plain ADMIN_PASSWORD.
     admin_password: str = field(default_factory=lambda: _env("ADMIN_PASSWORD", ""))

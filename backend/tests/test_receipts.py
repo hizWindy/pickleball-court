@@ -364,6 +364,24 @@ def test_typed_reference_confirms_and_is_flagged_for_a_look(admin, booking_paylo
     assert [f["code"] for f in d["reviewFlags"]] == ["typed_reference"] and d["scan"] is None
 
 
+# ── The OCR child process failing must never break a booking ──────────────────
+@pytest.mark.parametrize("failure", ["killed", "timeout", "garbage"])
+def test_ocr_child_failure_returns_none(monkeypatch, failure):
+    import subprocess
+
+    monkeypatch.setattr(ocr, "settings", replace(ocr.settings, ocr_enabled=True))
+
+    def fake_run(cmd, **kw):
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(cmd, kw["timeout"])
+        if failure == "killed":  # e.g. the OOM killer
+            return subprocess.CompletedProcess(cmd, -9, b"", b"Killed")
+        return subprocess.CompletedProcess(cmd, 0, b"not json", b"")
+
+    monkeypatch.setattr(ocr.subprocess, "run", fake_run)
+    assert ocr.read_lines(b"\xff\xd8\xff-image") is None
+
+
 # ── The real engine, on a generated receipt ───────────────────────────────────
 def test_real_ocr_reads_a_generated_receipt(monkeypatch):
     pytest.importorskip("rapidocr")

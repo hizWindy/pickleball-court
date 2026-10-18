@@ -47,7 +47,11 @@ The desk shows one **label** per booking, computed from those: **Paid · Late ·
 ## Reading receipts (OCR)
 
 `app/ocr.py` runs [RapidOCR](https://github.com/RapidAI/RapidOCR) (PaddleOCR models on ONNX Runtime) on our own server:
-no image leaves it, the ~30 MB of models ship inside the pip package, and a phone screenshot takes about 1-3 s.
+no image leaves it, the ~30 MB of models ship inside the pip package, and a phone screenshot takes about 2-3 s.
+The engine needs ~350 MB to load, so each receipt is read by a short-lived child process (`app/ocr_worker.py`): the web
+server idles at ~50 MB, borrows the memory for a few seconds per receipt, and if the child is ever killed or exceeds
+`OCR_TIMEOUT_SECONDS` (default 60) the booking is still confirmed and flagged `unreadable`. This is what lets a 512 MB
+Render instance cope; receipts are read one at a time.
 `app/receipt_reader.py` turns the text into fields by their labels, so it handles GCash, GoTyme and most bank receipts:
 
 | Field | Labels it looks for |

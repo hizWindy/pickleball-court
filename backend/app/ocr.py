@@ -3,24 +3,28 @@
 Uses RapidOCR (PaddleOCR models on ONNX Runtime): about 30 MB of models shipped inside the
 pip package, no system install, roughly 1-3 s per screenshot on a small CPU.
 
+The engine itself runs in a short-lived child process (app/ocr_worker.py) for every receipt. Loading it costs about
+340 MB, which a 512 MB server can't spare around the clock; this way the site idles small, a receipt borrows the
+memory for a few seconds and gives it back, and an out-of-memory kill takes down the child, not the site.
+
 OCR is a helper, never a gate: if the engine is missing, disabled or fails, `read_lines`
 returns None and the booking still goes through, flagged for the host to look at.
 """
 
 from __future__ import annotations
 
+import importlib.util
+import json
 import logging
+import subprocess
 import sys
 import threading
-import types
 from dataclasses import dataclass
 
-from app.config import settings
+from app.config import BASE_DIR, settings
 
 log = logging.getLogger("housepickle.ocr")
 
-_engine = None
-_engine_failed = False
 _lock = threading.Lock()  # one image at a time keeps memory flat on a 512 MB server
 
 
@@ -34,121 +38,40 @@ class Line:
     score: float
 
 
-def _shapely_fallback() -> None:
-    """RapidOCR only needs a polygon's area and perimeter from Shapely. Some Windows PCs block
-    Shapely's DLL (Smart App Control), so provide those two numbers in plain Python instead."""
-    try:
-        import shapely.geometry  # noqa: F401
-
-        return
-    except ImportError:
-        pass
-
-    class Polygon:
-        def __init__(self, points):
-            self._p = [(float(x), float(y)) for x, y in points]
-
-        @property
-        def area(self) -> float:
-            p, n = self._p, len(self._p)
-            return abs(sum(p[i][0] * p[(i + 1) % n][1] - p[(i + 1) % n][0] * p[i][1] for i in range(n))) / 2
-
-        @property
-        def length(self) -> float:
-            p, n = self._p, len(self._p)
-            return sum(((p[i][0] - p[(i + 1) % n][0]) ** 2 + (p[i][1] - p[(i + 1) % n][1]) ** 2) ** 0.5 for i in range(n))
-
-    for name in [m for m in sys.modules if m == "shapely" or m.startswith("shapely.")]:
-        del sys.modules[name]
-    geometry = types.ModuleType("shapely.geometry")
-    geometry.Polygon = Polygon
-    shapely = types.ModuleType("shapely")
-    shapely.geometry = geometry
-    sys.modules["shapely"] = shapely
-    sys.modules["shapely.geometry"] = geometry
-
-
-def _get_engine():
-    global _engine, _engine_failed
-    if _engine is not None or _engine_failed:
-        return _engine
-    try:
-        _shapely_fallback()
-        from rapidocr import RapidOCR
-
-        # No angle classifier: it only rights upside-down text lines, which a screenshot never has, and skipping it
-        # saves about a third of the time with identical results on GCash / GoTyme receipts.
-        _engine = RapidOCR(params={"Global.log_level": "error", "Global.use_cls": False})
-    except Exception:  # missing package, blocked DLL, bad model file...
-        _engine_failed = True
-        log.exception("receipt OCR is unavailable; receipts will be flagged for a manual look")
-    return _engine
-
-
-def warm_up() -> None:
-    """Load the engine and push one tiny image through it, so the first guest to upload a receipt after the server
-    starts doesn't pay for the model loading (several seconds on a small server)."""
-    if not settings.ocr_enabled:
-        return
-    engine = _get_engine()
-    if engine is None:
-        return
-    try:
-        import numpy as np
-
-        with _lock:
-            engine(np.full((96, 256, 3), 255, dtype=np.uint8))
-    except Exception:
-        log.exception("OCR warm-up failed (receipts will still be read, just slower the first time)")
-
-
 def available() -> bool:
-    return settings.ocr_enabled and _get_engine() is not None
-
-
-def _rows(boxes, texts, scores) -> list[Line]:
-    """Group the engine's word boxes into visual rows, so 'Sent to' and 'JUAN DELA CRUZ' land on one line."""
-    items = []
-    for box, text, score in zip(boxes, texts, scores):
-        ys = [float(p[1]) for p in box]
-        xs = [float(p[0]) for p in box]
-        items.append((min(ys), max(ys) - min(ys), min(xs), str(text).strip(), float(score)))
-    items.sort(key=lambda i: (i[0], i[2]))
-
-    rows: list[list[tuple]] = []
-    for item in items:
-        top, height = item[0], item[1]
-        if rows:
-            last = rows[-1]
-            row_top = min(i[0] for i in last)
-            row_h = max(i[1] for i in last)
-            if abs(top - row_top) < 0.6 * max(height, row_h):  # same baseline
-                last.append(item)
-                continue
-        rows.append([item])
-
-    lines = []
-    for row in rows:
-        row.sort(key=lambda i: i[2])
-        text = "  ".join(i[3] for i in row if i[3])
-        if text:
-            lines.append(Line(text=text, top=min(i[0] for i in row), height=max(i[1] for i in row), score=min(i[4] for i in row)))
-    return lines
+    """OCR is on and the engine is installed (checked without loading it)."""
+    return settings.ocr_enabled and importlib.util.find_spec("rapidocr") is not None
 
 
 def read_lines(image: bytes) -> list[Line] | None:
     """Text rows of the image, top to bottom. None if OCR is off, unavailable or failed."""
     if not settings.ocr_enabled:
         return None
-    engine = _get_engine()
-    if engine is None:
-        return None
     try:
         with _lock:
-            result = engine(image)
-    except Exception:
-        log.exception("OCR failed on a receipt")
+            done = subprocess.run(
+                [sys.executable, "-m", "app.ocr_worker"],
+                input=image,
+                capture_output=True,
+                cwd=BASE_DIR,
+                timeout=settings.ocr_timeout_seconds,
+            )
+    except subprocess.TimeoutExpired:
+        log.error("OCR took longer than %s s and was stopped; the receipt will be flagged", settings.ocr_timeout_seconds)
         return None
-    if not result or result.txts is None or result.boxes is None:
-        return []
-    return _rows(result.boxes, result.txts, result.scores)
+    except OSError:
+        log.exception("OCR could not be started; receipts will be flagged for a manual look")
+        return None
+
+    if done.returncode != 0:  # includes -9 / 137 when the box killed it for memory
+        log.error(
+            "OCR worker failed (exit %s); the receipt will be flagged. %s",
+            done.returncode, done.stderr.decode("utf-8", "replace")[-600:].strip(),
+        )
+        return None
+    try:
+        rows = json.loads(done.stdout)["lines"]
+        return [Line(text=r["text"], top=r["top"], height=r["height"], score=r["score"]) for r in rows]
+    except (ValueError, KeyError, TypeError):
+        log.exception("OCR worker returned something unreadable")
+        return None

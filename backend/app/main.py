@@ -17,7 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import admin_auth, booking_service, notify, ocr
+from app import admin_auth, booking_service, notify
 from app.admin_api import router as admin_router
 from app.api import router
 from app.config import settings
@@ -63,14 +63,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if not admin_auth.configured():
         log.warning("Admin desk is locked: set ADMIN_PASSWORD_HASH (python -m app.admin_auth) or ADMIN_PASSWORD to sign in.")
     task = asyncio.create_task(_sweep_forever())
-    warm = asyncio.create_task(asyncio.to_thread(ocr.warm_up))  # in the background: the site is up straight away
     try:
         yield
     finally:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
-        await asyncio.gather(warm, return_exceptions=True)
 
 
 app = FastAPI(title="HousePickle Club Booking API", version="1.0.0", lifespan=lifespan)
