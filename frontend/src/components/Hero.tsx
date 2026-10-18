@@ -9,7 +9,8 @@ import {
   Clock,
   ShieldCheck,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  TicketCheck
 } from 'lucide-react';
 import { motion, useScroll, useTransform } from 'motion/react';
 import { COURT_DETAILS, COURTS, SLOTS_BY_PERIOD } from '../data/mockData';
@@ -20,9 +21,10 @@ import { addDays, currentPlayDate, fmtDate } from '../lib/time';
 
 interface HeroProps {
   onOpenDirectBooking: (seed?: BookingDraftSeed) => void;
+  onCheckBooking: () => void;
 }
 
-export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
+export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking, onCheckBooking }) => {
   const heroRef = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({
     target: heroRef,
@@ -201,6 +203,22 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking }) => {
               <ShieldCheck className="w-3.5 h-3.5 shrink-0" /> Quick GCash Pay
             </span>
           </motion.div>
+
+          {/* Already booked? The labelled way back to a booking, above the fold on a phone. */}
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
+            type="button"
+            onClick={onCheckBooking}
+            className="mt-4 inline-flex items-center gap-2 min-h-11 pl-3 pr-3.5 rounded-full bg-white border border-emerald-300 shadow-sm text-xs sm:text-[13px] font-medium text-zinc-700 hover:bg-emerald-50 hover:border-[#15803D] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200"
+          >
+            <TicketCheck className="w-4 h-4 shrink-0 text-[#15803D]" />
+            <span>
+              Already booked? <strong className="font-heading font-extrabold uppercase tracking-wide text-[#15803D]">Check my booking</strong>
+            </span>
+            <ChevronRight className="w-4 h-4 shrink-0 text-[#15803D]" />
+          </motion.button>
         </div>
 
         {/* Double-Bezel Hardware Reservation Console */}

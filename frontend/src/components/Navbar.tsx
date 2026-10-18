@@ -1,12 +1,13 @@
 import React from 'react';
-import { ArrowUpRight, LockKeyhole } from 'lucide-react';
+import { ArrowUpRight, LockKeyhole, TicketCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface NavbarProps {
   onOpenDirectBooking: () => void;
+  onCheckBooking: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenDirectBooking }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onOpenDirectBooking, onCheckBooking }) => {
   return (
     <header className="fixed top-2 sm:top-3 inset-x-0 z-50 px-2 sm:px-6 pointer-events-none">
       <div className="max-w-6xl mx-auto pointer-events-auto">
@@ -38,7 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenDirectBooking }) => {
           </div>
 
           {/* Nav Links */}
-          <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-xs font-heading font-bold uppercase tracking-wider text-zinc-600 shrink-0">
+          <nav className="hidden lg:flex items-center gap-5 xl:gap-8 text-xs font-heading font-bold uppercase tracking-wider text-zinc-600 shrink-0">
             <a href="#open-slots" className="hover:text-[#15803D] transition-colors whitespace-nowrap">
               Open Slots
             </a>
@@ -51,20 +52,34 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenDirectBooking }) => {
             <a href="#location" className="hover:text-[#15803D] transition-colors whitespace-nowrap">
               Location
             </a>
+            <button type="button" onClick={onCheckBooking} className="hidden xl:inline hover:text-[#15803D] transition-colors whitespace-nowrap cursor-pointer uppercase tracking-wider">
+              Check my booking
+            </button>
           </nav>
 
           {/* Right Action Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            {/* Check my booking: a ticket icon below the xl width, where the text link would not fit, always labelled for screen readers. */}
+            <button
+              type="button"
+              onClick={onCheckBooking}
+              aria-label="Check my booking"
+              title="Check my booking"
+              className="xl:hidden flex items-center justify-center w-8 h-8 rounded-full border border-emerald-300 bg-emerald-50 text-[#15803D] hover:bg-emerald-100 transition-colors cursor-pointer shrink-0"
+            >
+              <TicketCheck className="w-4 h-4" />
+            </button>
+
             {/* Staff sign-in: a quiet outlined button, deliberately not green so it never competes with Book. */}
             <a
               href="/admin"
               rel="nofollow"
               aria-label="Staff sign-in"
               title="Staff sign-in"
-              className="flex items-center justify-center gap-1.5 w-7 h-7 sm:w-auto sm:h-8 sm:px-3 rounded-full border border-zinc-300 text-zinc-500 hover:text-[#15803D] hover:border-emerald-300 hover:bg-emerald-50 text-[11px] font-heading font-bold uppercase tracking-wider transition-colors shrink-0"
+              className="flex items-center justify-center gap-1.5 w-7 h-7 sm:w-8 sm:h-8 xl:w-auto xl:px-3 rounded-full border border-zinc-300 text-zinc-500 hover:text-[#15803D] hover:border-emerald-300 hover:bg-emerald-50 text-[11px] font-heading font-bold uppercase tracking-wider transition-colors shrink-0"
             >
               <LockKeyhole className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Staff</span>
+              <span className="hidden xl:inline">Staff</span>
             </a>
 
             {/* Book Court CTA: the one persistent booking button. The navbar is fixed, so it's always in reach. */}

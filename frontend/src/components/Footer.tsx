@@ -1,7 +1,7 @@
 import React from 'react';
 import { COURT_DETAILS } from '../data/mockData';
 
-export const Footer: React.FC<{ onReschedule: () => void }> = ({ onReschedule }) => {
+export const Footer: React.FC<{ onCheckBooking: () => void }> = ({ onCheckBooking }) => {
   return (
     <footer className="bg-[#F6F8FA] border-t border-zinc-200/80 py-10 text-xs text-zinc-500">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-6">
@@ -50,8 +50,8 @@ export const Footer: React.FC<{ onReschedule: () => void }> = ({ onReschedule })
           Staff
         </a>
         <span aria-hidden>·</span>
-        <button type="button" onClick={onReschedule} className="px-1 py-2 hover:text-zinc-600 focus-visible:text-zinc-700 cursor-pointer">
-          Reschedule my booking
+        <button type="button" onClick={onCheckBooking} className="px-1 py-2 hover:text-zinc-600 focus-visible:text-zinc-700 cursor-pointer">
+          Check my booking
         </button>
       </div>
     </footer>

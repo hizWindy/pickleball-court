@@ -89,7 +89,7 @@ def weather(conn: sqlite3.Connection = Conn) -> WeatherOut:
 def rain_delay_preview(
     date: date,
     from_hour: int = Query(alias="fromHour", ge=0, le=23),
-    hours: int = Query(ge=1, le=24),
+    hours: int = Query(ge=1, le=72),
     conn: sqlite3.Connection = Conn,
 ) -> RainDelayPreview:
     return svc.rain_delay_preview(conn, date, from_hour, hours)

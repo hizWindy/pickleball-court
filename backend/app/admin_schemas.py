@@ -227,12 +227,12 @@ class WeatherOut(ApiModel):
 
 
 class RainDelayIn(ApiModel):
-    """A window of the play day, e.g. 2 PM for 5 hours on Saturday. Everyone playing in it is rain-delayed
-    unless `codes` narrows it down."""
+    """A window starting in the play day, e.g. 2 PM for 5 hours on Saturday, or "now" for 48 hours when a typhoon is
+    coming. Everyone playing in it is rain-delayed unless `codes` narrows it down."""
 
     date: Day
     from_hour: int = Field(ge=0, le=23)
-    hours: int = Field(ge=1, le=24)
+    hours: int = Field(ge=1, le=72)  # up to three days: a typhoon can last that long
     codes: list[str] | None = Field(default=None, max_length=200)
     note: str | None = Field(default=None, max_length=200)
 

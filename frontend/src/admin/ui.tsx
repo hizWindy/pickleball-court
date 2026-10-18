@@ -93,7 +93,7 @@ export const LinkBtn: React.FC<React.AnchorHTMLAttributes<HTMLAnchorElement> & {
   </a>
 );
 
-/** Copy some text (a message to paste into Messenger, say), with a quiet "Copied" confirmation. */
+/** Copy some text (a message to paste into a text, say), with a quiet "Copied" confirmation. */
 export const CopyBtn: React.FC<{ text: string; label?: string; size?: Size; className?: string }> = ({ text, label = 'Copy', size = 'md', className }) => {
   const [copied, setCopied] = useState(false);
   useEffect(() => {

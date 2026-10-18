@@ -6,10 +6,9 @@ import { adminApi } from './api';
 import { useDesk } from './desk';
 import { clock, hourSpan, manilaHour, PLAY_HOURS, when } from './format';
 import { useNow, useRemote } from './hooks';
-import { rainMessage } from './messages';
 import { HOUR_MS, rainFill, upcomingHours } from './forecast';
-import { ContactBtns } from './QuickActions';
-import { Btn, Card, CopyBtn, cx, Dialog, ErrorNote, Field, Label, SelectInput, TextInput } from './ui';
+import { GuestRow, RebookCard, useRebook, type RebookWindow } from './RebookNow';
+import { Btn, Card, cx, Dialog, ErrorNote, Field, Label, SelectInput, TextInput } from './ui';
 import { useQuickActions, type QuickApi } from './useQuickActions';
 import type { AdminBooking, RainDelayPreview, RainRisk, WeatherReport } from './types';
 
@@ -19,12 +18,7 @@ interface Win {
   fromHour: number;
   hours: number;
 }
-interface Seed {
-  win: Win;
-  nonce: number;
-}
-
-const NOTES = ['Heavy rain', 'Thunderstorm', 'Flooded court'];
+const NOTES = ['Heavy rain', 'Typhoon', 'Thunderstorm', 'Flooded court'];
 const weekdayFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', weekday: 'short' });
 const dayNumFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', day: 'numeric' });
 /** "Thu 8" (the date order differs between locales, so it is put together here) */
@@ -66,7 +60,7 @@ export const WeatherPage: React.FC = () => {
   const now = useNow(30000);
   const { q, problemDialog } = useQuickActions();
   const { report, loading } = desk.weather;
-  const [seed, setSeed] = useState<Seed | null>(null);
+  const rebook = useRebook();
   const formRef = useRef<HTMLElement>(null);
   const waitingRef = useRef<HTMLElement>(null);
   const { refreshWeather } = desk;
@@ -76,9 +70,10 @@ export const WeatherPage: React.FC = () => {
     refreshWeather();
   }, [refreshWeather]);
 
-  const callFor = (win: Win) => {
-    setSeed({ win, nonce: Date.now() });
-    window.requestAnimationFrame(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  // "Rebook these guests" on a rainy stretch: the same one-tap flow, for exactly that stretch.
+  const rebookWindow = (win: Win) => {
+    const w: RebookWindow = { ...win, label: winText(win), sub: winText(win) };
+    rebook.start(`risk-${win.date}`, w);
   };
 
   const waiting = desk.counts?.rainDelay ?? 0;
@@ -112,6 +107,16 @@ export const WeatherPage: React.FC = () => {
         </button>
       )}
 
+      <section aria-labelledby="rebook-h">
+        <Heading
+          id="rebook-h"
+          title="Rebook guests"
+          note="Rain or typhoon? One tap gives the affected hours back and asks those guests to pick a new time. Nothing is cancelled or refunded."
+        />
+        <RebookCard rebook={rebook} onChoose={() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+      </section>
+      {rebook.ui}
+
       <section aria-labelledby="forecast-h">
         <Heading id="forecast-h" title="Next 48 hours" />
         <ForecastCard report={report} loading={loading} now={now} onRetry={refreshWeather} />
@@ -120,17 +125,17 @@ export const WeatherPage: React.FC = () => {
       {report?.available && (
         <section aria-labelledby="risk-h">
           <Heading id="risk-h" title="Bookings in the rain" note={`Paid bookings in hours with a ${report.warnPercent}% or higher chance of rain.`} />
-          <RainRisks report={report} onCall={callFor} />
+          <RainRisks report={report} onCall={rebookWindow} busy={rebook.looking !== null} />
         </section>
       )}
 
       <section ref={formRef} aria-labelledby="delay-h" className="scroll-mt-20">
         <Heading
           id="delay-h"
-          title="Call a rain delay"
-          note="Guests give their hours back and pick a new time themselves. Nothing is cancelled or refunded."
+          title="Choose the hours yourself"
+          note="Pick a day and time, see who is affected, then tick who to rebook. Guests pick a new time themselves. Nothing is cancelled or refunded."
         />
-        <RainDelayForm key={seed?.nonce ?? 0} seed={seed} />
+        <RainDelayForm />
       </section>
 
       <section ref={waitingRef} aria-labelledby="waiting-h" className="scroll-mt-20">
@@ -247,7 +252,7 @@ const ForecastStrip: React.FC<{ report: WeatherReport; now: number }> = ({ repor
 };
 
 // ── Bookings in the rain ──────────────────────────────────────────────────────
-const RainRisks: React.FC<{ report: WeatherReport; onCall: (win: Win) => void }> = ({ report, onCall }) => {
+const RainRisks: React.FC<{ report: WeatherReport; onCall: (win: Win) => void; busy: boolean }> = ({ report, onCall, busy }) => {
   const desk = useDesk();
   const groups = useMemo(() => {
     const byDay = new Map<string, RainRisk[]>();
@@ -294,8 +299,8 @@ const RainRisks: React.FC<{ report: WeatherReport; onCall: (win: Win) => void }>
             ))}
           </ul>
           <div className="px-4 pt-2">
-            <Btn variant="dark" className="w-full" onClick={() => onCall(windowFor(risks.map((r) => r.booking)))}>
-              <CloudRain className="h-4 w-4" /> Call rain delay for this window
+            <Btn variant="dark" className="w-full" disabled={busy} onClick={() => onCall(windowFor(risks.map((r) => r.booking)))}>
+              <CloudRain className="h-4 w-4" /> Rebook these guests
             </Btn>
           </div>
         </div>
@@ -305,9 +310,9 @@ const RainRisks: React.FC<{ report: WeatherReport; onCall: (win: Win) => void }>
 };
 
 // ── Call a rain delay ─────────────────────────────────────────────────────────
-const RainDelayForm: React.FC<{ seed: Seed | null }> = ({ seed }) => {
+const RainDelayForm: React.FC = () => {
   const desk = useDesk();
-  const [win, setWinState] = useState<Win>(() => seed?.win ?? defaultWindow());
+  const [win, setWinState] = useState<Win>(() => defaultWindow());
   const [note, setNote] = useState('Heavy rain');
   const [preview, setPreview] = useState<RainDelayPreview | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -340,11 +345,6 @@ const RainDelayForm: React.FC<{ seed: Seed | null }> = ({ seed }) => {
       setPreviewing(false);
     }
   }, []);
-
-  // "Call rain delay for this window" on a rainy booking remounts the form with that window and shows who it would move.
-  useEffect(() => {
-    if (seed) loadPreview(seed.win);
-  }, [seed, loadPreview]);
 
   const chosen = preview ? preview.bookings.filter((b) => picked.has(b.code)) : [];
 
@@ -573,40 +573,6 @@ const RainDelayForm: React.FC<{ seed: Seed | null }> = ({ seed }) => {
         </Dialog>
       )}
     </div>
-  );
-};
-
-// ── A guest to message ────────────────────────────────────────────────────────
-/** One rain-delayed guest, with the message ready to send. */
-const GuestRow: React.FC<{ b: AdminBooking; onOpen?: () => void; onUndo?: () => void }> = ({ b, onOpen, onUndo }) => {
-  const message = rainMessage(b);
-  return (
-    <Card className="p-4">
-      <button
-        type="button"
-        onClick={onOpen}
-        disabled={!onOpen}
-        className="flex w-full items-center gap-2 rounded-lg text-left enabled:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15803D]"
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-heading text-base font-bold text-zinc-950">{b.customerName}</span>
-          <span className="block text-sm text-zinc-600">
-            {b.courtName} · {when(b)}
-          </span>
-        </span>
-        {onOpen && <ChevronRight className="h-5 w-5 shrink-0 text-zinc-300" />}
-      </button>
-      {!b.customerPhone && <p className="mt-2 text-xs text-zinc-500">No phone number saved. Copy the message and send it on Messenger instead.</p>}
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <ContactBtns b={b} message={message} />
-        <CopyBtn text={message} label="Copy message" className={onUndo ? '!px-3' : 'col-span-2'} />
-        {onUndo && (
-          <Btn onClick={onUndo}>
-            Undo
-          </Btn>
-        )}
-      </div>
-    </Card>
   );
 };
 

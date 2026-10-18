@@ -125,6 +125,13 @@ export function App() {
     setPass({ code: booking.code, token, booking });
   }, []);
 
+  // "Open my pass" from the Check my booking screen.
+  const openPassFromCheck = useCallback((booking: Booking, token: string) => {
+    device.savePass(booking.code, token);
+    setReschedule(null);
+    setPass({ code: booking.code, token, booking });
+  }, []);
+
   const handleBookSpecificCourt = (court: Court) => openBooking({ courtId: court.id });
   // Any open layer makes the page behind it inert (no taps, no focus, hidden from screen readers).
   // For the payment window this is the "focus lock" from the payment rules.
@@ -139,11 +146,11 @@ export function App() {
       >
         <FramerScrollProgress />
 
-        <Navbar onOpenDirectBooking={() => openBooking()} />
+        <Navbar onOpenDirectBooking={() => openBooking()} onCheckBooking={() => startReschedule()} />
 
         <main className="flex-1 pt-18 sm:pt-20">
           <AnnouncementStrip onBook={openBooking} />
-          <Hero onOpenDirectBooking={openBooking} />
+          <Hero onOpenDirectBooking={openBooking} onCheckBooking={() => startReschedule()} />
           <NextOpenSlots onBook={openBooking} />
           <FramerBentoFeatures />
           <CourtShowcase onBookCourt={handleBookSpecificCourt} />
@@ -151,7 +158,7 @@ export function App() {
           <LocationDetails />
         </main>
 
-        <Footer onReschedule={() => startReschedule()} />
+        <Footer onCheckBooking={() => startReschedule()} />
       </div>
 
       <Suspense fallback={null}>
@@ -169,7 +176,7 @@ export function App() {
           />
         )}
         {reschedule && !lock && (
-          <RescheduleSheet seed={reschedule} onClose={() => setReschedule(null)} onDone={handleRescheduled} />
+          <RescheduleSheet seed={reschedule} onClose={() => setReschedule(null)} onDone={handleRescheduled} onOpenPass={openPassFromCheck} />
         )}
         {lock && (
           <PaymentLock key={lock.code} code={lock.code} token={lock.token} initial={lock.booking} onSubmitted={handleSubmitted} onClosed={handleLockClosed} />

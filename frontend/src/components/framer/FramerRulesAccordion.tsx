@@ -90,7 +90,7 @@ function buildFaq(config: AppConfig | null): AccordionItem[] {
       id: 'rain',
       category: 'Bookings',
       question: 'What if it rains?',
-      answer: "If the host closes the courts because of weather, your booking is moved free of charge. You'll get a message with a link to pick a new time, and it doesn't use up your one reschedule.",
+      answer: "If the host closes the courts because of weather, your booking is moved free of charge. Open the site and tap “Check my booking” (or use the link the host sends you) to pick a new time. It's free and doesn't use up your one reschedule.",
       action: 'reschedule'
     },
     {
@@ -237,15 +237,15 @@ export const FramerRulesAccordion: React.FC<{ onReschedule?: () => void }> = ({ 
             {onReschedule && (
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-emerald-200 bg-[#F0FDF4]/70 p-4">
                 <div>
-                  <p className="font-heading font-extrabold text-xs sm:text-sm uppercase tracking-wide text-zinc-900">Need to move your booking?</p>
-                  <p className="text-xs text-zinc-600 font-medium mt-0.5">You can reschedule once, at least {config?.rescheduleMinHours ?? 48} hours before your start time.</p>
+                  <p className="font-heading font-extrabold text-xs sm:text-sm uppercase tracking-wide text-zinc-900">Already booked? Check your booking</p>
+                  <p className="text-xs text-zinc-600 font-medium mt-0.5">See your status, rebook free after rain, or reschedule once (at least {config?.rescheduleMinHours ?? 48} hours before your start time).</p>
                 </div>
                 <button
                   type="button"
                   onClick={onReschedule}
                   className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#15803D] px-4 text-xs sm:text-sm font-heading font-extrabold uppercase tracking-wider text-white shadow-xs hover:bg-[#166534] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-300"
                 >
-                  <CalendarClock className="w-4 h-4" /> Reschedule my booking
+                  <CalendarClock className="w-4 h-4" /> Check my booking
                 </button>
               </div>
             )}
@@ -332,7 +332,7 @@ export const FramerRulesAccordion: React.FC<{ onReschedule?: () => void }> = ({ 
                               onClick={onReschedule}
                               className="mt-3 inline-flex min-h-11 items-center gap-1.5 text-xs font-heading font-extrabold uppercase tracking-wider text-[#15803D] underline underline-offset-4 hover:text-[#166534] cursor-pointer"
                             >
-                              <CalendarClock className="w-4 h-4" /> Reschedule my booking
+                              <CalendarClock className="w-4 h-4" /> Check my booking
                             </button>
                           )}
                           <div className="mt-3 flex items-center justify-between text-[10px] font-sport uppercase tracking-wider">

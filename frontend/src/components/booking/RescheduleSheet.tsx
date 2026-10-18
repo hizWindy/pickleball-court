@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, CalendarClock, Check, ChevronRight, Clock, CloudRain, Lock, Tag, X } from 'lucide-react';
-import { api, ApiError, errorMessage } from '../../lib/api';
+import { AlertTriangle, ArrowLeft, CalendarClock, Check, CheckCircle2, ChevronRight, Clock, CloudRain, Info, Lock, Tag, X } from 'lucide-react';
+import { api, ApiError, errorMessage, serverNowMs } from '../../lib/api';
 import { device } from '../../lib/device';
+import { passState, type PassTone } from '../../lib/pass';
 import { normalizePhone } from '../../lib/phone';
 import { addDays, afterMidnightNote, fmtDate, fmtSchedule, hourLabel, hourTimeLabel, hrsLabel, isNightHour, peso } from '../../lib/time';
 import { useAvailability, useConfig } from '../../hooks/useBookingData';
@@ -23,6 +24,8 @@ interface Props {
   onClose: () => void;
   /** The booking was moved: the app opens its pass. */
   onDone: (booking: Booking, token: string) => void;
+  /** "Open my pass" on a booking that was found. */
+  onOpenPass: (booking: Booking, token: string) => void;
 }
 
 type Step = 'find' | 'date' | 'time' | 'review';
@@ -42,6 +45,61 @@ function formatCode(raw: string): string {
   return c.length > 4 ? `HPC-${c.slice(0, 4)}-${c.slice(4)}` : `HPC-${c}`;
 }
 const CODE_RE = /^HPC-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+
+// ── What state is this booking in? ────────────────────────────────────────────
+const TONE: Record<PassTone, { pill: string; box: string }> = {
+  green: { pill: 'bg-emerald-100 text-emerald-800', box: 'bg-emerald-50 text-emerald-950 ring-emerald-200' },
+  amber: { pill: 'bg-amber-100 text-amber-900', box: 'bg-amber-50 text-amber-950 ring-amber-200' },
+  red: { pill: 'bg-red-100 text-red-800', box: 'bg-red-50 text-red-950 ring-red-200' },
+  blue: { pill: 'bg-sky-100 text-sky-900', box: 'bg-sky-50 text-sky-950 ring-sky-200' },
+  zinc: { pill: 'bg-zinc-100 text-zinc-700', box: 'bg-zinc-100 text-zinc-900 ring-zinc-200' },
+};
+
+interface Status {
+  label: string;
+  tone: PassTone;
+  hint: string;
+  /** The courts were closed for rain: the guest picks a new time, free. */
+  rebook: boolean;
+}
+
+/** The plain-words status of a booking: Confirmed, Rebook now, Completed, Late, Awaiting payment... */
+function statusOf(b: Booking): Status {
+  if (b.status === 'confirmed' && !b.weatherHold && !b.late && !b.arrived && Date.parse(b.endAt) <= serverNowMs()) {
+    return { label: 'Completed', tone: 'zinc', hint: 'This session is over. Hope you enjoyed the game!', rebook: false };
+  }
+  const s = passState(b);
+  if (s.key === 'rain') {
+    return { label: 'Rebook now', tone: 'blue', hint: 'The courts were closed for rain, so your session was moved. Pick a new time. It is free.', rebook: true };
+  }
+  return { label: s.label, tone: s.tone, hint: s.hint, rebook: false };
+}
+
+/** Why a booking can't be moved online, in words that fit its state. */
+function whyNotMovable(b: Booking): string {
+  if (b.late) return 'It was marked Late, so the court was released. Please contact the host.';
+  if (b.arrived) return "You're already checked in for this session.";
+  if (b.status === 'held') return 'Your payment window is still open. Open your pass to finish paying.';
+  if (b.status === 'expired') return 'The payment time ran out, so the slot was released. You can book again from the home page.';
+  if (b.status === 'rejected') return "The host couldn't verify the payment. Please message the host.";
+  if (b.status === 'cancelled') return 'This booking was closed and the slot is free again.';
+  if (b.status === 'confirmed' && Date.parse(b.endAt) <= serverNowMs()) return 'This session is already over.';
+  return 'Please message the host if you need a change.';
+}
+
+/** Rebook-now first, then upcoming sessions soonest first, then payments still open, then everything else. */
+function bySoonest(a: RescheduleLookup, b: RescheduleLookup): number {
+  const rank = (l: RescheduleLookup) => {
+    const x = l.booking;
+    if (x.weatherHold) return 0;
+    if (x.status === 'confirmed' && Date.parse(x.endAt) > serverNowMs()) return 1;
+    if (x.status === 'held') return 2;
+    return 3;
+  };
+  const d = rank(a) - rank(b);
+  if (d) return d;
+  return rank(a) === 3 ? b.booking.startAt.localeCompare(a.booking.startAt) : a.booking.startAt.localeCompare(b.booking.startAt);
+}
 
 // ── Which new slots can this booking move to? ─────────────────────────────────
 interface CourtOption {
@@ -108,7 +166,7 @@ function evaluate(b: Booking, config: AppConfig, avail: Availability, nextAvail:
   });
 }
 
-export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone }) => {
+export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone, onOpenPass }) => {
   const { config } = useConfig();
   useBodyScrollLock();
 
@@ -126,7 +184,21 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone }) => {
   const [courtId, setCourtId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ booking: Booking; token: string } | null>(null);
+  const [done, setDone] = useState<{ booking: Booking; token: string; weather: boolean } | null>(null);
+  // This phone's own bookings, looked up as the sheet opens so nobody has to type a code. Skipped when opened from a link.
+  const [saved, setSaved] = useState<RescheduleLookup[] | null>(() => (seed.code || device.passes().length === 0 ? [] : null));
+  useEffect(() => {
+    if (saved !== null) return;
+    let alive = true;
+    Promise.all(
+      device.passes().slice(0, 4).map((p) => api.rescheduleFind(p.code, undefined, p.token).catch(() => null))
+    ).then((rows) => {
+      if (alive) setSaved(rows.filter((r): r is RescheduleLookup => r !== null).sort(bySoonest));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [saved]);
 
   const booking = lookup?.booking ?? null;
   const hours = booking?.hours ?? 1;
@@ -222,7 +294,7 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone }) => {
         { code: booking.code, customerPhone: phoneNormalized ?? undefined, courtId: option.court.id, date, hour },
         lookup.accessToken
       );
-      setDone({ booking: moved, token: lookup.accessToken });
+      setDone({ booking: moved, token: lookup.accessToken, weather: state === 'weather' });
     } catch (e) {
       const c = e instanceof ApiError ? e.code : '';
       setError(errorMessage(e));
@@ -265,8 +337,15 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone }) => {
     !!option?.ok && !submitting;
 
   const footerLabel =
-    step === 'find' ? (!lookup ? 'Find my booking' : canMove ? 'Choose a new date' : 'Close') :
-    step === 'review' ? 'Confirm new time' : 'Continue';
+    step === 'find' ? (!lookup ? 'Find my booking' : state === 'weather' ? 'Rebook now' : canMove ? 'Reschedule my booking' : 'Open my pass') :
+    step === 'review' ? (state === 'weather' ? 'Confirm rebooking' : 'Confirm new time') : 'Continue';
+  const openPass = () => lookup && onOpenPass(lookup.booking, lookup.accessToken);
+  const title = done ? (done.weather ? 'Rebooked' : 'Booking moved') : step === 'find' ? 'Check my booking' : state === 'weather' ? 'Rebook your session' : 'Reschedule your booking';
+  const subtitle = done
+    ? null
+    : step === 'find'
+    ? lookup ? 'Your booking status' : 'See your status, or rebook after rain'
+    : `Step ${stepIndex} of ${STEPS.length - 1} · ${STEPS[stepIndex].label}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/50 backdrop-blur-[2px] sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="reschedule-title">
@@ -283,29 +362,28 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone }) => {
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div className="text-center">
-              <h2 id="reschedule-title" className="text-[15px] font-bold text-zinc-950">{done ? 'Booking moved' : 'Reschedule your booking'}</h2>
-              {!done && (
-                <p className="text-xs text-zinc-500">
-                  Step {stepIndex + 1} of {STEPS.length} · {STEPS[stepIndex].label}
-                </p>
-              )}
+              <h2 id="reschedule-title" className="text-[15px] font-bold text-zinc-950">{title}</h2>
+              {subtitle && <p className="text-xs text-zinc-500">{subtitle}</p>}
             </div>
             <button type="button" onClick={closeOrDone} className="flex h-11 w-11 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100 cursor-pointer" aria-label="Close">
               <X className="h-5 w-5" />
             </button>
           </div>
-          {!done && (
-            <div className="mt-3 grid grid-cols-4 gap-1.5" aria-hidden>
-              {STEPS.map((s, i) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  tabIndex={-1}
-                  disabled={i > stepIndex}
-                  onClick={() => setStep(s.id)}
-                  className={cx('h-1.5 rounded-full transition-colors', i <= stepIndex ? 'bg-[#15803D]' : 'bg-zinc-200', i < stepIndex && 'cursor-pointer')}
-                />
-              ))}
+          {!done && step !== 'find' && (
+            <div className="mt-3 grid grid-cols-3 gap-1.5" aria-hidden>
+              {STEPS.slice(1).map((s, k) => {
+                const i = k + 1;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    tabIndex={-1}
+                    disabled={i > stepIndex}
+                    onClick={() => setStep(s.id)}
+                    className={cx('h-1.5 rounded-full transition-colors', i <= stepIndex ? 'bg-[#15803D]' : 'bg-zinc-200', i < stepIndex && 'cursor-pointer')}
+                  />
+                );
+              })}
             </div>
           )}
         </header>
@@ -314,18 +392,22 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone }) => {
         <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <motion.div key={done ? 'done' : step} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.18 }}>
             {done ? (
-              <MovedView booking={done.booking} />
+              <MovedView booking={done.booking} weather={done.weather} />
             ) : step === 'find' ? (
               booking && lookup ? (
                 <FoundView
                   lookup={lookup}
                   minHours={minHours}
+                  onOpenPass={openPass}
                   onOther={() => { setLookup(null); setFindError(null); }}
                 />
               ) : auto ? (
                 <div className="py-16 text-center text-sm text-zinc-500" role="status">Finding your booking…</div>
               ) : (
+                <div className="space-y-7">
+                <SavedBookings items={saved} onPick={(l) => { setFindError(null); setLookup(l); }} />
                 <FindForm
+                  another={!!saved && saved.length > 0}
                   code={code}
                   onCode={(v) => setCode(formatCode(v))}
                   phone={phone}
@@ -335,6 +417,7 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone }) => {
                   error={findError}
                   onSubmit={submitFind}
                 />
+                </div>
               )
             ) : step === 'date' && booking && lookup ? (
               <div className="space-y-5">
@@ -380,7 +463,7 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone }) => {
           {done ? (
             <PrimaryButton className="w-full" onClick={closeOrDone}>Open my new pass</PrimaryButton>
           ) : step === 'find' && lookup && !canMove ? (
-            <SecondaryButton className="w-full" onClick={onClose}>Close</SecondaryButton>
+            <PrimaryButton className="w-full" onClick={openPass}>Open my pass</PrimaryButton>
           ) : (
             <PrimaryButton
               className="w-full shadow-md shadow-emerald-950/10 text-sm font-heading font-extrabold uppercase tracking-wider"
@@ -400,8 +483,10 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone }) => {
 
 // ── Step 1: find the booking ──────────────────────────────────────────────────
 function FindForm({
-  code, onCode, phone, onPhone, codeError, phoneError, error, onSubmit,
+  another, code, onCode, phone, onPhone, codeError, phoneError, error, onSubmit,
 }: {
+  /** Bookings from this phone are listed above, so this form is for a different one. */
+  another: boolean;
   code: string;
   onCode: (v: string) => void;
   phone: string;
@@ -413,7 +498,10 @@ function FindForm({
 }) {
   return (
     <form onSubmit={onSubmit} className="space-y-5" noValidate>
-      <StepTitle title="Find your booking" subtitle="Enter your booking code and the mobile number you booked with." />
+      <StepTitle
+        title={another ? 'Another booking?' : 'Find your booking'}
+        subtitle="Enter your booking code and the mobile number you booked with."
+      />
       <div className="space-y-4">
         <Field label="Booking code" error={codeError ? 'Enter the code from your pass, like HPC-AB12-CD34.' : undefined} hint="You can find it on your court pass or in your booking text.">
           <input
@@ -450,15 +538,17 @@ function FindForm({
 }
 
 /** The booking we found, and what can be done with it. */
-function FoundView({ lookup, minHours, onOther }: { lookup: RescheduleLookup; minHours: number; onOther: () => void }) {
+function FoundView({ lookup, minHours, onOpenPass, onOther }: { lookup: RescheduleLookup; minHours: number; onOpenPass: () => void; onOther: () => void }) {
   const { booking: b } = lookup;
   const sched = fmtSchedule(b.startAt, b.endAt);
   const state = b.reschedule;
   const hostMessage = `Hi! About booking ${b.code}: I'd like to ask about changing my time.`;
+  const status = statusOf(b);
 
   return (
     <div className="space-y-5">
       <StepTitle title="Is this your booking?" />
+      <StatusBanner status={status} />
       <div className="divide-y divide-zinc-100 rounded-3xl border border-zinc-200 bg-white text-sm">
         <div className="flex items-center justify-between gap-3 p-4">
           <div>
@@ -476,11 +566,10 @@ function FoundView({ lookup, minHours, onOther }: { lookup: RescheduleLookup; mi
       </div>
 
       {state === 'weather' && (
-        <div className="flex gap-3 rounded-2xl bg-sky-50 p-4 text-sm text-sky-950 ring-1 ring-sky-200">
+        <div className="flex gap-3 rounded-2xl bg-white p-4 text-sm text-zinc-700 ring-1 ring-zinc-200">
           <CloudRain className="mt-0.5 h-5 w-5 shrink-0 text-sky-600" />
           <p>
-            The courts were closed for rain, so your session was moved. <strong>Moving it now is free and doesn't use your one reschedule.</strong>{' '}
-            Pick any new time of the same length ({hrsLabel(b.hours)}).
+            <strong>Rebooking is free and doesn't use your one reschedule.</strong> Pick any new time of the same length ({hrsLabel(b.hours)}).
           </p>
         </div>
       )}
@@ -511,20 +600,81 @@ function FoundView({ lookup, minHours, onOther }: { lookup: RescheduleLookup; mi
       )}
       {state === 'unavailable' && (
         <Blocked title="This booking can't be moved online" code={b.code} message={hostMessage}>
-          {b.late
-            ? 'It was marked Late, so the court was released. Please contact the host.'
-            : b.arrived
-            ? "You're already checked in for this session."
-            : b.status !== 'confirmed'
-            ? 'Only paid, upcoming bookings can be rescheduled.'
-            : 'Please message the host if you need a change.'}
+          {whyNotMovable(b)}
         </Blocked>
+      )}
+
+      {(state === 'weather' || state === 'open') && (
+        <SecondaryButton className="w-full" onClick={onOpenPass}>Open my pass</SecondaryButton>
       )}
 
       <button type="button" onClick={onOther} className="min-h-11 text-sm font-semibold text-zinc-500 underline-offset-2 hover:text-zinc-800 hover:underline cursor-pointer">
         Not your booking? Look up another
       </button>
     </div>
+  );
+}
+
+/** The one-line answer to "what is going on with my booking?", in the colour of its state. */
+function StatusBanner({ status }: { status: Status }) {
+  const Icon = status.rebook ? CloudRain : status.tone === 'green' ? CheckCircle2 : status.tone === 'red' || status.tone === 'amber' ? AlertTriangle : Info;
+  return (
+    <div role="status" className={cx('flex items-start gap-3 rounded-2xl p-4 ring-1', TONE[status.tone].box)}>
+      <Icon className="mt-0.5 h-5 w-5 shrink-0" />
+      <div className="min-w-0">
+        <p className="font-heading text-base font-bold leading-tight">{status.label}</p>
+        <p className="mt-0.5 text-sm opacity-90">{status.hint}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Bookings this phone knows about, each with its live status, so a returning guest taps instead of types. */
+function SavedBookings({ items, onPick }: { items: RescheduleLookup[] | null; onPick: (l: RescheduleLookup) => void }) {
+  if (items === null) {
+    return (
+      <div className="space-y-2" aria-hidden>
+        <div className="h-4 w-44 animate-pulse rounded bg-zinc-200" />
+        <div className="h-[68px] animate-pulse rounded-2xl bg-zinc-100" />
+        <div className="h-[68px] animate-pulse rounded-2xl bg-zinc-100" />
+      </div>
+    );
+  }
+  if (items.length === 0) return null;
+  return (
+    <section aria-labelledby="saved-bookings-h" className="space-y-2.5">
+      <h3 id="saved-bookings-h" className="text-[15px] font-bold text-zinc-950">Your bookings on this phone</h3>
+      <ul className="space-y-2">
+        {items.map((l) => {
+          const b = l.booking;
+          const status = statusOf(b);
+          const sched = fmtSchedule(b.startAt, b.endAt);
+          return (
+            <li key={b.code}>
+              <button
+                type="button"
+                onClick={() => onPick(l)}
+                className={cx(
+                  'flex min-h-[68px] w-full cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3.5 text-left transition hover:border-[#15803D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15803D]',
+                  status.rebook ? 'border-sky-300 bg-sky-50/60' : 'border-zinc-200'
+                )}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-bold text-zinc-950">
+                    {b.courtName} · {sched.day}
+                  </span>
+                  <span className="block truncate text-xs text-zinc-500">
+                    {sched.time} · {b.code}
+                  </span>
+                </span>
+                <span className={cx('shrink-0 rounded-full px-2.5 py-1 text-xs font-bold', TONE[status.tone].pill)}>{status.label}</span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -792,7 +942,7 @@ function ReviewStep({
 }
 
 // ── Done ──────────────────────────────────────────────────────────────────────
-function MovedView({ booking }: { booking: Booking }) {
+function MovedView({ booking, weather }: { booking: Booking; weather: boolean }) {
   const sched = fmtSchedule(booking.startAt, booking.endAt);
   return (
     <div className="flex flex-col items-center gap-4 py-10 text-center">
@@ -805,7 +955,7 @@ function MovedView({ booking }: { booking: Booking }) {
         <Check className="h-8 w-8" strokeWidth={3} />
       </motion.span>
       <div>
-        <h3 className="text-2xl font-bold tracking-tight text-zinc-950">Moved! Your new pass is ready.</h3>
+        <h3 className="text-2xl font-bold tracking-tight text-zinc-950">{weather ? 'Rebooked!' : 'Moved!'} Your new pass is ready.</h3>
         <p className="mt-2 text-sm text-zinc-600">
           {booking.courtName} · {sched.day}
           {sched.note ? ` (${sched.note})` : ''}

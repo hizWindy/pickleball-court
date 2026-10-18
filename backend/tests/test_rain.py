@@ -124,6 +124,25 @@ def test_a_rain_delay_gives_the_hours_back_and_keeps_the_booking_paid(admin, boo
     assert guest["weatherHold"] is True and guest["reschedule"] == "weather" and guest["late"] is False
 
 
+def test_a_typhoon_window_can_span_several_days(admin, booking_payload):
+    today, _ = paid(admin, booking_payload, hour=15)
+    tomorrow, _ = paid(admin, booking_payload, date="2026-10-11", hour=9)
+    later, _ = paid(admin, booking_payload, date="2026-10-13", hour=9)  # after the storm
+    window = {"date": "2026-10-10", "fromHour": 10, "hours": 48}  # now until the same hour the day after tomorrow
+
+    preview = admin.get("/api/admin/rain-delay", params=window).json()
+    assert {x["code"] for x in preview["bookings"]} == {today, tomorrow}
+
+    res = admin.post("/api/admin/rain-delay", json={**window, "note": "Typhoon"})
+    assert res.status_code == 200, res.text
+    assert {b["code"] for b in res.json()["moved"]} == {today, tomorrow}
+    assert admin.get(f"/api/admin/bookings/{later}").json()["label"] == "paid"
+    assert admin.get("/api/admin/counts").json()["rainDelay"] == 2
+
+    too_long = admin.get("/api/admin/rain-delay", params={**window, "hours": 73})
+    assert too_long.status_code == 422  # three days is the limit
+
+
 def test_a_delayed_booking_never_goes_late_and_the_host_can_undo_the_delay(admin, booking_payload, fake_now):
     code, _ = paid(admin, booking_payload, hour=15)
     admin.post("/api/admin/rain-delay", json={"date": "2026-10-10", "fromHour": 14, "hours": 3})
