@@ -166,6 +166,7 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone, onOpen
   const [finding, setFinding] = useState(false);
   const [auto, setAuto] = useState(!!(seed.code && seed.token)); // opened with this device's token: look it up right away
   const [findError, setFindError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false); // the server found no booking for this code + number
   const [lookup, setLookup] = useState<RescheduleLookup | null>(null);
   const [date, setDate] = useState<string | null>(null);
   const [hour, setHour] = useState<number | null>(null);
@@ -185,12 +186,14 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone, onOpen
   const find = useCallback(async (c: string, p?: string, t?: string) => {
     setFinding(true);
     setFindError(null);
+    setNotFound(false);
     try {
       const res = await api.rescheduleFind(c, p, t);
       device.savePass(res.booking.code, res.accessToken); // so the pass opens on this device later
       setLookup(res);
     } catch (e) {
-      setFindError(errorMessage(e));
+      if (e instanceof ApiError && e.status === 404) setNotFound(true);
+      else setFindError(errorMessage(e));
     } finally {
       setFinding(false);
     }
@@ -373,7 +376,7 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone, onOpen
                   lookup={lookup}
                   minHours={minHours}
                   onOpenPass={openPass}
-                  onOther={() => { setLookup(null); setFindError(null); }}
+                  onOther={() => { setLookup(null); setFindError(null); setNotFound(false); }}
                 />
               ) : auto ? (
                 <div className="py-16 text-center text-sm text-zinc-500" role="status">Finding your booking…</div>
@@ -386,6 +389,8 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone, onOpen
                   codeError={touched && !codeValid}
                   phoneError={touched && !phoneNormalized}
                   error={findError}
+                  notFound={notFound}
+                  codeValid={codeValid}
                   onSubmit={submitFind}
                 />
               )
@@ -453,8 +458,11 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone, onOpen
 
 // ── Step 1: find the booking ──────────────────────────────────────────────────
 function FindForm({
-  code, onCode, phone, onPhone, codeError, phoneError, error, onSubmit,
+  code, onCode, phone, onPhone, codeError, phoneError, error, notFound, codeValid, onSubmit,
 }: {
+  /** No booking matched this code + number (the server gives the same answer for a wrong code and a wrong number). */
+  notFound: boolean;
+  codeValid: boolean;
   code: string;
   onCode: (v: string) => void;
   phone: string;
@@ -496,9 +504,32 @@ function FindForm({
         </Field>
       </div>
       <InlineError>{error}</InlineError>
+      {notFound && <NotFoundHelp code={codeValid ? code : ''} />}
       {/* lets the keyboard's Go/Enter key submit */}
       <button type="submit" className="sr-only" tabIndex={-1}>Find my booking</button>
     </form>
+  );
+}
+
+/**
+ * No match. The server answers the same for a wrong code, a wrong number and a booking that doesn't exist (so nobody can
+ * test which codes are real), which means the guest needs help working out which it is.
+ */
+function NotFoundHelp({ code }: { code: string }) {
+  return (
+    <div role="alert" className="space-y-3 rounded-2xl bg-amber-50 p-4 text-sm text-amber-950 ring-1 ring-amber-200">
+      <p className="flex items-center gap-2 font-heading text-base font-bold">
+        <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" /> We couldn't find that booking
+      </p>
+      <p>Please check:</p>
+      <ul className="space-y-1.5">
+        <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" /> The code is exactly as on your court pass, with the dashes (like HPC-AB12-CD34).</li>
+        <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" /> The mobile number is the one you used when you booked.</li>
+        <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" /> If you let go of an unpaid slot, that booking was removed and can't be looked up.</li>
+      </ul>
+      <p className="font-semibold">Still stuck? Send the host your code:</p>
+      <HostActions code={code} message={`Hi! I can't find my booking${code ? ` ${code}` : ''} on the website. Can you check it for me?`} />
+    </div>
   );
 }
 

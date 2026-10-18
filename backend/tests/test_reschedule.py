@@ -146,6 +146,20 @@ def test_only_paid_upcoming_bookings_can_move(client, booking_payload, fake_now)
     assert move(client, held["code"], "2026-10-15", 19).json()["error"]["code"] == "reschedule_unavailable"
 
 
+def test_an_expired_booking_can_still_be_looked_up_but_a_released_one_cannot(client, booking_payload, fake_now):
+    # Check my booking: an unpaid hold that ran out is kept as "expired", so the guest sees what happened to it...
+    ran_out = client.post("/api/bookings", json=booking_payload(date="2026-10-14", hour=19)).json()
+    fake_now.advance(minutes=30)
+    seen = find(client, ran_out["booking"]["code"])
+    assert seen.status_code == 200 and seen.json()["booking"]["status"] == "expired"
+
+    # ...but a hold the guest let go of is erased on purpose, so there is nothing to find.
+    let_go = client.post("/api/bookings", json=booking_payload(date="2026-10-15", hour=19)).json()
+    code, headers = let_go["booking"]["code"], {"X-Booking-Token": let_go["accessToken"]}
+    assert client.post(f"/api/bookings/{code}/release", headers=headers).status_code == 200
+    assert find(client, code).status_code == 404
+
+
 def test_a_late_booking_cannot_be_moved_online(client, booking_payload, fake_now):
     from datetime import datetime
 
