@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertTriangle, BookOpen, Clock, Download, ImagePlus, Keyboard, Maximize2, QrCode, RefreshCw, Upload } from 'lucide-react';
+import { AlertTriangle, BookOpen, Clock, Download, ImagePlus, Keyboard, Maximize2, QrCode, ReceiptText, RefreshCw, Upload } from 'lucide-react';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { prepareReceipt } from '../../lib/image';
 import { isIOS, saveImage, saveLabel, usePrefetchedImage } from '../../lib/saveImage';
@@ -28,12 +28,15 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   const { config } = useConfig();
   const [booking, setBooking] = useState<Booking | null>(initial ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'receipt' | 'reference'>('receipt');
+  // Typed details are the normal way to prove payment. Uploading a receipt only exists when the server is set up to read
+  // one (`proofMode: 'receipt'`), and then it is offered first, with typing as the fallback.
+  const [picked, setPicked] = useState<'receipt' | 'reference' | null>(null);
+  const mode: 'receipt' | 'reference' = config?.proofMode === 'receipt' ? picked ?? 'receipt' : 'reference';
+  const setMode = setPicked;
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [ref, setRef] = useState('');
-  const [paidTime, setPaidTime] = useState('');
   const [payerName, setPayerName] = useState(initial?.customerName ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -148,7 +151,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
     setBusy(true);
     setError(null);
     try {
-      const b = await api.submitReference(code, token, { referenceNumber: ref, paidTime, payerName });
+      const b = await api.submitReference(code, token, { referenceNumber: ref, payerName });
       onSubmitted(b);
     } catch (err) {
       handleProofError(err);
@@ -282,7 +285,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                   ) : null}
                   <Row label="Exact amount" value={pesoExact(booking.total)} strong copy={booking.total.toFixed(2)} />
                   <p className="rounded-2xl bg-amber-50 px-3 py-2.5 text-xs font-medium leading-relaxed text-amber-950 ring-1 ring-amber-100">
-                    Send the exact amount shown. The host checks every receipt.
+                    Send the exact amount shown. The host checks every payment in {account?.label ?? 'GCash'}.
                   </p>
                   <p className="rounded-2xl bg-zinc-50 px-3 py-2.5 text-xs leading-relaxed text-zinc-600">
                     {account?.qrImage ? (
@@ -295,8 +298,15 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                     ) : (
                       <>Open {account?.label ?? 'GCash'} and send to the account above. Check the name matches before you send.</>
                     )}{' '}
-                    Then take a screenshot of the receipt.
+                    {mode === 'receipt' ? 'Then take a screenshot of the receipt.' : 'Then come back here and type the reference number from your receipt.'}
                   </p>
+                  <div className="flex gap-2.5 rounded-2xl bg-sky-50 px-3 py-2.5 text-xs leading-relaxed text-sky-950 ring-1 ring-sky-100">
+                    <ReceiptText className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
+                    <p>
+                      <strong>Download or screenshot your own transaction receipt and keep it.</strong> In {account?.label ?? 'GCash'}, open
+                      your transaction history and save the receipt. If anything goes wrong with your payment, it is your proof.
+                    </p>
+                  </div>
                 </div>
                 {qrOpen && account?.qrImage && (
                   <div
@@ -456,7 +466,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                 ) : (
                   <form onSubmit={submitReference} className="space-y-4 rounded-3xl border border-zinc-200 bg-white p-4">
                     <label className="block">
-                      <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Reference number</span>
+                      <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Reference number (from your receipt)</span>
                       <input
                         value={ref}
                         onChange={(e) => setRef(e.target.value)}
@@ -474,18 +484,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                       )}
                     </label>
                     <label className="block">
-                      <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Time of payment</span>
-                      <input
-                        type="time"
-                        value={paidTime}
-                        onChange={(e) => setPaidTime(e.target.value)}
-                        required
-                        className="w-full rounded-2xl border border-zinc-200 px-4 py-3 text-base focus:border-[#15803D] focus:outline-none focus:ring-4 focus:ring-emerald-100"
-                      />
-                      <span className="mt-1 block text-xs text-zinc-500">Exactly as shown on your receipt.</span>
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Name on the account you paid from</span>
+                      <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Name of the sender (the account you paid from)</span>
                       <input
                         value={payerName}
                         onChange={(e) => setPayerName(e.target.value)}
@@ -494,18 +493,21 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                         required
                         className="w-full rounded-2xl border border-zinc-200 px-4 py-3 text-base focus:border-[#15803D] focus:outline-none focus:ring-4 focus:ring-emerald-100"
                       />
+                      <span className="mt-1 block text-xs text-zinc-500">The name on your {account?.label ?? 'GCash'} account, so the host can find your payment.</span>
                     </label>
                     <InlineError>{error}</InlineError>
-                    <PrimaryButton type="submit" className="w-full" loading={busy} disabled={!ref || !paidTime || payerName.trim().length < 2}>
+                    <PrimaryButton type="submit" className="w-full" loading={busy} disabled={!ref || payerName.trim().length < 2}>
                       Submit payment details
                     </PrimaryButton>
-                    <button
-                      type="button"
-                      onClick={() => { setMode('receipt'); setError(null); }}
-                      className="mx-auto flex items-center gap-1.5 text-sm font-semibold text-[#15803D] cursor-pointer"
-                    >
-                      <ImagePlus className="h-4 w-4" /> Upload a receipt instead (faster)
-                    </button>
+                    {config?.proofMode === 'receipt' && (
+                      <button
+                        type="button"
+                        onClick={() => { setMode('receipt'); setError(null); }}
+                        className="mx-auto flex items-center gap-1.5 text-sm font-semibold text-[#15803D] cursor-pointer"
+                      >
+                        <ImagePlus className="h-4 w-4" /> Upload a receipt instead (faster)
+                      </button>
+                    )}
                   </form>
                 )}
               </section>

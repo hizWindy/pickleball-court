@@ -24,7 +24,7 @@ export const PrivacyNotice: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         </p>
         <div>
           <h3 className="font-semibold text-zinc-900">What we collect</h3>
-          <p>Your name, mobile number, the court and time you book, and your payment proof (receipt image or reference number, payment time and payer name).</p>
+          <p>Your name, mobile number, the court and time you book, and your payment proof (the reference number and sender name you type in, or a receipt image if you upload one).</p>
         </div>
         <div>
           <h3 className="font-semibold text-zinc-900">Why</h3>
@@ -37,9 +37,8 @@ export const PrivacyNotice: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         <div>
           <h3 className="font-semibold text-zinc-900">How long</h3>
           <p>
-            Booking records are kept for reference. Receipt images are deleted about a week after your booking is confirmed. To confirm
-            you instantly, our own server reads the amount, reference number, date and recipient off your receipt; the image is not sent
-            to any other company.
+            Booking records are kept for reference. If you upload a receipt image, it is deleted about a week after your booking is
+            confirmed, and our own server reads it; the image is not sent to any other company.
           </p>
         </div>
         <div>
@@ -49,7 +48,7 @@ export const PrivacyNotice: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           </p>
         </div>
         <p className="rounded-2xl bg-emerald-50 p-3 text-xs text-emerald-900">
-          Tip: before uploading a receipt you may crop out your balance. We only need the amount, reference number, date and recipient.
+          Tip: download or screenshot your own transaction receipt from GCash / GoTyme and keep it. We only need the reference number and the sender name.
         </p>
       </div>
     </div>

@@ -14,6 +14,9 @@ os.environ["ADMIN_PASSWORD_HASH"] = ""  # empty (not unset) so a real .env can't
 ADMIN_PASSWORD = os.environ["ADMIN_PASSWORD"]
 # The real OCR engine is only loaded by the tests that ask for it (see test_receipts.py).
 os.environ["OCR_ENABLED"] = "0"
+# The app defaults to typed proof (no uploads). The suite runs in receipt mode so the upload + OCR paths stay covered;
+# test_reference_mode.py switches to the default.
+os.environ["PROOF_MODE"] = "receipt"
 
 from fastapi.testclient import TestClient  # noqa: E402
 

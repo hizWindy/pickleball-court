@@ -90,6 +90,10 @@ class Settings:
     # payment, or after the hard cap below if nobody ever reviewed it. The hash is kept to block reuse.
     receipt_keep_after_decision_days: int = field(default_factory=lambda: _env_int("RECEIPT_KEEP_AFTER_DECISION_DAYS", 7))
     receipt_retention_days: int = field(default_factory=lambda: _env_int("RECEIPT_RETENTION_DAYS", 14))
+    # How a player proves payment. "reference" (default): they type the reference number and the sender's name, nothing is
+    # uploaded and the OCR never runs, so a 512 MB server is plenty. "receipt": they upload a screenshot that is read on this
+    # server (needs ~400 MB spare while reading; see app/ocr.py). Switch back to "receipt" after upgrading the server's RAM.
+    proof_mode: str = field(default_factory=lambda: "receipt" if _env("PROOF_MODE", "reference").strip().lower() == "receipt" else "reference")
     # Read amount / reference / date / recipient off uploaded receipts (on this server; see app/ocr.py).
     ocr_enabled: bool = field(default_factory=lambda: _env("OCR_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off"))
     # A receipt that takes longer than this to read (model loading included) is abandoned and flagged for the host.

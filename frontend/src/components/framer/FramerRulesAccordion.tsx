@@ -63,13 +63,15 @@ function buildFaq(config: AppConfig | null): AccordionItem[] {
       id: 'gcash-process',
       category: 'Payment',
       question: 'How do I pay with GCash?',
-      answer: `Pick your date, time and court, then confirm. Your slot is held for ${hold} minutes while you send the full amount via GCash to Reymark Vergara (09128285344) and upload a screenshot of the receipt. When your receipt shows the full amount, your booking is confirmed right away and your court pass downloads. Each payment can only be used for one booking.`
+      answer: config?.proofMode === 'receipt'
+        ? `Pick your date, time and court, then confirm. Your slot is held for ${hold} minutes while you send the full amount via GCash to Reymark Vergara (09128285344) and upload a screenshot of the receipt. When your receipt shows the full amount, your booking is confirmed right away and your court pass downloads. Each payment can only be used for one booking.`
+        : `Pick your date, time and court, then confirm. Your slot is held for ${hold} minutes while you send the full amount via GCash to Reymark Vergara (09128285344). Then type the reference number from your GCash receipt and the name of the account you paid from, and your booking is confirmed right away and your court pass downloads. Always download or screenshot your own transaction receipt and keep it: it is your proof of payment if anything goes wrong. Each payment can only be used for one booking.`
     },
     {
       id: 'not-confirmed',
       category: 'Payment',
       question: 'Why is my booking not confirmed yet?',
-      answer: "A booking is confirmed only after the full payment is received. If your receipt shows less than the total, or the amount can't be read, the host checks it by hand and your slot stays reserved meanwhile. If it was short, send the rest to the same account and text the host your new receipt."
+      answer: "Your booking is confirmed as soon as you submit your reference number and name, but the host still checks every payment in the GCash / GoTyme app. If the amount is short or the payment can't be found, the host will message you. If it was short, send the rest to the same account and text the host your new reference number. Keep your own transaction receipt as proof."
     },
     {
       id: 'cancel',

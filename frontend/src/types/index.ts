@@ -66,6 +66,8 @@ export interface AppConfig {
   /** ...and the new date must be within this many days of the original one. */
   rescheduleWindowDays: number;
   consentVersion: string;
+  /** How a player proves payment: type the reference number + sender name, or (when the server has the RAM) upload a receipt. */
+  proofMode: 'reference' | 'receipt';
   today: string; // current play day, YYYY-MM-DD (Manila)
   serverNow: string;
 }

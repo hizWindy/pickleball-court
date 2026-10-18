@@ -10,10 +10,12 @@ Lifecycle:
      └─(player or host releases an unpaid hold)──▶ deleted: an unpaid hold that was let go leaves no record
 
 * There is no cancellation of a paid booking. The only way out is to reschedule (see `reschedule.py`).
-* Payment proof confirms the booking straight away: paid is Paid, and the host looks at every receipt
-  anyway. The receipt image is read on the server (amount, reference, date, sender); whatever doesn't fit
-  the booking (a short amount, another account...) is kept as notes for the host. The same payment (image
-  or reference number) can never confirm two bookings. (`pending_verification` is no longer used.)
+* Payment proof confirms the booking straight away: paid is Paid, and the host checks every payment in the
+  GCash / GoTyme app anyway. By default (`PROOF_MODE=reference`) the player types the reference number and the
+  sender's name; the host sees the window the payment fell in (booking made .. proof sent). With
+  `PROOF_MODE=receipt` a receipt image is uploaded and read on the server (amount, reference, date, sender);
+  whatever doesn't fit the booking is kept as notes for the host. The same payment (image or reference
+  number) can never confirm two bookings. (`pending_verification` is no longer used.)
 
 * A booking occupies one `booking_slots` row per court-hour from the moment it
   is held. The table's primary key makes double booking impossible.
@@ -320,6 +322,7 @@ def get_config(conn: sqlite3.Connection) -> ConfigOut:
         reschedule_min_hours=settings.reschedule_min_hours,
         reschedule_window_days=settings.reschedule_window_days,
         consent_version=settings.consent_version,
+        proof_mode=settings.proof_mode,
         today=current_play_date(now),
         server_now=to_iso(now),
     )
@@ -474,9 +477,15 @@ def expected_payment(row: sqlite3.Row, now: datetime) -> receipt_reader.Expected
     )
 
 
+def require_receipt_mode() -> None:
+    if settings.proof_mode != "receipt":
+        raise BookingError("receipt_disabled", "Receipt uploads are switched off. Type your reference number and name instead.")
+
+
 def submit_receipt(
     conn: sqlite3.Connection, code: str, token: str | None, data: bytes, payer_name: str | None
 ) -> BookingOut:
+    require_receipt_mode()
     ext, digest = receipts.validate(data)
     # Read the receipt before taking the write lock: OCR takes a second or two.
     started = time.monotonic()
@@ -558,12 +567,15 @@ def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, dat
             ref = normalize_reference(row["payment_method"], data.reference_number)
         except ValueError as exc:
             raise BookingError("reference_invalid", str(exc)) from None
-        paid_at = _resolve_paid_time(data.paid_time, from_iso(row["created_at"]), now)
+        # No time is asked for: the payment fell between the booking and this moment (the host sees that window).
+        paid_at = _resolve_paid_time(data.paid_time, from_iso(row["created_at"]), now) if data.paid_time else None
         if conn.execute("SELECT 1 FROM bookings WHERE reference_number = ?", (ref,)).fetchone():
             raise Conflict("reference_used", "This reference number was already used for another booking.")
+        # In reference mode every booking is typed in, so a note on each one would only be noise for the host.
+        flags = receipt_reader.typed_flags() if settings.proof_mode == "receipt" else []
         _confirm_with_proof(
-            conn, row["id"], now, receipt_reader.typed_flags(), proof_type="reference", reference_number=ref,
-            paid_at=to_iso(paid_at), payer_name=data.payer_name,
+            conn, row["id"], now, flags, proof_type="reference", reference_number=ref,
+            paid_at=to_iso(paid_at) if paid_at else None, payer_name=data.payer_name,
         )
         row = conn.execute("SELECT * FROM bookings WHERE id = ?", (row["id"],)).fetchone()
     return to_view(conn, row, now)

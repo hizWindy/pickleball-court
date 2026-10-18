@@ -17,7 +17,7 @@ import type { AdminBookingDetail } from './types';
 // read just says "Not found" in its row. None of them changes the booking: paid is Paid.
 const NOTE_CODES = new Set(['amount_short', 'amount_over', 'recipient_mismatch', 'time_outside', 'not_successful', 'no_text', 'unreadable']);
 
-const REJECT_REASONS =["Amount doesn't match", 'Reference not found', 'Paid to a different account', 'Receipt is unreadable', 'Payment is from a different time'];
+const REJECT_REASONS =["Amount doesn't match", 'Reference not found', 'Paid to a different account', "Sender name doesn't match", 'Payment is from a different time'];
 
 type Ask = 'reject' | 'cancel' | 'delete' | 'confirm-unpaid' | null;
 
@@ -494,7 +494,7 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
 
       <div className="px-4 pt-3">
         <Label className="flex items-center gap-1.5">
-          <ScanText className="h-3.5 w-3.5" /> {scan ? `Read from the ${PROVIDER_LABEL[scan.provider ?? 'other'] ?? ''} receipt` : b.proofType === 'reference' ? 'Typed in by the player' : 'Nothing could be read'}
+          <ScanText className="h-3.5 w-3.5" /> {scan ? `Read from the ${PROVIDER_LABEL[scan.provider ?? 'other'] ?? ''} receipt` : b.proofType === 'reference' ? `Typed in by the player · check it in ${METHOD_LABEL[b.paymentMethod]}` : 'Nothing could be read'}
         </Label>
       </div>
       <dl className="divide-y divide-zinc-100 px-4">
@@ -523,9 +523,16 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
             <ReadRow label="Reference" action={b.referenceNumber ? <CopyButton value={b.referenceNumber} /> : undefined}>
               <span className="font-mono tracking-wide">{b.referenceNumber ? fmtReference(b.referenceNumber) : ''}</span>
             </ReadRow>
-            {b.paidAt && <ReadRow label="Paid at" hint={`Booking window ${to ? `${from} – ${to}` : `from ${from}`}`}>{stamp(b.paidAt)}</ReadRow>}
+            {b.paidAt ? (
+              <ReadRow label="Paid at" hint={`Booking window ${to ? `${from} – ${to}` : `from ${from}`}`}>{stamp(b.paidAt)}</ReadRow>
+            ) : (
+              // No time is typed in: the payment was made after the booking and before the details were sent.
+              <ReadRow label="Paid between" hint="From booking to sending the details. See the exact time in your app.">
+                {to ? `${from} – ${to}` : `from ${from}`}
+              </ReadRow>
+            )}
             {b.payerName && <ReadRow label="Sent by">{b.payerName}</ReadRow>}
-            <ReadRow label="Amount due">{peso(b.total)}</ReadRow>
+            <ReadRow label="Amount due" hint={`Match this in your ${METHOD_LABEL[b.paymentMethod]} app`}>{peso(b.total)}</ReadRow>
           </>
         ) : (
           <ReadRow label="Amount due" hint={`Booking window ${to ? `${from} – ${to}` : `from ${from}`}`}>{peso(b.total)}</ReadRow>
@@ -538,7 +545,9 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
         </details>
       )}
       <p className="px-4 pb-3 text-xs text-zinc-500">
-        Paid with the {METHOD_LABEL[b.paymentMethod]} QR. The reading is automatic and can be wrong, so trust your {METHOD_LABEL[b.paymentMethod]} app over it.
+        {b.proofType === 'receipt'
+          ? `Paid with the ${METHOD_LABEL[b.paymentMethod]} QR. The reading is automatic and can be wrong, so trust your ${METHOD_LABEL[b.paymentMethod]} app over it.`
+          : `The player typed these in; nothing was checked automatically. Open your ${METHOD_LABEL[b.paymentMethod]} app and match the reference number, the amount and the sender before the session. Reject the payment if it isn't there.`}
       </p>
     </Card>
   );

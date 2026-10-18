@@ -69,6 +69,7 @@ def submit_receipt(
     token: str | None = TOKEN_HEADER,
     conn: sqlite3.Connection = Conn,
 ) -> BookingOut:
+    svc.require_receipt_mode()
     limit(request, "proof", max_hits=15, window_seconds=600)
     # Read one byte past the cap so oversized uploads are rejected without buffering them whole.
     data = receipt.file.read(settings.max_receipt_bytes + 1)

@@ -44,7 +44,18 @@ Status flow: `held → confirmed` (on full payment) | `pending_verification` (re
 `Late` and `rain delay` are not statuses: the booking stays `confirmed` and carries `late_at` / `weather_hold_at`.
 The desk shows one **label** per booking, computed from those: **Paid · Late · Done · Rain delay** (plus Blocked, Paying now, Needs check, Rejected, Expired, Cancelled).
 
-## Reading receipts (OCR)
+## Reading receipts (OCR): off by default
+
+`PROOF_MODE` (default `reference`) decides how a player proves payment:
+
+- **`reference`**: the player types the GCash / GoTyme reference number and the sender's name. No upload, no OCR, no payment
+  time. The booking confirms at once; the admin desk shows *Paid between* the booking time and the moment the details were
+  sent, and the host matches reference, amount and sender in the GCash / GoTyme app. A reference can only pay for one booking.
+  `POST /bookings/{code}/receipt` answers `receipt_disabled`. This is what a 512 MB Render instance runs.
+- **`receipt`**: the original flow below (upload a screenshot, read on the server). Needs ~400 MB spare while a receipt is read:
+  set `PROOF_MODE=receipt` after upgrading the instance's RAM. Everything below is kept for that.
+
+The rest of this section describes `PROOF_MODE=receipt`.
 
 `app/ocr.py` runs [RapidOCR](https://github.com/RapidAI/RapidOCR) (PaddleOCR models on ONNX Runtime) on our own server:
 no image leaves it, the ~30 MB of models ship inside the pip package, and a phone screenshot takes about 2-3 s.

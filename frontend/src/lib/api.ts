@@ -95,7 +95,7 @@ export const api = {
   submitReference: (
     code: string,
     token: string,
-    body: { referenceNumber: string; paidTime: string; payerName: string }
+    body: { referenceNumber: string; payerName: string }
   ) => request<Booking>(`/api/bookings/${enc(code)}/reference`, { method: 'POST', json: body, token }),
 
   /** XHR instead of fetch so we can show real upload progress on slow mobile data. */

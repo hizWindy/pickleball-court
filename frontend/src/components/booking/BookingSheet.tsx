@@ -932,7 +932,7 @@ function DetailsStep({
                   {a.method === 'gcash' ? 'G' : 'GT'}
                 </span>
                 <span className="block text-[15px] font-bold text-zinc-950">{a.label}</span>
-                <span className="text-xs text-zinc-500">{a.enabled ? 'Send money, upload receipt' : 'Coming soon'}</span>
+                <span className="text-xs text-zinc-500">{a.enabled ? (config.proofMode === 'receipt' ? 'Send money, upload receipt' : 'Send money, enter reference no.') : 'Coming soon'}</span>
               </button>
             );
           })}
@@ -988,7 +988,7 @@ function ReviewStep(props: {
         </ReviewRow>
         <ReviewRow label="Payment" onEdit={() => props.onEdit('details')}>
           <span className="block font-semibold text-zinc-950">{props.methodLabel}</span>
-          <span className="text-zinc-600">Send money, then upload your receipt</span>
+          <span className="text-zinc-600">{config.proofMode === 'receipt' ? 'Send money, then upload your receipt' : 'Send money, then enter your reference number'}</span>
         </ReviewRow>
         <div className="space-y-1 p-4 text-sm">
           {props.lineItems.map((li, i) => (
@@ -1014,8 +1014,10 @@ function ReviewStep(props: {
       <div className="flex gap-3 rounded-2xl bg-amber-50 p-4 text-sm text-amber-950 ring-1 ring-amber-100">
         <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
         <p>
-          When you confirm, this slot is <strong>held for you for {config.holdMinutes} minutes</strong>. Send the <strong>full amount</strong> and
-          upload your receipt within that time, or the slot is released for others. Your booking is confirmed as soon as you upload the receipt.
+          When you confirm, this slot is <strong>held for you for {config.holdMinutes} minutes</strong>. Send the <strong>full amount</strong> and{' '}
+          {config.proofMode === 'receipt'
+            ? 'upload your receipt within that time, or the slot is released for others. Your booking is confirmed as soon as you upload the receipt.'
+            : 'enter your reference number and name within that time, or the slot is released for others. Your booking is confirmed as soon as you submit them. Keep your own transaction receipt from your app: it is your proof of payment.'}
         </p>
       </div>
 

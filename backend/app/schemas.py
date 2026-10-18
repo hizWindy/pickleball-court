@@ -49,6 +49,7 @@ class ConfigOut(ApiModel):
     reschedule_min_hours: int
     reschedule_window_days: int
     consent_version: str
+    proof_mode: Literal["reference", "receipt"]  # how a player proves payment: type the reference, or upload a receipt
     today: date  # current play day in Manila
     server_now: str
 
@@ -95,7 +96,8 @@ class CreateBookingIn(ApiModel):
 
 class ReferenceProofIn(ApiModel):
     reference_number: str = Field(max_length=40)
-    paid_time: str = Field(pattern=r"^\d{2}:\d{2}$", description="HH:MM (24h) as shown on the receipt")
+    # Not asked for any more (the host sees the payment window instead); still accepted from older clients.
+    paid_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$", description="HH:MM (24h) as shown on the receipt")
     payer_name: str
 
     @field_validator("payer_name")
