@@ -563,6 +563,12 @@ def _resolve_paid_time(paid_time: str, created_at: datetime, now: datetime) -> d
     )
 
 
+REFERENCE_USED = (
+    "That reference number is already linked to another booking. Each payment can pay for only one booking, so please "
+    "check that you typed the reference from the payment you just made for this booking."
+)
+
+
 def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, data: ReferenceProofIn) -> BookingOut:
     now = clock.now()
     with write_transaction(conn):
@@ -573,14 +579,18 @@ def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, dat
             raise BookingError("reference_invalid", str(exc)) from None
         # No time is asked for: the payment fell between the booking and this moment (the host sees that window).
         paid_at = _resolve_paid_time(data.paid_time, from_iso(row["created_at"]), now) if data.paid_time else None
+        # One payment, one booking: a reference number is never reused, even by a booking that was later rejected or voided.
         if conn.execute("SELECT 1 FROM bookings WHERE reference_number = ?", (ref,)).fetchone():
-            raise Conflict("reference_used", "This reference number was already used for another booking.")
+            raise Conflict("reference_used", REFERENCE_USED)
         # In reference mode every booking is typed in, so a note on each one would only be noise for the host.
         flags = receipt_reader.typed_flags() if settings.proof_mode == "receipt" else []
-        _confirm_with_proof(
-            conn, row["id"], now, flags, proof_type="reference", reference_number=ref,
-            paid_at=to_iso(paid_at) if paid_at else None, payer_name=data.payer_name,
-        )
+        try:
+            _confirm_with_proof(
+                conn, row["id"], now, flags, proof_type="reference", reference_number=ref,
+                paid_at=to_iso(paid_at) if paid_at else None, payer_name=data.payer_name,
+            )
+        except sqlite3.IntegrityError:  # the unique index is the last line of defence
+            raise Conflict("reference_used", REFERENCE_USED) from None
         row = conn.execute("SELECT * FROM bookings WHERE id = ?", (row["id"],)).fetchone()
     return to_view(conn, row, now)
 

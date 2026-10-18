@@ -8,6 +8,7 @@ import { fmtCountdown, fmtSchedule, fmtTime, pesoExact } from '../../lib/time';
 import { useConfig, useCountdown } from '../../hooks/useBookingData';
 import { HOUSE_RULES, policiesFor, type HouseRule } from '../../data/houseRules';
 import type { Booking } from '../../types';
+import { HostActions } from './shared';
 import { CopyButton, cx, InlineError, PrimaryButton, SecondaryButton, useBodyScrollLock } from './ui';
 
 interface Props {
@@ -39,6 +40,8 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   const [ref, setRef] = useState('');
   const [payerName, setPayerName] = useState(initial?.customerName ?? '');
   const [error, setError] = useState<string | null>(null);
+  // The reference number (or receipt) already pays for another booking: one payment, one booking.
+  const [refUsed, setRefUsed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmRelease, setConfirmRelease] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -126,6 +129,11 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
     if (e instanceof ApiError && e.code === 'hold_expired') {
       sync();
     }
+    if (e instanceof ApiError && (e.code === 'reference_used' || e.code === 'payment_used' || e.code === 'receipt_used')) {
+      setRefUsed(true);
+      setError(null);
+      return;
+    }
     setError(errorMessage(e));
   };
 
@@ -150,6 +158,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setRefUsed(false);
     try {
       const b = await api.submitReference(code, token, { referenceNumber: ref, payerName });
       onSubmitted(b);
@@ -451,6 +460,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                         </p>
                       </div>
                     )}
+                    {refUsed && <ReferenceUsedHelp code={code} />}
                     <InlineError>{error}</InlineError>
                     <PrimaryButton className="w-full" disabled={!file} loading={busy} onClick={submitReceipt}>
                       <Upload className="h-4 w-4" /> {busy ? (progress != null && progress >= 1 ? 'Checking receipt' : 'Uploading') : 'Submit receipt'}
@@ -469,13 +479,14 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                       <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Reference number (from your receipt)</span>
                       <input
                         value={ref}
-                        onChange={(e) => setRef(e.target.value)}
+                        onChange={(e) => { setRef(e.target.value); setRefUsed(false); }}
                         inputMode={isGcash ? 'numeric' : 'text'}
                         autoComplete="off"
                         placeholder={isGcash ? '13 digits, e.g. 1092 837 461928' : 'As shown on your receipt'}
                         maxLength={40}
                         required
-                        className="w-full rounded-2xl border border-zinc-200 px-4 py-3 font-mono text-base tracking-wide focus:border-[#15803D] focus:outline-none focus:ring-4 focus:ring-emerald-100"
+                        className={cx('w-full rounded-2xl border px-4 py-3 font-mono text-base tracking-wide focus:outline-none focus:ring-4', refUsed ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100' : 'border-zinc-200 focus:border-[#15803D] focus:ring-emerald-100')}
+                        aria-invalid={refUsed || undefined}
                       />
                       {isGcash && ref && (
                         <span className={cx('mt-1 block text-xs', refDigits === 13 ? 'text-emerald-700' : 'text-zinc-500')}>
@@ -495,6 +506,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                       />
                       <span className="mt-1 block text-xs text-zinc-500">The name on your {account?.label ?? 'GCash'} account, so the host can find your payment.</span>
                     </label>
+                    {refUsed && <ReferenceUsedHelp code={code} />}
                     <InlineError>{error}</InlineError>
                     <PrimaryButton type="submit" className="w-full" loading={busy} disabled={!ref || payerName.trim().length < 2}>
                       Submit payment details
@@ -542,6 +554,25 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
     </div>
   );
 };
+
+/** The reference number (or receipt) is already linked to another booking: say why, and what to do. */
+function ReferenceUsedHelp({ code }: { code: string }) {
+  return (
+    <div role="alert" className="space-y-2.5 rounded-2xl bg-amber-50 p-3.5 text-sm text-amber-950 ring-1 ring-amber-200">
+      <p className="flex items-center gap-2 font-heading text-[15px] font-bold">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" /> That reference number is already used
+      </p>
+      <p>
+        Each payment can pay for only <strong>one booking</strong>. Please use the reference number from the payment you just made for this
+        booking, not from an earlier one.
+      </p>
+      <p className="text-xs text-amber-900/90">
+        Still the same? If you're sure it's right, send the host your booking code ({code}) and they'll check it.
+      </p>
+      <HostActions code={code} message={`Hi! About booking ${code}: it says my reference number was already used. Can you check my payment?`} />
+    </div>
+  );
+}
 
 function RuleGroup({ title, rules }: { title: string; rules: HouseRule[] }) {
   return (
