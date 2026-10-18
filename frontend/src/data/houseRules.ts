@@ -20,11 +20,13 @@ export interface HouseRule {
 
 export interface PolicyNumbers {
   lateAfterMinutes: number;
+  /** Guests may move their own booking once. Off: only the host's weather rebooking moves a booking. */
+  guestReschedule: boolean;
   rescheduleMinHours: number;
   rescheduleWindowDays: number;
 }
 
-export const DEFAULT_POLICY_NUMBERS: PolicyNumbers = { lateAfterMinutes: 15, rescheduleMinHours: 48, rescheduleWindowDays: 30 };
+export const DEFAULT_POLICY_NUMBERS: PolicyNumbers = { lateAfterMinutes: 15, guestReschedule: false, rescheduleMinHours: 48, rescheduleWindowDays: 30 };
 
 const ONES = [
   'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
@@ -68,20 +70,26 @@ export function buildPolicies(n: PolicyNumbers = DEFAULT_POLICY_NUMBERS): HouseR
       tag: 'No Refunds',
       tagColor: 'amber',
       isCrucial: true,
-      summary: 'Strictly no cancellations. Bookings are final and non-refundable. One reschedule is allowed.',
+      summary: n.guestReschedule
+        ? 'Strictly no cancellations. Bookings are final and non-refundable. One reschedule is allowed.'
+        : 'Strictly no cancellations. Bookings are final and non-refundable. If the courts close for weather, you rebook free.',
       lead: 'Strictly no cancellations.',
-      details:
-        'All bookings are final and payments are non-refundable. A confirmed booking can be rescheduled once (see Rescheduling). If management closes the courts because of weather, affected bookings are moved free of charge.',
+      details: n.guestReschedule
+        ? 'All bookings are final and payments are non-refundable. A confirmed booking can be rescheduled once (see Rescheduling). If management closes the courts because of weather, affected bookings are moved free of charge.'
+        : 'All bookings are final and payments are non-refundable. If management closes the courts because of weather, affected bookings are moved free of charge (see Rebooking).',
     },
     {
       id: 'policy-rescheduling',
       number: '04',
-      title: 'Rescheduling Policy',
-      tag: 'Once Only',
+      title: n.guestReschedule ? 'Rescheduling Policy' : 'Rebooking Policy',
+      tag: n.guestReschedule ? 'Once Only' : 'Weather',
       tagColor: 'blue',
-      summary: `One reschedule per booking, at least ${n.rescheduleMinHours} hours before your start. Weather moves don't count.`,
-      details:
-        `Requests to reschedule must be made at least ${spelled(n.rescheduleMinHours)} hours before the reserved schedule. Rescheduling is subject to court availability. Each confirmed booking may only be rescheduled once. Requests made within ${spelled(n.rescheduleMinHours)} hours may only be accommodated under exceptional circumstances and at the sole discretion of management. The new date must be within ${n.rescheduleWindowDays} days of the original date, and the new slot can't cost more than what you paid. Weather moves don't count as your one reschedule.`,
+      summary: n.guestReschedule
+        ? `One reschedule per booking, at least ${n.rescheduleMinHours} hours before your start. Weather moves don't count.`
+        : 'A booking moves only when management closes the courts for bad weather. Then you pick a new time for free.',
+      details: !n.guestReschedule
+        ? 'Bookings are not rescheduled on request. When management closes the courts because of rain or a typhoon, each affected booking is rebooked free of charge: open "Check my booking" on this site, enter your booking code and mobile number, and pick a new time of the same length. For any other change, message the host; exceptions are at the sole discretion of management.'
+        : `Requests to reschedule must be made at least ${spelled(n.rescheduleMinHours)} hours before the reserved schedule. Rescheduling is subject to court availability. Each confirmed booking may only be rescheduled once. Requests made within ${spelled(n.rescheduleMinHours)} hours may only be accommodated under exceptional circumstances and at the sole discretion of management. The new date must be within ${n.rescheduleWindowDays} days of the original date, and the new slot can't cost more than what you paid. Weather moves don't count as your one reschedule.`,
     },
     {
       id: 'policy-no-show',
@@ -114,6 +122,7 @@ export const policiesFor = (config: AppConfig | null): HouseRule[] =>
   config
     ? buildPolicies({
         lateAfterMinutes: config.lateAfterMinutes,
+        guestReschedule: config.guestReschedule,
         rescheduleMinHours: config.rescheduleMinHours,
         rescheduleWindowDays: config.rescheduleWindowDays,
       })
@@ -185,7 +194,7 @@ export const HOUSE_RULES: HouseRule[] = [
 ];
 
 /** The short list shown on the review step, right before the player agrees to the rules. */
-export function reviewNotices(n: Pick<PolicyNumbers, 'lateAfterMinutes' | 'rescheduleMinHours'>) {
+export function reviewNotices(n: Pick<PolicyNumbers, 'lateAfterMinutes' | 'guestReschedule' | 'rescheduleMinHours'>) {
   return [
     {
       title: 'Pay in full',
@@ -193,7 +202,9 @@ export function reviewNotices(n: Pick<PolicyNumbers, 'lateAfterMinutes' | 'resch
     },
     {
       title: 'No cancellations',
-      text: `Bookings are final and non-refundable. You can reschedule once, at least ${n.rescheduleMinHours} hours before your start.`,
+      text: n.guestReschedule
+        ? `Bookings are final and non-refundable. You can reschedule once, at least ${n.rescheduleMinHours} hours before your start.`
+        : 'Bookings are final and non-refundable. If the host closes the courts for bad weather, you can rebook for free.',
     },
     {
       title: `${n.lateAfterMinutes}-Minute Late Rule`,

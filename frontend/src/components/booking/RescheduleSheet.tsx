@@ -84,6 +84,9 @@ function whyNotMovable(b: Booking): string {
   if (b.status === 'rejected') return "The host couldn't verify the payment. Please message the host.";
   if (b.status === 'cancelled') return 'This booking was closed and the slot is free again.';
   if (b.status === 'confirmed' && Date.parse(b.endAt) <= serverNowMs()) return 'This session is already over.';
+  if (b.status === 'confirmed') {
+    return 'Your time can be changed here only when the host closes the courts for bad weather. If that happens, a Rebook now button shows up on this screen. For any other change, message the host.';
+  }
   return 'Please message the host if you need a change.';
 }
 
@@ -531,7 +534,7 @@ function FoundView({ lookup, minHours, onOpenPass, onOther }: { lookup: Reschedu
         <div className="flex gap-3 rounded-2xl bg-white p-4 text-sm text-zinc-700 ring-1 ring-zinc-200">
           <CloudRain className="mt-0.5 h-5 w-5 shrink-0 text-sky-600" />
           <p>
-            <strong>Rebooking is free and doesn't use your one reschedule.</strong> Pick any new time of the same length ({hrsLabel(b.hours)}).
+            <strong>Rebooking is free.</strong> Pick any new time of the same length ({hrsLabel(b.hours)}).
           </p>
         </div>
       )}
@@ -561,7 +564,7 @@ function FoundView({ lookup, minHours, onOpenPass, onOther }: { lookup: Reschedu
         </Blocked>
       )}
       {state === 'unavailable' && (
-        <Blocked title="This booking can't be moved online" code={b.code} message={hostMessage}>
+        <Blocked title={b.status === 'confirmed' && !b.late && !b.arrived && Date.parse(b.endAt) > serverNowMs() ? 'Rebooking opens only for bad weather' : "This booking can't be moved online"} code={b.code} message={hostMessage}>
           {whyNotMovable(b)}
         </Blocked>
       )}
@@ -840,7 +843,7 @@ function ReviewStep({
       {state === 'weather' ? (
         <div className="flex gap-3 rounded-2xl bg-sky-50 p-4 text-sm text-sky-950 ring-1 ring-sky-200">
           <CloudRain className="mt-0.5 h-5 w-5 shrink-0 text-sky-600" />
-          <p>This move is free, and it doesn't use your one reschedule.</p>
+          <p>This rebooking is free.</p>
         </div>
       ) : (
         <div className="flex gap-3 rounded-2xl bg-amber-50 p-4 text-sm text-amber-950 ring-1 ring-amber-100">

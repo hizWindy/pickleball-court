@@ -581,7 +581,7 @@ const RainNote: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
         <CloudRain className="h-5 w-5 shrink-0" /> Rain delay{b.weatherHoldAt ? ` · ${stamp(b.weatherHoldAt)}` : ''}
       </p>
       <p className="mt-1 text-sm text-sky-900">
-        The hours are open again. Nothing is cancelled or refunded: the guest keeps their paid booking and picks a new time on the site (free, it doesn't use their one reschedule). Changed your mind? Undo puts it back.
+        The hours are open again. Nothing is cancelled or refunded: the guest keeps their paid booking and picks a new time on the site (free). Changed your mind? Undo puts it back.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <ContactBtns b={b} message={message} className="flex-1" />

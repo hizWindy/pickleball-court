@@ -8,14 +8,14 @@ export function plainWhen(b: Pick<AdminBooking, 'startAt' | 'hour' | 'hours'>): 
   return `${day}, ${hourSpan(b.hour, b.hours).replace(/ – /g, '-')}`;
 }
 
-/** Where a rain-delayed guest picks a new time. Free, and it doesn't use their one reschedule. */
+/** Where a rain-delayed guest picks a new time (it opens "Check my booking"). Free. */
 export const rescheduleLink = (code: string) => `${window.location.origin}/?reschedule=${code}`;
 
 /** The message the host sends to someone whose booking was moved because of rain. */
 export function rainMessage(b: AdminBooking): string {
   return (
     `Hi ${firstName(b.customerName)}! It's raining, so your ${b.courtName} booking on ${plainWhen(b)} at HousePickle Club was moved. ` +
-    `Nothing is lost: pick your new time here (free, doesn't use your one reschedule): ${rescheduleLink(b.code)}`
+    `Nothing is lost: pick your new time here (it's free): ${rescheduleLink(b.code)}`
   );
 }
 

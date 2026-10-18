@@ -568,7 +568,7 @@ const RainDelayForm: React.FC = () => {
             {chosen.length === 1 ? '1 booking' : `${chosen.length} bookings`} on {winText(win)} will give their hours back right now.
           </p>
           <p>
-            Nothing is cancelled or refunded. Each guest keeps their paid booking and picks a new time themselves (free, and it doesn't use their one reschedule). You'll get a message to send each of them next.
+            Nothing is cancelled or refunded. Each guest keeps their paid booking and picks a new time themselves (free). You'll get a message to send each of them next.
           </p>
         </Dialog>
       )}

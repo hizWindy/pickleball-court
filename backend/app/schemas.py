@@ -46,6 +46,7 @@ class ConfigOut(ApiModel):
     quick_hours: int  # how many quick-pick chips (1..n hours) to show
     booking_window_days: int
     late_after_minutes: int
+    guest_reschedule: bool  # false: a booking moves only when the host calls a weather rebooking
     reschedule_min_hours: int
     reschedule_window_days: int
     consent_version: str

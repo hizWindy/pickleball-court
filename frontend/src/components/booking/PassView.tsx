@@ -174,7 +174,7 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
                     <div>
                       <p className="font-heading text-sm font-black uppercase tracking-tight text-sky-950">Courts closed for rain</p>
                       <p className="mt-1 text-sm leading-relaxed text-sky-950/90">
-                        The courts are closed for rain, so your session was moved. Pick a new time. It's free and doesn't use your one reschedule.
+                        The courts are closed for rain, so your session was moved. Pick a new time. It's free.
                       </p>
                     </div>
                   </div>

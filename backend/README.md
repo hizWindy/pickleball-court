@@ -33,8 +33,8 @@ Tests: `pytest` (they use a throwaway database and a fake clock).
 | **No cancellations.** A paid booking is final (no refunds). A guest can only *release an unpaid hold*; anything else answers `409 bookings_final`. The host can still void a booking from the desk (mistakes, duplicates). | `release_hold` |
 | **Late rule (15 min).** A paid booking whose group hasn't arrived `LATE_AFTER_MINUTES` after its start is **Late**: its court-hours are released automatically (status stays `confirmed`, `late_at` is set, no refund). "Arrived" is set only by the host (Arrived button); guests have no way to check in. Walk-ins added for a time that has begun, and blocks, are never late. | `release_late`, `admin_service.mark_arrived` |
 | **Hidden restore window.** For `RESTORE_WINDOW_MINUTES` (5) after it went late the host (only) can **Restore** the booking if the hours are still free. Guests are never told; the public API doesn't expose it. After that, the host can still move the booking with Edit. | `admin_service.restore` |
-| **Rescheduling by the guest**: once, at least 48 h before the start, same length, new date within 30 days of the original, never to a slot that costs more than was paid (cheaper is allowed, no refund). Proof of ownership = booking code + mobile number (or the device's token). | `reschedule.py` |
-| **Rain delay** (host): gives the hours of paid bookings in a window back and sets `weather_hold_at`. The guest then picks a new time themselves (any time, free, doesn't use their one reschedule). The host can undo it with Restore. | `admin_service.rain_delay` |
+| **Moving a booking** happens only when the host calls a weather rebooking (below), because the host is the one watching the weather. Optional, off by default (`GUEST_RESCHEDULE=1`): one self-service move per guest, at least 48 h before the start, same length, new date within 30 days of the original, never to a slot that costs more than was paid (cheaper is allowed, no refund). Proof of ownership = booking code + mobile number (or the device's token). | `reschedule.py` |
+| **Rain delay** (host): gives the hours of paid bookings in a window back and sets `weather_hold_at`. The guest then picks a new time themselves on "Check my booking" (any time, free). The host can undo it with Restore. | `admin_service.rain_delay` |
 | One active hold per mobile number, two per IP. Rate limits on create and proof. The player's IP is stored only while the booking is `held`, then erased. | `create_booking`, `ratelimit.py` |
 | Each hour is priced by its own rate (₱200 daytime from 5 AM to 6 PM, ₱250 night lights from 6 PM to 5 AM), plus ₱80 for paddles. Totals are computed on the server only. | `slots.price_hours` |
 | 12 AM–4 AM belong to the previous night's "play day". All times are Manila time. | `slots.py` |
@@ -96,7 +96,7 @@ The courts are open-air, so rain means moving people. `app/weather.py` reads the
 **Rain-delay flow** (admin desk → Weather): pick the window (date, start hour, how many hours) → preview who is affected →
 call it. Every paid booking in the window gives its hours back and becomes **Rain delay** (still paid, nothing cancelled or
 refunded). The host texts each guest (the desk prefills an `sms:` message with the link `/?reschedule=CODE`); the guest picks a
-new time themselves on the site, at any time, for free, without using their one reschedule. The host can undo with Restore.
+new time themselves on the site ("Check my booking"), at any time, for free. The host can undo with Restore.
 
 **Telegram alerts (optional)**: set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` and the server messages the host once when a
 booking goes Late ("restore it if they turn up") and once per day when rain is forecast during paid bookings. Each alert is

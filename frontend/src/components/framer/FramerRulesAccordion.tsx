@@ -40,6 +40,7 @@ function buildFaq(config: AppConfig | null): AccordionItem[] {
   const late = config?.lateAfterMinutes ?? 15;
   const minHours = config?.rescheduleMinHours ?? 48;
   const windowDays = config?.rescheduleWindowDays ?? 30;
+  const guest = config?.guestReschedule ?? false; // false: a booking moves only when the host calls a weather rebooking
   return [
     {
       id: 'night-owl',
@@ -77,20 +78,22 @@ function buildFaq(config: AppConfig | null): AccordionItem[] {
       id: 'cancel',
       category: 'Bookings',
       question: 'Can I cancel my booking?',
-      answer: `No. All bookings are final and payments are non-refundable. The only flexibility is one reschedule per booking, and if the host closes the courts because of weather your session is moved free of charge. Haven't paid yet? You can release your held slot before the ${hold} minutes run out. Nothing is charged.`
+      answer: `No. All bookings are final and payments are non-refundable. ${guest ? 'The only flexibility is one reschedule per booking, and if' : 'The only exception is when'} the host closes the courts because of weather: your session is moved free of charge. Haven't paid yet? You can release your held slot before the ${hold} minutes run out. Nothing is charged.`
     },
     {
       id: 'reschedule',
       category: 'Bookings',
       question: 'Can I change my booking time?',
-      answer: `Yes, once. Reschedule at least ${minHours} hours before your start time. Keep the same length, pick a new date within ${windowDays} days of your original date, and choose a slot that costs no more than you paid (a cheaper slot is fine, but the difference isn't refunded). Inside ${minHours} hours, message the host. Exceptions are at the host's discretion.`,
+      answer: !guest
+        ? "Not on request. If the host closes the courts because of rain or a typhoon, you can rebook for free: tap “Check my booking”, enter your booking code and mobile number, and pick a new time. For any other change, message the host. Exceptions are at the host's discretion."
+        : `Yes, once. Reschedule at least ${minHours} hours before your start time. Keep the same length, pick a new date within ${windowDays} days of your original date, and choose a slot that costs no more than you paid (a cheaper slot is fine, but the difference isn't refunded). Inside ${minHours} hours, message the host. Exceptions are at the host's discretion.`,
       action: 'reschedule'
     },
     {
       id: 'rain',
       category: 'Bookings',
       question: 'What if it rains?',
-      answer: "If the host closes the courts because of weather, your booking is moved free of charge. Open the site and tap “Check my booking” (or use the link the host sends you) to pick a new time. It's free and doesn't use up your one reschedule.",
+      answer: "If the host closes the courts because of weather, your booking is moved free of charge. Open the site and tap “Check my booking” (or use the link the host sends you) to pick a new time. It's free.",
       action: 'reschedule'
     },
     {
@@ -238,7 +241,7 @@ export const FramerRulesAccordion: React.FC<{ onReschedule?: () => void }> = ({ 
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-emerald-200 bg-[#F0FDF4]/70 p-4">
                 <div>
                   <p className="font-heading font-extrabold text-xs sm:text-sm uppercase tracking-wide text-zinc-900">Already booked? Check your booking</p>
-                  <p className="text-xs text-zinc-600 font-medium mt-0.5">See your status, rebook free after rain, or reschedule once (at least {config?.rescheduleMinHours ?? 48} hours before your start time).</p>
+                  <p className="text-xs text-zinc-600 font-medium mt-0.5">{config?.guestReschedule ? `See your status, rebook free after rain, or reschedule once (at least ${config.rescheduleMinHours} hours before your start time).` : 'See your booking status. If the host closes the courts for weather, you can rebook here for free.'}</p>
                 </div>
                 <button
                   type="button"

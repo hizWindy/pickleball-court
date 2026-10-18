@@ -1,7 +1,10 @@
 """Guests moving their own booking.
 
-Bookings can't be cancelled, so rescheduling is the one flexibility a paid booking has:
+Bookings can't be cancelled. A paid booking moves in two ways:
 
+* the host calls a rebooking for bad weather (`weather_hold_at`): always allowed, free, any time. This is the only way
+  unless `GUEST_RESCHEDULE=1` (the default is off: the host is the one watching the weather);
+* with `GUEST_RESCHEDULE=1` only, a guest's own move:
 * once per booking, at least `reschedule_min_hours` (48) before the start;
 * same length; the new date within `reschedule_window_days` (30) of the original one;
 * a slot that costs more than the booking already paid is refused (the host can handle those by hand),

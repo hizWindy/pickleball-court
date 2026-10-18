@@ -66,8 +66,11 @@ class Settings:
     # Host-only grace after a booking turns Late: the host may still restore it for a guest who pleads.
     # Guests are never told about it (the published rule is just `late_after_minutes`).
     restore_window_minutes: int = field(default_factory=lambda: _env_int("RESTORE_WINDOW_MINUTES", 5))
-    # Rescheduling: once per booking, at least this long before the start; the new date must be within
-    # `reschedule_window_days` of the original one. Weather delays are exempt from the once-only rule.
+    # Who can move a paid booking. Off (default): only when the host calls a rebooking for bad weather (`weather_hold_at`),
+    # because the host is the one watching the weather. On: guests also get one self-service move of their own.
+    guest_reschedule: bool = field(default_factory=lambda: _env("GUEST_RESCHEDULE", "0").strip().lower() in ("1", "true", "yes", "on"))
+    # Self-service rescheduling (GUEST_RESCHEDULE=1): once per booking, at least this long before the start; the new date
+    # must be within `reschedule_window_days` of the original one. Weather delays are exempt from the once-only rule.
     reschedule_min_hours: int = field(default_factory=lambda: _env_int("RESCHEDULE_MIN_HOURS", 48))
     reschedule_window_days: int = field(default_factory=lambda: _env_int("RESCHEDULE_WINDOW_DAYS", 30))
     # Weather for the admin desk (Open-Meteo: free, no key). Defaults to Koronadal City.

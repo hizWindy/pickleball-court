@@ -17,6 +17,9 @@ os.environ["OCR_ENABLED"] = "0"
 # The app defaults to typed proof (no uploads). The suite runs in receipt mode so the upload + OCR paths stay covered;
 # test_reference_mode.py switches to the default.
 os.environ["PROOF_MODE"] = "receipt"
+# Same for guests moving their own booking: off by default in the app, on here so that flow stays covered
+# (test_weather_only_rebooking.py checks the default).
+os.environ["GUEST_RESCHEDULE"] = "1"
 
 from fastapi.testclient import TestClient  # noqa: E402
 

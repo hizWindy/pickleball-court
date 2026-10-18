@@ -61,7 +61,9 @@ export interface AppConfig {
   bookingWindowDays: number;
   /** House rule: a group not there this long after its start is Late and the court is released. */
   lateAfterMinutes: number;
-  /** Rescheduling: once per booking, at least this many hours before the start. */
+  /** false: a booking moves only when the host calls a weather rebooking. true: guests also get one self-service move. */
+  guestReschedule: boolean;
+  /** Self-service rescheduling (when guestReschedule): once per booking, at least this many hours before the start. */
   rescheduleMinHours: number;
   /** ...and the new date must be within this many days of the original one. */
   rescheduleWindowDays: number;

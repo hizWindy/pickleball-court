@@ -208,8 +208,9 @@ def purge_old_receipts(conn: sqlite3.Connection, now: datetime | None = None) ->
 
 
 def reschedule_state(row: sqlite3.Row, now: datetime) -> str:
-    """Can the guest move this booking? `open` (once, 48 h ahead), `weather` (host called a rain delay,
-    always possible), `used`, `too_late`, or `unavailable` (not a paid, upcoming booking)."""
+    """Can the guest move this booking? `weather` (the host called a rebooking for bad weather: always possible) or,
+    only when GUEST_RESCHEDULE is on, `open` (once, 48 h ahead), `used` and `too_late`. Otherwise `unavailable`:
+    not a paid, upcoming booking, or nobody has called a weather rebooking for it."""
     if row["status"] != "confirmed" or row["source"] == "blocked":
         return "unavailable"
     if row["weather_hold_at"]:
@@ -219,6 +220,8 @@ def reschedule_state(row: sqlite3.Row, now: datetime) -> str:
     start = from_iso(row["start_at"])
     if start <= now:
         return "unavailable"
+    if not settings.guest_reschedule:
+        return "unavailable"  # a booking moves only when the host calls a weather rebooking (handled above)
     if row["reschedule_count"] >= 1:
         return "used"
     if start - now < timedelta(hours=settings.reschedule_min_hours):
@@ -319,6 +322,7 @@ def get_config(conn: sqlite3.Connection) -> ConfigOut:
         quick_hours=min(settings.quick_hours, settings.max_hours),
         booking_window_days=settings.booking_window_days,
         late_after_minutes=settings.late_after_minutes,
+        guest_reschedule=settings.guest_reschedule,
         reschedule_min_hours=settings.reschedule_min_hours,
         reschedule_window_days=settings.reschedule_window_days,
         consent_version=settings.consent_version,
