@@ -87,20 +87,6 @@ function whyNotMovable(b: Booking): string {
   return 'Please message the host if you need a change.';
 }
 
-/** Rebook-now first, then upcoming sessions soonest first, then payments still open, then everything else. */
-function bySoonest(a: RescheduleLookup, b: RescheduleLookup): number {
-  const rank = (l: RescheduleLookup) => {
-    const x = l.booking;
-    if (x.weatherHold) return 0;
-    if (x.status === 'confirmed' && Date.parse(x.endAt) > serverNowMs()) return 1;
-    if (x.status === 'held') return 2;
-    return 3;
-  };
-  const d = rank(a) - rank(b);
-  if (d) return d;
-  return rank(a) === 3 ? b.booking.startAt.localeCompare(a.booking.startAt) : a.booking.startAt.localeCompare(b.booking.startAt);
-}
-
 // ── Which new slots can this booking move to? ─────────────────────────────────
 interface CourtOption {
   court: CourtConfig;
@@ -185,21 +171,6 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone, onOpen
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ booking: Booking; token: string; weather: boolean } | null>(null);
-  // This phone's own bookings, looked up as the sheet opens so nobody has to type a code. Skipped when opened from a link.
-  const [saved, setSaved] = useState<RescheduleLookup[] | null>(() => (seed.code || device.passes().length === 0 ? [] : null));
-  useEffect(() => {
-    if (saved !== null) return;
-    let alive = true;
-    Promise.all(
-      device.passes().slice(0, 4).map((p) => api.rescheduleFind(p.code, undefined, p.token).catch(() => null))
-    ).then((rows) => {
-      if (alive) setSaved(rows.filter((r): r is RescheduleLookup => r !== null).sort(bySoonest));
-    });
-    return () => {
-      alive = false;
-    };
-  }, [saved]);
-
   const booking = lookup?.booking ?? null;
   const hours = booking?.hours ?? 1;
   const state = booking?.reschedule;
@@ -404,10 +375,7 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone, onOpen
               ) : auto ? (
                 <div className="py-16 text-center text-sm text-zinc-500" role="status">Finding your booking…</div>
               ) : (
-                <div className="space-y-7">
-                <SavedBookings items={saved} onPick={(l) => { setFindError(null); setLookup(l); }} />
                 <FindForm
-                  another={!!saved && saved.length > 0}
                   code={code}
                   onCode={(v) => setCode(formatCode(v))}
                   phone={phone}
@@ -417,7 +385,6 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone, onOpen
                   error={findError}
                   onSubmit={submitFind}
                 />
-                </div>
               )
             ) : step === 'date' && booking && lookup ? (
               <div className="space-y-5">
@@ -483,10 +450,8 @@ export const RescheduleSheet: React.FC<Props> = ({ seed, onClose, onDone, onOpen
 
 // ── Step 1: find the booking ──────────────────────────────────────────────────
 function FindForm({
-  another, code, onCode, phone, onPhone, codeError, phoneError, error, onSubmit,
+  code, onCode, phone, onPhone, codeError, phoneError, error, onSubmit,
 }: {
-  /** Bookings from this phone are listed above, so this form is for a different one. */
-  another: boolean;
   code: string;
   onCode: (v: string) => void;
   phone: string;
@@ -498,10 +463,7 @@ function FindForm({
 }) {
   return (
     <form onSubmit={onSubmit} className="space-y-5" noValidate>
-      <StepTitle
-        title={another ? 'Another booking?' : 'Find your booking'}
-        subtitle="Enter your booking code and the mobile number you booked with."
-      />
+      <StepTitle title="Find your booking" subtitle="Enter your booking code and the mobile number you booked with." />
       <div className="space-y-4">
         <Field label="Booking code" error={codeError ? 'Enter the code from your pass, like HPC-AB12-CD34.' : undefined} hint="You can find it on your court pass or in your booking text.">
           <input
@@ -626,55 +588,6 @@ function StatusBanner({ status }: { status: Status }) {
         <p className="mt-0.5 text-sm opacity-90">{status.hint}</p>
       </div>
     </div>
-  );
-}
-
-/** Bookings this phone knows about, each with its live status, so a returning guest taps instead of types. */
-function SavedBookings({ items, onPick }: { items: RescheduleLookup[] | null; onPick: (l: RescheduleLookup) => void }) {
-  if (items === null) {
-    return (
-      <div className="space-y-2" aria-hidden>
-        <div className="h-4 w-44 animate-pulse rounded bg-zinc-200" />
-        <div className="h-[68px] animate-pulse rounded-2xl bg-zinc-100" />
-        <div className="h-[68px] animate-pulse rounded-2xl bg-zinc-100" />
-      </div>
-    );
-  }
-  if (items.length === 0) return null;
-  return (
-    <section aria-labelledby="saved-bookings-h" className="space-y-2.5">
-      <h3 id="saved-bookings-h" className="text-[15px] font-bold text-zinc-950">Your bookings on this phone</h3>
-      <ul className="space-y-2">
-        {items.map((l) => {
-          const b = l.booking;
-          const status = statusOf(b);
-          const sched = fmtSchedule(b.startAt, b.endAt);
-          return (
-            <li key={b.code}>
-              <button
-                type="button"
-                onClick={() => onPick(l)}
-                className={cx(
-                  'flex min-h-[68px] w-full cursor-pointer items-center gap-3 rounded-2xl border bg-white p-3.5 text-left transition hover:border-[#15803D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15803D]',
-                  status.rebook ? 'border-sky-300 bg-sky-50/60' : 'border-zinc-200'
-                )}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-bold text-zinc-950">
-                    {b.courtName} · {sched.day}
-                  </span>
-                  <span className="block truncate text-xs text-zinc-500">
-                    {sched.time} · {b.code}
-                  </span>
-                </span>
-                <span className={cx('shrink-0 rounded-full px-2.5 py-1 text-xs font-bold', TONE[status.tone].pill)}>{status.label}</span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300" />
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
   );
 }
 
