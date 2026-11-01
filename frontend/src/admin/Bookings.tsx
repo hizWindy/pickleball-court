@@ -85,8 +85,9 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
     }
   };
 
-  // Things that still need the host's attention are shown whatever their date.
-  const ignoreTime = !!q || status === 'held' || LABEL_KEYS.has(status);
+  // A search looks at every date. Everything else keeps the dates the host picked, so the number on a chip
+  // (counted for those dates) is exactly what tapping it lists.
+  const ignoreTime = !!q;
   const today = desk.config?.today;
   const query = useMemo(() => {
     const soonestFirst = status === 'paid' || status === 'rain_delay';
@@ -237,7 +238,8 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
           <p className="mx-auto mt-1 max-w-xs text-sm text-zinc-500">
             {filtered ? 'Try another search, or look at all dates and statuses.' : 'Online bookings and walk-ins you add will show up here.'}
           </p>
-          <div className="mt-4 flex justify-center gap-2">
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            {!ignoreTime && time !== 'all' && <Btn onClick={() => setTime('all')}>Show all dates</Btn>}
             {filtered && <Btn onClick={clear}>Clear filters</Btn>}
             <Btn variant="primary" onClick={() => desk.addBooking()}>
               <Plus className="h-4 w-4" /> Add booking

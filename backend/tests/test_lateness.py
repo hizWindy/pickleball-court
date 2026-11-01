@@ -64,6 +64,31 @@ def test_late_is_judged_from_the_clock_not_from_when_someone_looked(admin, booki
     assert d["restorable"] is False  # the host's few minutes were over long ago
 
 
+def test_each_filter_count_matches_what_it_lists_for_the_same_dates(admin, booking_payload, fake_now):
+    # The desk's chips show `counts` for the chosen dates, and tapping one lists that filter for the same dates.
+    late, _ = paid(admin, booking_payload, hour=19)  # nobody comes: Late
+    done, _ = paid(admin, booking_payload, hour=20, courtId="court-2")
+    paid(admin, booking_payload, date="2026-10-11", hour=18)  # tomorrow evening: still Paid
+    at(fake_now, 20, 5)
+    admin.post(f"/api/admin/bookings/{done}/arrived")
+    fake_now.current = datetime(2026, 10, 11, 10, 0, tzinfo=MANILA).astimezone(UTC)  # the next morning
+
+    def listing(**params):
+        return admin.get("/api/admin/bookings", params=params).json()
+
+    for dates, expected in (
+        ({"dateFrom": "2026-10-11"}, {"all": 1, "paid": 1, "late": 0, "done": 0}),  # "Today & later"
+        ({"dateTo": "2026-10-10"}, {"all": 2, "paid": 0, "late": 1, "done": 1}),  # "Earlier dates"
+        ({}, {"all": 3, "paid": 1, "late": 1, "done": 1}),  # "All dates"
+    ):
+        counts = listing(**dates)["counts"]
+        assert {k: counts[k] for k in expected} == expected
+        assert listing(**dates)["total"] == counts["all"]
+        for label in ("paid", "late", "done", "rain_delay"):
+            assert listing(label=label, **dates)["total"] == counts["rainDelay" if label == "rain_delay" else label], (dates, label)
+    assert [b["code"] for b in listing(label="late")["items"]] == [late]
+
+
 def test_walk_ins_added_for_now_are_here_not_late(admin, fake_now):
     body = {"kind": "walk_in", "courtId": "court-1", "date": "2026-10-10", "hour": 10, "hours": 1,
             "customerName": "Maria Santos", "customerPhone": "0918 555 0101", "paymentMethod": "cash"}
