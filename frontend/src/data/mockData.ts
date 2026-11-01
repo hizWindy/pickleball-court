@@ -5,10 +5,10 @@ export const COURTS: Court[] = [
   {
     id: 'court-1',
     name: 'Court 1',
-    tagline: 'Dual-tone pro blue surface with sky blue kitchen zone & bright night lights',
+    tagline: 'Teal court with charcoal kitchen zone & bright night lights',
     type: 'standard',
-    surface: 'Dual-Tone Pro Blue Acrylic Non-Slip Surface',
-    image: '/images/housepickle-arena-court-clean.webp',
+    surface: 'Teal & Charcoal Acrylic Non-Slip Surface',
+    image: '/images/court-official-near.webp',
     dayRate: 200,
     nightRate: 250,
     badge: 'Court 1',
@@ -24,10 +24,10 @@ export const COURTS: Court[] = [
   {
     id: 'court-2',
     name: 'Court 2',
-    tagline: 'Dual-tone pro blue surface with sky blue kitchen zone & bright night lights',
+    tagline: 'Teal court with charcoal kitchen zone & bright night lights',
     type: 'standard',
-    surface: 'Dual-Tone Pro Blue Acrylic Non-Slip Surface',
-    image: '/images/housepickle-arena-court-clean.webp',
+    surface: 'Teal & Charcoal Acrylic Non-Slip Surface',
+    image: '/images/court-official-far.webp',
     dayRate: 200,
     nightRate: 250,
     badge: 'Court 2',
@@ -57,7 +57,7 @@ export const COURT_DETAILS = {
   hours: 'Open 24 Hours / 7 Days a week',
   parking: 'Free dedicated on-site parking',
   lighting: 'Super bright night floodlights (24/7, no blinding glare)',
-  surface: 'Tournament red & charcoal non-slip court surface'
+  surface: 'Teal & charcoal non-slip court surface'
 };
 
 export const GENERATE_TIME_SLOTS = (): TimeSlot[] => {
@@ -69,12 +69,12 @@ export const GENERATE_TIME_SLOTS = (): TimeSlot[] => {
       time,
       hour,
       period,
-      isPeak: hour >= 18 || hour < 5,
-      rateType: period === 'night_owl' || period === 'evening' ? 'night_owl' : 'standard'
+      isPeak: period === 'evening',
+      rateType: period === 'evening' ? 'night_owl' : 'standard'
     });
   };
 
-  // Morning: 05:00 to 11:00 (5 AM – 12 PM)
+  // Morning: 05:00 to 17:00 starts (5 AM – 6 PM), ₱200/hr
   addSlot('slot-05', '05:00 AM', 5, 'morning');
   addSlot('slot-06', '06:00 AM', 6, 'morning');
   addSlot('slot-07', '07:00 AM', 7, 'morning');
@@ -82,29 +82,25 @@ export const GENERATE_TIME_SLOTS = (): TimeSlot[] => {
   addSlot('slot-09', '09:00 AM', 9, 'morning');
   addSlot('slot-10', '10:00 AM', 10, 'morning');
   addSlot('slot-11', '11:00 AM', 11, 'morning');
+  addSlot('slot-12', '12:00 PM', 12, 'morning');
+  addSlot('slot-13', '01:00 PM', 13, 'morning');
+  addSlot('slot-14', '02:00 PM', 14, 'morning');
+  addSlot('slot-15', '03:00 PM', 15, 'morning');
+  addSlot('slot-16', '04:00 PM', 16, 'morning');
+  addSlot('slot-17', '05:00 PM', 17, 'morning');
 
-  // Afternoon: 12:00 to 17:00 (12 PM – 6 PM)
-  addSlot('slot-12', '12:00 PM', 12, 'afternoon');
-  addSlot('slot-13', '01:00 PM', 13, 'afternoon');
-  addSlot('slot-14', '02:00 PM', 14, 'afternoon');
-  addSlot('slot-15', '03:00 PM', 15, 'afternoon');
-  addSlot('slot-16', '04:00 PM', 16, 'afternoon');
-  addSlot('slot-17', '05:00 PM', 17, 'afternoon');
-
-  // Evening: 18:00 to 21:00 (6 PM – 10 PM)
+  // Evening: 18:00 to 04:00 starts (6 PM – 5 AM), ₱250/hr
   addSlot('slot-18', '06:00 PM', 18, 'evening');
   addSlot('slot-19', '07:00 PM', 19, 'evening');
   addSlot('slot-20', '08:00 PM', 20, 'evening');
   addSlot('slot-21', '09:00 PM', 21, 'evening');
-
-  // Night Owl: 22:00 to 04:00 (10 PM – 5 AM)
-  addSlot('slot-22', '10:00 PM', 22, 'night_owl');
-  addSlot('slot-23', '11:00 PM', 23, 'night_owl');
-  addSlot('slot-00', '12:00 AM', 0, 'night_owl');
-  addSlot('slot-01', '01:00 AM', 1, 'night_owl');
-  addSlot('slot-02', '02:00 AM', 2, 'night_owl');
-  addSlot('slot-03', '03:00 AM', 3, 'night_owl');
-  addSlot('slot-04', '04:00 AM', 4, 'night_owl');
+  addSlot('slot-22', '10:00 PM', 22, 'evening');
+  addSlot('slot-23', '11:00 PM', 23, 'evening');
+  addSlot('slot-00', '12:00 AM', 0, 'evening');
+  addSlot('slot-01', '01:00 AM', 1, 'evening');
+  addSlot('slot-02', '02:00 AM', 2, 'evening');
+  addSlot('slot-03', '03:00 AM', 3, 'evening');
+  addSlot('slot-04', '04:00 AM', 4, 'evening');
 
   return slots;
 };
@@ -114,7 +110,5 @@ export const ALL_TIME_SLOTS: TimeSlot[] = GENERATE_TIME_SLOTS();
 
 export const SLOTS_BY_PERIOD: Record<TimePeriod, TimeSlot[]> = {
   morning: ALL_TIME_SLOTS.filter((s) => s.period === 'morning'),
-  afternoon: ALL_TIME_SLOTS.filter((s) => s.period === 'afternoon'),
   evening: ALL_TIME_SLOTS.filter((s) => s.period === 'evening'),
-  night_owl: ALL_TIME_SLOTS.filter((s) => s.period === 'night_owl'),
 };

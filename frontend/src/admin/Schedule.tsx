@@ -251,7 +251,7 @@ export const SchedulePage: React.FC = () => {
         <li className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm border-2 border-dashed border-amber-500" /> Late (hours reopened)
         </li>
-        <li className="text-indigo-400">Night Owl hours are shaded</li>
+        <li className="text-indigo-400">Evening hours (6 PM – 5 AM) are shaded</li>
       </ul>
       {problemDialog}
     </div>

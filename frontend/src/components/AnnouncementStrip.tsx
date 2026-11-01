@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ChevronRight, Clock, Flame, Sparkles, Sun, X, Zap, type LucideIcon } from 'lucide-react';
 import { useAvailability, useConfig } from '../hooks/useBookingData';
 import { serverNowMs } from '../lib/api';
-import { dayLabel, minutesUntil, primeTime, toPicks, type OpenPick } from '../lib/openSlots';
+import { dayLabel, isPrimeHour, minutesUntil, primeTime, toPicks, type OpenPick } from '../lib/openSlots';
 import { addDays, currentPlayDate, hourLabel, peso } from '../lib/time';
 import type { BookingDraftSeed } from '../types';
 
@@ -67,15 +67,15 @@ export const AnnouncementStrip: React.FC<AnnouncementStripProps> = ({ onBook }) 
       }
     }
 
-    // 2. Prime time scarcity (5-10 PM), only once it's genuinely getting tight.
+    // 2. Prime time scarcity (6-10 PM), only once it's genuinely getting tight.
     const prime = primeTime(todayAvail.slots, courts);
     if (prime.total > 0 && prime.free > 0 && prime.free <= 3) {
-      const firstPrime = picks.find((p) => p.date === today && p.slot.period === 'evening');
+      const firstPrime = picks.find((p) => p.date === today && isPrimeHour(p.slot.hour));
       out.push({
         id: 'prime',
         Icon: Clock,
         tag: 'Prime time',
-        text: `Tonight 5–10 PM: only ${prime.free} of ${prime.total} hours left`,
+        text: `Tonight 6–10 PM: only ${prime.free} of ${prime.total} hours left`,
         seed: firstPrime ? seedOf(firstPrime) : undefined,
       });
     }
@@ -95,14 +95,14 @@ export const AnnouncementStrip: React.FC<AnnouncementStripProps> = ({ onBook }) 
       });
     }
 
-    // 4. Daytime promo, when a daytime hour is actually bookable.
+    // 4. Morning rate, when a morning hour is actually bookable.
     const day = picks.find((p) => p.slot.rateType === 'standard');
     const save = courts[0].nightRate - courts[0].dayRate;
     if (day && save > 0) {
       out.push({
         id: 'day-promo',
         Icon: Sun,
-        tag: 'Day Promo',
+        tag: 'Morning rate',
         text: `${peso(courts[0].dayRate)}/hr from 5 AM to 6 PM · save ${peso(save)} every hour`,
         seed: seedOf(day),
       });

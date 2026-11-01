@@ -75,7 +75,7 @@ export const FramerBentoFeatures: React.FC = () => {
 
         {/* Dynamic Bento Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-          {/* Card 1: 24/7 Night Owl Arena (Span 7) - Always Shows Night Court Photo */}
+          {/* Card 1: 24/7 play and the Morning / Evening rates (Span 7) */}
           <motion.div
             initial={{ opacity: 0, y: 35 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -120,7 +120,7 @@ export const FramerBentoFeatures: React.FC = () => {
             {/* Card Footer with Live Clock */}
             <div className="p-6 text-white pt-0 relative z-10">
               <p className="text-xs text-zinc-200 leading-relaxed max-w-lg mb-4 font-medium">
-                Play anytime! Daytime promo rate is only <strong>₱200/hr from 5:00 AM to 6:00 PM</strong> (₱250 night lights from 6:00 PM to 5:00 AM), with super bright lights so you can see the ball clearly without hurting your eyes.
+                Play anytime! Morning is only <strong>₱200/hr from 5:00 AM to 6:00 PM</strong> and Evening is ₱250/hr from 6:00 PM to 5:00 AM, with super bright lights so you can see the ball clearly without hurting your eyes.
               </p>
               <div className="pt-3 border-t border-white/20 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2">

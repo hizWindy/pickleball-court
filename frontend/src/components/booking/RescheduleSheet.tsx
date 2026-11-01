@@ -671,20 +671,20 @@ function TimeStep({
         title="Pick a new start time"
         subtitle={`${fmtDate(date, { weekday: 'long', month: 'long', day: 'numeric' })} · ${hrsLabel(booking.hours)}, same length as your booking`}
       />
-      <div className="grid grid-cols-4 gap-1.5 rounded-2xl bg-zinc-100 p-1.5">
-        {PERIODS.map(({ id, label, Icon }) => (
+      <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-zinc-100 p-1.5">
+        {PERIODS.map(({ id, label, range, Icon }) => (
           <button
             key={id}
             type="button"
             onClick={() => onPeriod(id)}
             className={cx(
-              'flex min-h-11 flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[11px] font-semibold transition cursor-pointer',
+              'flex min-h-11 flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[13px] font-semibold transition cursor-pointer',
               active === id ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-800'
             )}
           >
             <Icon className={cx('h-4 w-4', active === id ? 'text-[#15803D]' : '')} />
             <span>{label}</span>
-            {grid && <span className="text-[10px] font-medium text-zinc-400">{openCount(id)} open</span>}
+            <span className="text-[10px] font-medium text-zinc-400">{range}{grid ? ` · ${openCount(id)} open` : ''}</span>
           </button>
         ))}
       </div>
@@ -753,9 +753,9 @@ function TimeStep({
               );
             })}
           </div>
-          {active === 'night_owl' && (
+          {active === 'evening' && (
             <p className="text-xs text-zinc-500">
-              12 AM – 4 AM are the early hours of {fmtDate(addDays(date, 1))}. Night lights rate (₱250/hr) applies 6 PM – 5 AM.
+              Evening rate applies 6 PM – 5 AM. 12 AM – 4 AM are the early hours of {fmtDate(addDays(date, 1))}.
             </p>
           )}
           <p className="text-xs leading-relaxed text-zinc-500">

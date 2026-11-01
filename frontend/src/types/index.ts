@@ -15,7 +15,8 @@ export interface Court {
   dimensions: string;
 }
 
-export type TimePeriod = 'morning' | 'afternoon' | 'evening' | 'night_owl';
+/** Morning is 5 AM - 6 PM (day rate), Evening is 6 PM - 5 AM (night rate). */
+export type TimePeriod = 'morning' | 'evening';
 
 export interface TimeSlot {
   id: string; // e.g., "slot-06"

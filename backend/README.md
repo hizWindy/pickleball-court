@@ -41,7 +41,7 @@ Render. Try it: the site's *Check my booking* with a code and that number, and `
 | **Moving a booking** happens only when the host calls a weather rebooking (below), because the host is the one watching the weather. Optional, off by default (`GUEST_RESCHEDULE=1`): one self-service move per guest, at least 48 h before the start, same length, new date within 30 days of the original, never to a slot that costs more than was paid (cheaper is allowed, no refund). Proof of ownership = booking code + mobile number (or the device's token). | `reschedule.py` |
 | **Rain delay** (host): gives the hours of paid bookings in a window back and sets `weather_hold_at`. The guest then picks a new time themselves on "Check my booking" (any time, free). The host can undo it with Restore. | `admin_service.rain_delay` |
 | One active hold per mobile number, two per IP. Rate limits on create and proof. The player's IP is stored only while the booking is `held`, then erased. | `create_booking`, `ratelimit.py` |
-| Each hour is priced by its own rate (₱200 daytime from 5 AM to 6 PM, ₱250 night lights from 6 PM to 5 AM), plus ₱80 for paddles. Totals are computed on the server only. | `slots.price_hours` |
+| Each hour is priced by its own rate (Morning ₱200 from 5 AM to 6 PM, Evening ₱250 from 6 PM to 5 AM; the booking picker groups start times the same way), plus ₱80 for paddles. Totals are computed on the server only. | `slots.price_hours` |
 | 12 AM–4 AM belong to the previous night's "play day". All times are Manila time. | `slots.py` |
 | Consent is required, versioned and timestamped per booking. Receipt images are deleted 7 days after the host decides (14 days at most if nobody ever reviews them); the hash is kept. | `CONSENT_VERSION`, `purge_old_receipts` |
 

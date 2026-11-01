@@ -1,13 +1,11 @@
-import { Moon, Sun, Sunrise, Sunset } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
 import { COURT_DETAILS } from '../../data/mockData';
 import type { TimePeriod } from '../../types';
 import { cx } from './ui';
 
 export const PERIODS: { id: TimePeriod; label: string; range: string; Icon: typeof Sun }[] = [
-  { id: 'morning', label: 'Morning', range: '5 AM – 12 PM', Icon: Sunrise },
-  { id: 'afternoon', label: 'Afternoon', range: '12 – 6 PM', Icon: Sun },
-  { id: 'evening', label: 'Evening', range: '6 – 10 PM', Icon: Sunset },
-  { id: 'night_owl', label: 'Night Owl', range: '10 PM – 5 AM', Icon: Moon },
+  { id: 'morning', label: 'Morning', range: '5 AM – 6 PM', Icon: Sun },
+  { id: 'evening', label: 'Evening', range: '6 PM – 5 AM', Icon: Moon },
 ];
 
 export const inputClass = (err: boolean) =>

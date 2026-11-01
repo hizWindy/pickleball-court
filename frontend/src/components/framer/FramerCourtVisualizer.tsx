@@ -108,9 +108,9 @@ export const FramerCourtVisualizer: React.FC = () => {
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-28 bg-[#D2EE5E]/10 rounded-full blur-2xl pointer-events-none" />
 
               {/* Court Boundary (White Lines) */}
-              <div className="relative w-[92%] h-[85%] bg-[#DC2626] border-[3px] border-white rounded-xs shadow-2xl overflow-hidden flex flex-col">
-                {/* Top Half Court (Tournament Red) */}
-                <div className="relative flex-1 border-b border-white/80 bg-[#DC2626]">
+              <div className="relative w-[92%] h-[85%] bg-[#0FC2B5] border-[3px] border-white rounded-xs shadow-2xl overflow-hidden flex flex-col">
+                {/* Top Half Court (teal, as painted on the real courts) */}
+                <div className="relative flex-1 border-b border-white/80 bg-[#0FC2B5]">
                   {/* Service Courts */}
                   <div className="absolute inset-x-0 top-0 h-[50%] grid grid-cols-2 border-b-[3px] border-white">
                     <div className="border-r-[2px] border-white flex items-center justify-center p-1">
@@ -128,7 +128,7 @@ export const FramerCourtVisualizer: React.FC = () => {
                   </div>
 
                     {/* Non-Volley Zone (The Kitchen) Top - Charcoal Gray with HousePickle Branding */}
-                  <div className="absolute inset-x-0 bottom-0 h-[50%] bg-[#374151] flex items-center justify-center">
+                  <div className="absolute inset-x-0 bottom-0 h-[50%] bg-[#4B5563] flex items-center justify-center">
                     <div className="flex items-center gap-1 sm:gap-1.5 opacity-90 px-1">
                       <img src="/icon.svg" alt="HousePickle" width={14} height={14} loading="lazy" decoding="async" className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
                       <span className="text-[8px] sm:text-[10px] md:text-[11px] font-heading font-black uppercase text-white tracking-wider sm:tracking-widest">
@@ -146,10 +146,10 @@ export const FramerCourtVisualizer: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Bottom Half Court (Tournament Red) */}
-                <div className="relative flex-1 bg-[#DC2626]">
+                {/* Bottom Half Court (teal) */}
+                <div className="relative flex-1 bg-[#0FC2B5]">
                   {/* Non-Volley Zone (The Kitchen) Bottom - Charcoal Gray with HousePickle Branding */}
-                  <div className="absolute inset-x-0 top-0 h-[50%] bg-[#374151] flex items-center justify-center border-b-[3px] border-white">
+                  <div className="absolute inset-x-0 top-0 h-[50%] bg-[#4B5563] flex items-center justify-center border-b-[3px] border-white">
                     <div className="flex items-center gap-1 sm:gap-1.5 opacity-90 px-1">
                       <img src="/icon.svg" alt="HousePickle" width={14} height={14} loading="lazy" decoding="async" className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
                       <span className="text-[8px] sm:text-[10px] md:text-[11px] font-heading font-black uppercase text-white tracking-wider sm:tracking-widest">

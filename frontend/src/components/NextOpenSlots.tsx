@@ -23,7 +23,7 @@ function startsIn(startAt: string): string | null {
 
 /**
  * Answers the one question most visitors have: "When's the soonest I can play?"
- * Shows the next free hours (today, then tomorrow) plus the next Night Owl promo hour.
+ * Shows the next free hours (today, then tomorrow), always including a cheaper Morning hour.
  * Tapping a card opens the booking with date, time and court already chosen.
  */
 export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
@@ -35,9 +35,9 @@ export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
   const courts = config?.courts ?? [];
 
   const all = [...toPicks(today, todayAvail?.slots, courts), ...toPicks(tomorrow, tomorrowAvail?.slots, courts)];
-  // One card per part of the day (the soonest free hour in each), so the options are genuinely
-  // different (e.g. Tonight 12 AM · Tomorrow 6 AM · Tomorrow 12 PM · Tomorrow 5 PM) instead of
-  // four back-to-back hours. Falls back to consecutive hours if there are fewer parts left.
+  // One card per Morning / Evening of each day (the soonest free hour in each), so the options are
+  // genuinely different (e.g. Today 3 PM · Tonight 7 PM · Tomorrow 5 AM · Tomorrow night 6 PM) instead
+  // of four back-to-back hours. Falls back to consecutive hours if there are fewer groups left.
   const seen = new Set<string>();
   let picks = all.filter((p) => {
     const key = `${p.date}-${p.slot.period}`;
@@ -47,7 +47,7 @@ export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
   });
   if (picks.length < MAX_CARDS) picks = [...picks, ...all.filter((p) => !picks.includes(p))];
   picks = picks.slice(0, MAX_CARDS).sort((a, b) => (a.slot.startAt < b.slot.startAt ? -1 : 1));
-  // Make sure the cheaper Daytime Promo rate is on show if it isn't already.
+  // Make sure the cheaper Morning rate is on show if it isn't already.
   const promoPick = all.find((p) => p.slot.rateType === 'standard');
   if (promoPick && !picks.some((p) => p.slot.rateType === 'standard')) {
     picks = [...picks.slice(0, MAX_CARDS - 1), promoPick];
@@ -126,12 +126,12 @@ function SlotCard({ pick, today, courts, onBook }: { pick: OpenPick; today: stri
     >
       {!night && (
         <span className="absolute right-3 top-3 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-sport font-extrabold uppercase tracking-wider text-[#15803D]">
-          ₱200 Promo
+          Morning
         </span>
       )}
       {night && (
         <span className="absolute right-3 top-3 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-sport font-extrabold uppercase tracking-wider text-[#D2EE5E]">
-          Night Lights
+          Evening
         </span>
       )}
       <div>

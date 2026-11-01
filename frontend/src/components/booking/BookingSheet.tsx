@@ -257,6 +257,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
                   onPick={pickHour}
                   onRetry={refresh}
                   holdMinutes={config?.holdMinutes ?? 10}
+                  rates={{ morning: config?.courts[0]?.dayRate ?? 200, evening: config?.courts[0]?.nightRate ?? 250 }}
                 />
               )}
               {step === 'court' && config && hour != null && (
@@ -415,7 +416,7 @@ function DateStep({ config, today, selected, onPick }: { config: AppConfig; toda
 
 // ── Step 2: Time ──────────────────────────────────────────────────────────────
 function TimeStep({
-  date, avail, error, selectedHour, period, onPeriod, onPick, onRetry, holdMinutes,
+  date, avail, error, selectedHour, period, onPeriod, onPick, onRetry, holdMinutes, rates,
 }: {
   date: string;
   avail: Availability | null;
@@ -426,6 +427,8 @@ function TimeStep({
   onPick: (h: number) => void;
   onRetry: () => void;
   holdMinutes: number;
+  /** Hourly rate of each group, from the server config. */
+  rates: Record<TimePeriod, number>;
 }) {
   const firstOpen = avail?.slots.find((s) => summarize(s).state === 'available')?.period;
   const selectedPeriod = avail?.slots.find((s) => s.hour === selectedHour)?.period;
@@ -439,20 +442,20 @@ function TimeStep({
         title="Pick a start time"
         subtitle={`${fmtDate(date, { weekday: 'long', month: 'long', day: 'numeric' })} · updates live`}
       />
-      <div className="grid grid-cols-4 gap-1.5 rounded-2xl bg-zinc-100 p-1.5">
-        {PERIODS.map(({ id, label, Icon }) => (
+      <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-zinc-100 p-1.5">
+        {PERIODS.map(({ id, label, range, Icon }) => (
           <button
             key={id}
             type="button"
             onClick={() => onPeriod(id)}
             className={cx(
-              'flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[11px] font-semibold transition cursor-pointer',
+              'flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[13px] font-semibold transition cursor-pointer',
               active === id ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-800'
             )}
           >
             <Icon className={cx('h-4 w-4', active === id ? 'text-[#15803D]' : '')} />
-            <span>{label}</span>
-            {avail && <span className="text-[10px] font-medium text-zinc-400">{openCount(id)} open</span>}
+            <span>{label} · {peso(rates[id])}</span>
+            <span className="text-[10px] font-medium text-zinc-400">{range}{avail ? ` · ${openCount(id)} open` : ''}</span>
           </button>
         ))}
       </div>
@@ -527,9 +530,12 @@ function TimeStep({
                     )}
                   </span>
 
-                  {slot.rateType === 'standard' && isAvail && (
-                    <span className={cx('absolute right-1.5 top-1.5 rounded-full px-1.5 text-[9px] font-bold', isSel ? 'bg-[#D2EE5E] text-zinc-900' : 'bg-emerald-100 text-emerald-800')}>
-                      ₱200
+                  {isAvail && (
+                    <span className={cx(
+                      'absolute right-1.5 top-1.5 rounded-full px-1.5 text-[9px] font-bold',
+                      isSel ? 'bg-[#D2EE5E] text-zinc-900' : slot.period === 'evening' ? 'bg-zinc-900 text-[#D2EE5E]' : 'bg-emerald-100 text-emerald-800'
+                    )}>
+                      {peso(rates[slot.period])}
                     </span>
                   )}
                   {isBooked && (
@@ -541,9 +547,9 @@ function TimeStep({
               );
             })}
           </div>
-          {active === 'night_owl' && (
+          {active === 'evening' && (
             <p className="text-xs text-zinc-500">
-              12 AM – 4 AM are the early hours of {fmtDate(addDays(date, 1))}. Night lights rate (₱250/hr) applies 6 PM – 5 AM.
+              Evening rate ({peso(rates.evening)}/hr) applies 6 PM – 5 AM. 12 AM – 4 AM are the early hours of {fmtDate(addDays(date, 1))}.
             </p>
           )}
           <Legend holdMinutes={holdMinutes} />
@@ -788,7 +794,7 @@ function CourtStep({
                     <span className={cx('block text-[15px] font-bold', free ? 'text-zinc-950' : 'text-zinc-800')}>{c.name}</span>
                     <span className="text-xs text-zinc-500">
                       {free ? (
-                        'Full-size · pro blue acrylic surface'
+                        'Full-size · teal court with charcoal kitchen'
                       ) : maxOnThisCourt > 0 ? (
                         <span className="font-semibold text-rose-700">Open for {maxOnThisCourt} hr only before next booking</span>
                       ) : (
@@ -838,7 +844,7 @@ function CourtStep({
             <div key={i} className="flex justify-between py-0.5 text-zinc-600">
               <span>
                 {hourLabel(li.hour)} – {hourLabel((li.hour + 1) % 24)}
-                {li.night && <span className="ml-1.5 text-xs font-semibold text-emerald-700">Night Owl</span>}
+                <span className="ml-1.5 text-xs font-semibold text-emerald-700">{li.night ? 'Evening' : 'Morning'}</span>
               </span>
               <span>{peso(li.rate)}</span>
             </div>
@@ -993,7 +999,7 @@ function ReviewStep(props: {
         <div className="space-y-1 p-4 text-sm">
           {props.lineItems.map((li, i) => (
             <div key={i} className="flex justify-between text-zinc-600">
-              <span>{hourLabel(li.hour)} – {hourLabel((li.hour + 1) % 24)}{li.night ? ' (Night Owl)' : ''}</span>
+              <span>{hourLabel(li.hour)} – {hourLabel((li.hour + 1) % 24)} ({li.night ? 'Evening' : 'Morning'})</span>
               <span>{peso(li.rate)}</span>
             </div>
           ))}

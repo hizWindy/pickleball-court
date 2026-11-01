@@ -308,7 +308,7 @@ const OverviewBody: React.FC<{ o: Overview; days: number; now: number }> = ({ o,
         <Section title="By rate" note="Court fees, before paddles.">
           <RankBars
             rows={o.byRate.map((r) => ({
-              label: r.rateType === 'night_owl' ? 'Night Owl' : 'Standard',
+              label: r.rateType === 'night_owl' ? 'Evening (6 PM – 5 AM)' : 'Morning (5 AM – 6 PM)',
               sub: `${r.hours} h`,
               value: r.revenue,
               display: peso(r.revenue),

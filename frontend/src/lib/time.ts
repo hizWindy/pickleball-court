@@ -76,7 +76,7 @@ export const pesoExact = (n: number) => `₱${n.toLocaleString('en-PH', { minimu
 /** "₱500" for whole pesos, "₱500.50" when there are centavos (receipt amounts can have them). */
 export const pesoAuto = (n: number) => (Number.isInteger(n) ? peso(n) : pesoExact(n));
 
-/** 6 PM - 4:59 AM is the night lights rate. */
+/** 6 PM - 4:59 AM is Evening (the night rate); 5 AM - 5:59 PM is Morning. */
 export const isNightHour = (hour: number) => hour >= 18 || hour < 5;
 
 /** "1 hr", "2 hrs" */

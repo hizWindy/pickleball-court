@@ -15,20 +15,15 @@ from datetime import date, datetime, time, timedelta
 from app.clock import MANILA, UTC
 
 DAY_START_HOUR = 5
-NIGHT_START_HOUR = 18  # 6 PM - 5 AM is the night lights rate (₱250/hr); 5 AM - 6 PM is daytime promo (₱200/hr)
+NIGHT_START_HOUR = 18  # Morning is 5 AM - 6 PM (₱200/hr); Evening is 6 PM - 5 AM (₱250/hr)
 
 # Display order within a play day: 5 AM ... 11 PM, 12 AM ... 4 AM
 PLAY_DAY_HOURS: list[int] = list(range(DAY_START_HOUR, 24)) + list(range(0, DAY_START_HOUR))
 
 
 def period_for_hour(hour: int) -> str:
-    if 5 <= hour <= 11:
-        return "morning"
-    if 12 <= hour <= 17:
-        return "afternoon"
-    if 18 <= hour <= 21:
-        return "evening"
-    return "night_owl"
+    """The two booking groups players pick from. They line up with the two rates."""
+    return "evening" if is_night_hour(hour) else "morning"
 
 
 def is_night_hour(hour: int) -> bool:

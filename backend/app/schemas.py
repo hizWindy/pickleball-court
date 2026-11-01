@@ -59,7 +59,7 @@ class ConfigOut(ApiModel):
 class SlotOut(ApiModel):
     hour: int
     start_at: str
-    period: str
+    period: Literal["morning", "evening"]
     rate_type: Literal["standard", "night_owl"]
     courts: dict[str, SlotState]
 

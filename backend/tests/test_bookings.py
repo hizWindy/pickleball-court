@@ -36,6 +36,16 @@ def test_multi_hour_booking_blocks_every_hour_and_prices_each_hour(client, booki
         assert slot_state(client, "2026-10-10", hour) == "held"
 
 
+def test_play_day_has_two_groups_morning_and_evening(client):
+    slots = client.get("/api/availability", params={"date": "2026-10-10"}).json()["slots"]
+    morning = [s["hour"] for s in slots if s["period"] == "morning"]
+    evening = [s["hour"] for s in slots if s["period"] == "evening"]
+    assert morning == list(range(5, 18))  # 5 AM - 5 PM starts, ₱200
+    assert evening == [18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4]  # 6 PM - 4 AM starts, ₱250
+    assert {s["rateType"] for s in slots if s["period"] == "morning"} == {"standard"}
+    assert {s["rateType"] for s in slots if s["period"] == "evening"} == {"night_owl"}
+
+
 def test_after_midnight_slots_belong_to_previous_play_day(client, booking_payload):
     b = create(client, booking_payload, hour=1).json()["booking"]
     assert b["startAt"] == "2026-10-10T17:00:00Z"  # Oct 11, 1:00 AM Manila

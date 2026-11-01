@@ -243,7 +243,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
                   {b.lineItems.map((li) => {
                     const h = manilaHour(Date.parse(li.startAt));
                     return (
-                      <Row key={li.startAt} label={`${clock(h)}${li.rateType === 'night_owl' ? ' · Night Owl' : ''}`}>
+                      <Row key={li.startAt} label={`${clock(h)} · ${li.rateType === 'night_owl' ? 'Evening' : 'Morning'}`}>
                         {peso(li.rate)}
                       </Row>
                     );

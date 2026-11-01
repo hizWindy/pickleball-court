@@ -139,7 +139,7 @@ export const HOUSE_RULES: HouseRule[] = [
     isCrucial: true,
     summary: 'Tennis, pickleball, or clean athletic sneakers with non-marking soles.',
     details:
-      'To protect the professional dual-tone acrylic surface and prevent ankle slips, only non-marking athletic sneakers or court shoes are permitted. Strictly no slippers, flip-flops, crocs, hiking boots, running spikes, high heels, or bare feet on the playing area.',
+      'To protect the teal and charcoal acrylic surface and prevent ankle slips, only non-marking athletic sneakers or court shoes are permitted. Strictly no slippers, flip-flops, crocs, hiking boots, running spikes, high heels, or bare feet on the playing area.',
   },
   {
     id: 'firm-turnover',
@@ -174,12 +174,12 @@ export const HOUSE_RULES: HouseRule[] = [
   {
     id: 'night-owl-noise',
     number: '05',
-    title: '24/7 Night Owl Etiquette (10 PM – 6 AM)',
+    title: 'Late-Night Quiet Hours (10 PM – 6 AM)',
     tag: 'Community',
     tagColor: 'amber',
     summary: 'Keep cheering and portable speakers considerate during midnight hours.',
     details:
-      'HousePickle Club is proud to offer 24/7 play in front of Aloha Suites. During late-night promo hours (10:00 PM to 6:00 AM), keep portable Bluetooth speakers and loud shouting at a respectful level for neighborhood peace. Night floodlights are turned on strictly for active booked sessions.',
+      'HousePickle Club is proud to offer 24/7 play in front of Aloha Suites. From 10:00 PM to 6:00 AM, keep portable Bluetooth speakers and loud shouting at a respectful level for neighborhood peace. Night floodlights are turned on strictly for active booked sessions.',
   },
   {
     id: 'sportsmanship',

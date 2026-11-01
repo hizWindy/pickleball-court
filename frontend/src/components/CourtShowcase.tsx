@@ -14,14 +14,14 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
 
   const gallery = [
     {
-      title: 'HousePickle Club 3D Architecture',
-      tag: 'Official 2-Court Vision',
-      image: '/images/housepickle-3d-architecture.webp'
+      title: 'HousePickle Club Courts',
+      tag: 'Official 2-Court Venue',
+      image: '/images/court-official.webp'
     },
     {
-      title: 'Blue & Green Acrylic Court',
+      title: 'Teal & Charcoal Court',
       tag: 'Knee-Friendly Surface',
-      image: '/images/court-championship.webp'
+      image: '/images/court-official-near.webp'
     },
     {
       title: '24/7 Super Bright Night Lights',
@@ -29,9 +29,9 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
       image: '/images/night-atmosphere.webp'
     },
     {
-      title: 'Official Court Dimensions & Kitchen',
+      title: 'Regulation Court & Kitchen',
       tag: 'Clean & Regulation',
-      image: '/images/court-guide.webp'
+      image: '/images/court-official-far.webp'
     },
     {
       title: 'Rental Paddles & Balls',
@@ -53,13 +53,13 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
         >
           <div className="relative aspect-[4/3] sm:aspect-[16/10] md:aspect-[16/9] lg:aspect-[16/8] w-full bg-zinc-950 overflow-hidden">
             <img
-              src="/images/housepickle-venue-aerial.webp"
-              alt="HousePickle Club Official 2-Court Venue Design"
-              width={1024}
-              height={768}
+              src="/images/court-official-16-9.webp"
+              alt="HousePickle Club's two teal pickleball courts"
+              width={1600}
+              height={900}
               loading="lazy"
               decoding="async"
-              className="w-full h-full object-cover object-[center_45%] group-hover:scale-103 transition-transform duration-700"
+              className="w-full h-full object-cover object-center group-hover:scale-103 transition-transform duration-700"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/30 via-45% to-black/30 pointer-events-none" />
 
@@ -67,7 +67,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
             <div className="absolute top-4 left-4 sm:top-6 sm:left-6 flex items-center gap-2">
               <span className="px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-[#D2EE5E] font-sport font-extrabold text-[10px] sm:text-xs uppercase tracking-wider border border-white/20 flex items-center gap-2 shadow-md">
                 <span className="w-2 h-2 rounded-full bg-[#D2EE5E] animate-pulse" />
-                OFFICIAL 2-COURT VENUE DESIGN
+                OUR 2 OFFICIAL COURTS
               </span>
             </div>
 
@@ -88,11 +88,11 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedImage('/images/housepickle-venue-aerial.webp')}
+                  onClick={() => setSelectedImage('/images/court-official.webp')}
                   className="px-4 py-2 rounded-full bg-white/20 hover:bg-white/35 backdrop-blur-md text-white text-xs font-sport font-extrabold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 border border-white/25 shadow-md"
                 >
                   <Maximize2 className="w-3.5 h-3.5" />
-                  <span>ENLARGE RENDER</span>
+                  <span>ENLARGE PHOTO</span>
                 </button>
               </div>
             </div>
@@ -119,7 +119,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
             </div>
             <div className="flex items-center gap-2 text-xs font-sport font-bold uppercase text-zinc-600">
               <span className="px-3 py-1 rounded-full bg-emerald-50 text-[#15803D] border border-emerald-200">
-                Late Night Promo: ₱200/hr (10PM - 6AM)
+                Morning ₱200/hr • Evening ₱250/hr
               </span>
             </div>
           </motion.div>
@@ -149,7 +149,6 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                       height={500}
                       loading="lazy"
                       decoding="async"
-                      style={{ objectPosition: idx === 0 ? 'center 75%' : 'center 58%' }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-95"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
@@ -177,7 +176,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                         {court.name}
                       </h4>
                       <p className="text-[11px] sm:text-xs text-zinc-300 font-medium mt-0.5">
-                        Dual-Tone Pro Blue Surface • Full 20 × 44 ft
+                        Teal & Charcoal Surface • Full 20 × 44 ft
                       </p>
                     </div>
                   </div>
@@ -190,7 +189,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                         <div>
                           <div className="flex items-center gap-1 text-[11px] font-sport font-bold uppercase text-[#15803D]">
                             <Sun className="w-3.5 h-3.5 text-[#15803D]" />
-                            Daytime Promo (5A-6P)
+                            Morning (5A-6P)
                           </div>
                           <div className="text-lg font-heading font-black text-[#15803D] mt-0.5">
                             ₱{court.dayRate}<span className="text-xs font-normal text-emerald-700">/hr</span>
@@ -202,7 +201,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                         <div>
                           <div className="flex items-center gap-1 text-[11px] font-sport font-bold uppercase text-zinc-600">
                             <Moon className="w-3.5 h-3.5 text-zinc-700" />
-                            Night Lights (6P-5A)
+                            Evening (6P-5A)
                           </div>
                           <div className="text-lg font-heading font-black text-zinc-900 mt-0.5">
                             ₱{court.nightRate}<span className="text-xs font-normal text-zinc-500">/hr</span>
@@ -215,7 +214,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
                     <div className="space-y-1.5 text-xs text-zinc-600 pt-1">
                       <div className="flex items-center gap-2">
                         <Check className="w-3.5 h-3.5 text-[#15803D] shrink-0" />
-                        <span>Smooth dual-tone blue non-slip surface with kitchen zone</span>
+                        <span>Smooth teal non-slip surface with charcoal kitchen zone</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-3.5 h-3.5 text-[#15803D] shrink-0" />
