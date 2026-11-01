@@ -19,10 +19,11 @@ function remember(key: string, value: unknown) {
  * Load data for a key and keep it fresh while the tab is visible.
  * Shows the last result for the key straight away (see above) and refreshes behind it: polling and "something
  * changed" reloads never blink the screen. `keepPrevious` holds on to the old result while a new key (a filter, a
- * range, "show more") loads, so lists don't empty out between two pages.
+ * range, "show more") loads, so lists don't empty out between two pages. `dataKey` says which key the data on hand
+ * belongs to, so a screen can tell a held-over result from the one it asked for.
  */
 export function useRemote<T>(key: string, load: () => Promise<T>, { intervalMs = 0, enabled = true, version = 0, keepPrevious = false } = {}) {
-  const [data, setDataState] = useState<T | null>(() => (memory.get(key) as T | undefined) ?? null);
+  const [state, setState] = useState<{ key: string; value: T } | null>(() => (memory.has(key) ? { key, value: memory.get(key) as T } : null));
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(() => !memory.has(key));
   const loadRef = useRef(load);
@@ -38,7 +39,7 @@ export function useRemote<T>(key: string, load: () => Promise<T>, { intervalMs =
       const result = await loadRef.current();
       remember(forKey, result);
       if (keyRef.current === forKey) {
-        setDataState(result);
+        setState({ key: forKey, value: result });
         setError(null);
       }
     } catch (e) {
@@ -51,13 +52,13 @@ export function useRemote<T>(key: string, load: () => Promise<T>, { intervalMs =
   const refresh = useCallback(() => run(false), [run]);
   const setData = useCallback((value: T | null) => {
     if (value !== null) remember(keyRef.current, value);
-    setDataState(value);
+    setState(value === null ? null : { key: keyRef.current, value });
   }, []);
 
   useEffect(() => {
     if (!enabled) return;
     const cached = memory.get(key) as T | undefined;
-    setDataState((prev) => (cached !== undefined ? cached : keepPrevious ? prev : null));
+    setState((prev) => (cached !== undefined ? { key, value: cached } : keepPrevious ? prev : null));
     setError(null);
     run(cached !== undefined);
     if (!intervalMs) return;
@@ -79,7 +80,7 @@ export function useRemote<T>(key: string, load: () => Promise<T>, { intervalMs =
     if (enabled) run(true);
   }, [version, enabled, run]);
 
-  return { data, error, loading, refresh, setData };
+  return { data: state?.value ?? null, dataKey: state?.key ?? null, error, loading, refresh, setData };
 }
 
 export type Tab = 'overview' | 'bookings' | 'schedule' | 'weather';

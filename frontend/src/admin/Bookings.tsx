@@ -111,8 +111,18 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
       dateTo: !ignoreTime && time === 'past' && today ? addDays(today, -1) : undefined,
     };
   }, [q, status, courtId, pages, ignoreTime, time, today]);
-  const key = JSON.stringify(query);
-  const { data, error, loading } = useRemote(`bookings-${key}`, () => adminApi.list(query), { intervalMs: 90000, version: desk.refreshKey, enabled: !!today, keepPrevious: true });
+  // The chip numbers depend on the search, dates and court; the rows also on the chip and sort (and the page count).
+  const countsPart = JSON.stringify([query.q, query.dateFrom, query.dateTo, query.courtId]);
+  const { pageSize, ...listQuery } = query;
+  const listPart = JSON.stringify(listQuery);
+  const { data: onHand, dataKey, error, loading } = useRemote(JSON.stringify(['bookings', countsPart, listPart, pageSize]), () => adminApi.list(query), {
+    intervalMs: 90000, version: desk.refreshKey, enabled: !!today, keepPrevious: true,
+  });
+  // The last result stays on hand while a new one loads (or fails), but it must never pass for this filter, like a Late
+  // list under the All chip. Rows are only kept for "Show more" (same list, fewer pages); numbers only for the same dates.
+  const [, onHandCounts, onHandList] = dataKey ? (JSON.parse(dataKey) as string[]) : [];
+  const data = onHand && onHandList === listPart ? onHand : null;
+  const counts = onHand && onHandCounts === countsPart ? onHand.counts : undefined;
 
   const items = data?.items ?? null;
 
@@ -128,7 +138,6 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
     if (MORE_KEYS.has(next)) setMoreOpen(true);
   };
 
-  const counts = data?.counts;
   const moreSelected = MORE.find((c) => c.key === status);
   const showMore = moreOpen || !!moreSelected;
   const moreTotal = counts ? MORE.reduce((n, c) => n + c.count(counts), 0) : 0;
