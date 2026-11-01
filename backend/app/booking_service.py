@@ -34,7 +34,7 @@ import sqlite3
 import uuid
 from datetime import date, datetime, timedelta
 
-from app import clock, ocr, receipt_reader, receipts
+from app import clock, ocr, ratelimit, receipt_reader, receipts
 from app.clock import MANILA, from_iso, to_iso
 from app.config import settings
 from app.db import write_transaction
@@ -51,7 +51,7 @@ from app.schemas import (
     SlotOut,
 )
 from app.slots import PLAY_DAY_HOURS, current_play_date, is_night_hour, period_for_hour, play_date_of, price_hours, slot_start
-from app.validation import mask_phone, normalize_reference
+from app.validation import REFERENCE_REJECTED, ReferenceRejected, clean_reference, mask_phone, normalize_reference
 
 log = logging.getLogger("housepickle")
 
@@ -569,19 +569,39 @@ REFERENCE_USED = (
 )
 
 
+REFERENCE_TRIES = 5  # turned-away tries one booking gets, then the host takes over
+REFERENCE_TRIES_WINDOW = 15 * 60
+REFERENCE_LOCKED = "Too many tries on this booking. Please call or text the host with your booking code and they'll sort it out."
+
+
+def _refuse_reference(strike_key: str, booking_code: str, raw: str, reason: str) -> BookingError:
+    """Count a turned-away try and build the reply. Everything we won't take for a reason that could tell someone what is
+    already in the system (made-up, another day, a duplicate) gets the very same reply, status code and all."""
+    ratelimit.add_strike(strike_key, REFERENCE_TRIES_WINDOW)
+    log.info("reference turned away (%s) for %s: %s", reason, booking_code, clean_reference(raw)[:40])
+    return BookingError("reference_rejected", REFERENCE_REJECTED)
+
+
 def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, data: ReferenceProofIn) -> BookingOut:
     now = clock.now()
     with write_transaction(conn):
         row = _held_for_proof(conn, code, token, now)
+        strike_key = f"reference:{row['code']}"
+        if ratelimit.struck_out(strike_key, REFERENCE_TRIES, REFERENCE_TRIES_WINDOW):
+            raise TooMany("reference_locked", REFERENCE_LOCKED)
         try:
-            ref = normalize_reference(row["payment_method"], data.reference_number)
-        except ValueError as exc:
+            ref = normalize_reference(data.reference_number, booked_on=from_iso(row["created_at"]).astimezone(MANILA).date())
+        except ReferenceRejected as exc:
+            raise _refuse_reference(strike_key, row["code"], data.reference_number, exc.reason) from None
+        except ValueError as exc:  # a hint that depends only on what was typed
+            ratelimit.add_strike(strike_key, REFERENCE_TRIES_WINDOW)
             raise BookingError("reference_invalid", str(exc)) from None
         # No time is asked for: the payment fell between the booking and this moment (the host sees that window).
         paid_at = _resolve_paid_time(data.paid_time, from_iso(row["created_at"]), now) if data.paid_time else None
         # One payment, one booking: a reference number is never reused, even by a booking that was later rejected or voided.
-        if conn.execute("SELECT 1 FROM bookings WHERE reference_number = ?", (ref,)).fetchone():
-            raise Conflict("reference_used", REFERENCE_USED)
+        taken = conn.execute("SELECT code FROM bookings WHERE reference_number = ?", (ref,)).fetchone()
+        if taken:
+            raise _refuse_reference(strike_key, row["code"], ref, f"already on {taken['code']}")
         # In reference mode every booking is typed in, so a note on each one would only be noise for the host.
         flags = receipt_reader.typed_flags() if settings.proof_mode == "receipt" else []
         try:
@@ -590,7 +610,7 @@ def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, dat
                 paid_at=to_iso(paid_at) if paid_at else None, payer_name=data.payer_name,
             )
         except sqlite3.IntegrityError:  # the unique index is the last line of defence
-            raise Conflict("reference_used", REFERENCE_USED) from None
+            raise _refuse_reference(strike_key, row["code"], ref, "taken at the same moment") from None
         row = conn.execute("SELECT * FROM bookings WHERE id = ?", (row["id"],)).fetchone()
     return to_view(conn, row, now)
 

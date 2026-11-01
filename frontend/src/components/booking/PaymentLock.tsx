@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertTriangle, BookOpen, Clock, Download, ImagePlus, Keyboard, Maximize2, QrCode, ReceiptText, RefreshCw, Upload } from 'lucide-react';
+import { AlertTriangle, BookOpen, Check, ClipboardPaste, Clock, Download, ImagePlus, Keyboard, Maximize2, QrCode, ReceiptText, RefreshCw, Upload } from 'lucide-react';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { prepareReceipt } from '../../lib/image';
+import { checkReference, formatReference, SHAPE_LABEL } from '../../lib/reference';
 import { isIOS, saveImage, saveLabel, usePrefetchedImage } from '../../lib/saveImage';
 import { fmtCountdown, fmtSchedule, fmtTime, pesoExact } from '../../lib/time';
 import { useConfig, useCountdown } from '../../hooks/useBookingData';
@@ -42,6 +43,11 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   const [error, setError] = useState<string | null>(null);
   // The reference number (or receipt) already pays for another booking: one payment, one booking.
   const [refUsed, setRefUsed] = useState(false);
+  // The server turned the typed reference away, or this booking used up its tries. It stays up so the way out stays in reach.
+  const [refTrouble, setRefTrouble] = useState<'rejected' | 'locked' | null>(null);
+  // Hints about the shape wait until the guest pauses or leaves the field, so nobody is scolded mid-typing.
+  const [refTouched, setRefTouched] = useState(false);
+  const refInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [confirmRelease, setConfirmRelease] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -54,6 +60,12 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   const policies = policiesFor(config);
   const totalMs = holdMinutes * 60_000;
   const timeUp = booking != null && left <= 0 && !busy;
+
+  useEffect(() => {
+    if (!ref) return;
+    const t = window.setTimeout(() => setRefTouched(true), 900);
+    return () => window.clearTimeout(t);
+  }, [ref]);
 
   const sync = useCallback(async () => {
     try {
@@ -129,6 +141,13 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
     if (e instanceof ApiError && e.code === 'hold_expired') {
       sync();
     }
+    if (e instanceof ApiError && (e.code === 'reference_rejected' || e.code === 'reference_locked')) {
+      // One calm reply for everything we won't take, with a way out. It never says why.
+      setRefTrouble(e.code === 'reference_locked' ? 'locked' : 'rejected');
+      setError(errorMessage(e));
+      if (e.code === 'reference_rejected') requestAnimationFrame(() => refInput.current?.focus());
+      return;
+    }
     if (e instanceof ApiError && (e.code === 'reference_used' || e.code === 'payment_used' || e.code === 'receipt_used')) {
       setRefUsed(true);
       setError(null);
@@ -183,7 +202,19 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
 
   const sched = booking ? fmtSchedule(booking.startAt, booking.endAt) : null;
   const isGcash = booking?.paymentMethod === 'gcash';
-  const refDigits = ref.replace(/\D/g, '').length;
+  const refCheck = checkReference(ref);
+  const canPaste = typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function';
+  const pasteReference = async () => {
+    try {
+      const pasted = (await navigator.clipboard.readText()).trim();
+      if (!pasted) return;
+      setRef(formatReference(pasted));
+      setRefTouched(true);
+      setError(null);
+    } catch {
+      // the browser said no, or there was nothing to paste: pasting by hand still works
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[70] flex items-stretch justify-center bg-zinc-950/60 backdrop-blur-sm sm:items-center sm:p-4" role="alertdialog" aria-modal="true" aria-labelledby="pay-title">
@@ -475,25 +506,62 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                   </div>
                 ) : (
                   <form onSubmit={submitReference} className="space-y-4 rounded-3xl border border-zinc-200 bg-white p-4">
-                    <label className="block">
-                      <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Reference number (from your receipt)</span>
+                    <div>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <label htmlFor="pay-ref" className="text-sm font-semibold text-zinc-800">Reference number (from your receipt)</label>
+                        {canPaste && (
+                          <button type="button" onClick={pasteReference} className="flex min-h-9 items-center gap-1 rounded-full px-2.5 text-xs font-semibold text-[#15803D] hover:bg-emerald-50 cursor-pointer">
+                            <ClipboardPaste className="h-3.5 w-3.5" /> Paste
+                          </button>
+                        )}
+                      </div>
                       <input
+                        id="pay-ref"
+                        ref={refInput}
                         value={ref}
-                        onChange={(e) => { setRef(e.target.value); setRefUsed(false); }}
-                        inputMode={isGcash ? 'numeric' : 'text'}
+                        onChange={(e) => {
+                          const el = e.target;
+                          // A GCash number is spaced as it is typed (4-3-6, like the receipt), but only when typing at the end so the cursor never jumps.
+                          setRef(el.selectionStart === el.value.length ? formatReference(el.value) : el.value);
+                          setRefUsed(false);
+                          setError(null);
+                          if (!el.value) setRefTouched(false);
+                        }}
+                        onBlur={() => {
+                          if (ref) setRefTouched(true);
+                        }}
+                        inputMode="text"
+                        autoCapitalize="characters"
+                        autoCorrect="off"
+                        spellCheck={false}
                         autoComplete="off"
-                        placeholder={isGcash ? '13 digits, e.g. 1092 837 461928' : 'As shown on your receipt'}
+                        placeholder="Paste or type it from your receipt"
                         maxLength={40}
                         required
-                        className={cx('w-full rounded-2xl border px-4 py-3 font-mono text-base tracking-wide focus:outline-none focus:ring-4', refUsed ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100' : 'border-zinc-200 focus:border-[#15803D] focus:ring-emerald-100')}
-                        aria-invalid={refUsed || undefined}
+                        className={cx('w-full rounded-2xl border px-4 py-3 font-mono text-base tracking-wide focus:outline-none focus:ring-4', error ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100' : 'border-zinc-200 focus:border-[#15803D] focus:ring-emerald-100')}
+                        aria-invalid={!!error || undefined}
+                        aria-describedby="pay-ref-help"
                       />
-                      {isGcash && ref && (
-                        <span className={cx('mt-1 block text-xs', refDigits === 13 ? 'text-emerald-700' : 'text-zinc-500')}>
-                          {refDigits}/13 digits
-                        </span>
-                      )}
-                    </label>
+                      <p id="pay-ref-help" className="mt-1.5 text-xs" aria-live="polite">
+                        {refCheck.state === 'ok' ? (
+                          <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                            <Check className="h-3.5 w-3.5" strokeWidth={3} /> {SHAPE_LABEL[refCheck.shape]}
+                          </span>
+                        ) : refCheck.state === 'hint' && refTouched ? (
+                          <span className="font-medium text-amber-800">{refCheck.message}</span>
+                        ) : (
+                          <span className="text-zinc-500">GCash: 13 numbers · GoTyme: starts with GT</span>
+                        )}
+                      </p>
+                      <details className="mt-2 text-xs text-zinc-600">
+                        <summary className="cursor-pointer font-semibold text-zinc-700">Where do I find it?</summary>
+                        <ul className="mt-1.5 list-disc space-y-1 pl-5">
+                          <li><strong>GCash:</strong> open Transactions, tap your payment, then copy the Ref No. (13 numbers, like 1092 837 461928).</li>
+                          <li><strong>GoTyme:</strong> the reference number is at the bottom of your receipt (it starts with GT).</li>
+                          <li>Paid from another bank or wallet? Use the reference number on that app's receipt.</li>
+                        </ul>
+                      </details>
+                    </div>
                     <label className="block">
                       <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Name of the sender (the account you paid from)</span>
                       <input
@@ -506,9 +574,9 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                       />
                       <span className="mt-1 block text-xs text-zinc-500">The name on your {account?.label ?? 'GCash'} account, so the host can find your payment.</span>
                     </label>
-                    {refUsed && <ReferenceUsedHelp code={code} />}
                     <InlineError>{error}</InlineError>
-                    <PrimaryButton type="submit" className="w-full" loading={busy} disabled={!ref || payerName.trim().length < 2}>
+                    {refTrouble && <ReferenceHelp code={code} locked={refTrouble === 'locked'} />}
+                    <PrimaryButton type="submit" className="w-full" loading={busy} disabled={refCheck.state !== 'ok' || payerName.trim().length < 2 || refTrouble === 'locked'}>
                       Submit payment details
                     </PrimaryButton>
                     {config?.proofMode === 'receipt' && (
@@ -570,6 +638,19 @@ function ReferenceUsedHelp({ code }: { code: string }) {
         Still the same? If you're sure it's right, send the host your booking code ({code}) and they'll check it.
       </p>
       <HostActions code={code} message={`Hi! About booking ${code}: it says my reference number was already used. Can you check my payment?`} />
+    </div>
+  );
+}
+
+/** After a reference was turned away: a calm way out that never says why. */
+function ReferenceHelp({ code, locked }: { code: string; locked: boolean }) {
+  return (
+    <div className={cx('space-y-2.5 rounded-2xl p-3.5 text-sm ring-1', locked ? 'bg-amber-50 text-amber-950 ring-amber-200' : 'bg-zinc-50 text-zinc-800 ring-zinc-200')}>
+      <p className="font-heading text-[15px] font-bold">{locked ? 'Let the host take it from here' : 'Still stuck?'}</p>
+      <p className="text-xs">
+        {locked ? 'Send the host your booking code' : 'Call or text the host with your booking code'} ({code}) and they'll check your payment.
+      </p>
+      <HostActions code={code} message={`Hi! About booking ${code}: my reference number wasn't accepted. Can you check my payment?`} />
     </div>
   );
 }

@@ -141,7 +141,7 @@ def test_a_sentence_starting_with_from_is_not_a_sender():
 
 
 def test_lenient_checks():
-    good = ["RE••••K V.", "+63 912 828 5344", "Sent via GCash", "Total Amount Sent  P250.00", "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM"]
+    good = ["RE••••K V.", "+63 912 828 5344", "Sent via GCash", "Total Amount Sent  P250.00", "Ref No. 7305 118 642950", "Oct 10, 2026 10:02 AM"]
     # the labelled amount was misread, but the right total is printed elsewhere on the receipt
     misread = [ln.replace("Total Amount Sent  P250.00", "Total Amount Sent  P25.00") for ln in good] + ["Amount  250.00"]
     assert rr.assess(rr.read(misread), expected()) == []
@@ -157,7 +157,7 @@ def test_lenient_checks():
 
 
 def test_a_merged_mask_on_the_clubs_own_account_still_matches():
-    r = rr.read(["RE••KV.", "+63 9•5344", "Sent via GCash", "Total Amount Sent  P250.00", "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM"])
+    r = rr.read(["RE••KV.", "+63 9•5344", "Sent via GCash", "Total Amount Sent  P250.00", "Ref No. 7305 118 642950", "Oct 10, 2026 10:02 AM"])
     assert r.recipient_name == "RE••K V." and rr.assess(r, expected()) == []
 
 
@@ -208,7 +208,7 @@ def test_recipient_name_matching(name, ok):
 def test_a_genuine_payment_has_no_flags():
     r = rr.read([
         "RE••••K V.", "+63 912 828 5344", "Sent via GCash", "Total Amount Sent  P250.00",
-        "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM",
+        "Ref No. 7305 118 642950", "Oct 10, 2026 10:02 AM",
     ])
     assert rr.assess(r, expected()) == []
 
@@ -233,7 +233,7 @@ def test_unreadable_receipt_is_one_clear_flag():
     [("P249.00", "amount_short"), ("P100.00", "amount_short"), ("P251.00", "amount_over"), ("P250.00", None)],
 )
 def test_the_amount_is_checked_against_the_checkout_total(amount, code):
-    lines = ["RE••••K V.", "+63 912 828 5344", "Sent via GCash", f"Total Amount Sent  {amount}", "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM"]
+    lines = ["RE••••K V.", "+63 912 828 5344", "Sent via GCash", f"Total Amount Sent  {amount}", "Ref No. 7305 118 642950", "Oct 10, 2026 10:02 AM"]
     flags = [f.code for f in rr.assess(rr.read(lines), expected())]
     assert flags == ([code] if code else [])
 
@@ -260,7 +260,7 @@ def _upload(client, code, headers, data=PNG):
     return client.post(f"/api/bookings/{code}/receipt", headers=headers, files={"receipt": ("r.png", data)})
 
 
-GOOD = ["RE••••K V.", "+63 912 828 5344", "Sent via GCash", "Total Amount Sent  P250.00", "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM"]
+GOOD = ["RE••••K V.", "+63 912 828 5344", "Sent via GCash", "Total Amount Sent  P250.00", "Ref No. 7305 118 642950", "Oct 10, 2026 10:02 AM"]
 
 
 def test_matching_receipt_confirms_with_nothing_to_look_at(admin, booking_payload, ocr_reads, fake_now):
@@ -272,7 +272,7 @@ def test_matching_receipt_confirms_with_nothing_to_look_at(admin, booking_payloa
 
     d = admin.get(f"/api/admin/bookings/{code}").json()
     assert d["reviewFlags"] == [] and d["needsReview"] is False and d["label"] == "paid"
-    assert d["referenceNumber"] == "1234567890123"
+    assert d["referenceNumber"] == "7305118642950"
     assert d["scan"]["amount"] == 250 and d["scan"]["provider"] == "gcash" and d["scan"]["engine"] == "rapidocr"
     assert d["scan"]["recipientNumber"] == "+63 912 828 5344"
     assert _counts(admin) == {"toReview": 0, "flagged": 0, "held": 0, "late": 0, "rainDelay": 0}
@@ -313,7 +313,7 @@ def test_a_short_payment_is_paid_with_a_note_for_the_host(admin, booking_payload
 
 def test_a_receipt_whose_amount_couldnt_be_read_still_confirms_with_a_note(admin, booking_payload, ocr_reads):
     # Not strict: everything else on it is a payment, so the guest isn't kept waiting; the host gets a note.
-    ocr_reads(["RE••••K V.", "Sent via GCash", "Ref No. 1234 567 890123", "Oct 10, 2026 10:02 AM"])
+    ocr_reads(["RE••••K V.", "Sent via GCash", "Ref No. 7305 118 642950", "Oct 10, 2026 10:02 AM"])
     code, headers = _book(admin, booking_payload)
     b = _upload(admin, code, headers).json()
     assert b["status"] == "confirmed" and b["pendingReason"] is None
@@ -348,7 +348,7 @@ def test_same_payment_cannot_confirm_two_bookings_even_as_a_new_screenshot(clien
 def test_typed_reference_then_a_receipt_of_the_same_payment_is_refused(client, booking_payload, ocr_reads, fake_now):
     a, ha = _book(client, booking_payload)
     fake_now.advance(minutes=2)
-    client.post(f"/api/bookings/{a}/reference", headers=ha, json={"referenceNumber": "1234 567 890123", "paidTime": "10:02", "payerName": "Juan"})
+    client.post(f"/api/bookings/{a}/reference", headers=ha, json={"referenceNumber": "7305 118 642950", "paidTime": "10:02", "payerName": "Juan"})
     ocr_reads(GOOD)
     b, hb = _book(client, booking_payload, customerPhone="09181112222", hour=20)
     assert _upload(client, b, hb).json()["error"]["code"] == "payment_used"
@@ -358,7 +358,7 @@ def test_typed_reference_confirms_and_is_flagged_for_a_look(admin, booking_paylo
     code, headers = _book(admin, booking_payload)
     fake_now.advance(minutes=2)
     res = admin.post(f"/api/bookings/{code}/reference", headers=headers,
-                     json={"referenceNumber": "1092 8374 61928", "paidTime": "10:02", "payerName": "Juan dela Cruz"})
+                     json={"referenceNumber": "4821 9053 37164", "paidTime": "10:02", "payerName": "Juan dela Cruz"})
     assert res.json()["status"] == "confirmed"
     d = admin.get(f"/api/admin/bookings/{code}").json()
     assert [f["code"] for f in d["reviewFlags"]] == ["typed_reference"] and d["scan"] is None

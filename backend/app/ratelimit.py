@@ -12,6 +12,7 @@ from app.errors import TooMany
 
 _lock = threading.Lock()
 _hits: dict[str, deque[float]] = defaultdict(deque)
+_strikes: dict[str, deque[float]] = defaultdict(deque)
 
 
 def client_ip(request: Request) -> str:
@@ -32,6 +33,31 @@ def limit(request: Request, bucket: str, max_hits: int, window_seconds: int, per
         q.append(now)
 
 
+def struck_out(key: str, max_strikes: int, window_seconds: int) -> bool:
+    """Has this key used up its allowed turned-away tries within the window? (Reading never adds one.)"""
+    now = time.monotonic()
+    with _lock:
+        q = _strikes.get(key)
+        if q is None:
+            return False
+        while q and q[0] <= now - window_seconds:
+            q.popleft()
+        if not q:
+            del _strikes[key]
+            return False
+        return len(q) >= max_strikes
+
+
+def add_strike(key: str, window_seconds: int) -> None:
+    now = time.monotonic()
+    with _lock:
+        q = _strikes[key]
+        while q and q[0] <= now - window_seconds:
+            q.popleft()
+        q.append(now)
+
+
 def reset() -> None:
     with _lock:
         _hits.clear()
+        _strikes.clear()

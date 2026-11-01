@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from app import booking_service
+from app.validation import REFERENCE_REJECTED
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 
@@ -27,11 +28,11 @@ def test_typing_the_reference_and_name_confirms_with_no_time_and_no_notes(admin,
     code, headers = _book(admin, booking_payload)
     fake_now.advance(minutes=4)
     res = admin.post(f"/api/bookings/{code}/reference", headers=headers,
-                     json={"referenceNumber": "1092 8374 61928", "payerName": "Juan dela Cruz"})
+                     json={"referenceNumber": "4821 9053 37164", "payerName": "Juan dela Cruz"})
     assert res.status_code == 200 and res.json()["status"] == "confirmed"
 
     d = admin.get(f"/api/admin/bookings/{code}").json()
-    assert d["referenceNumber"] == "1092837461928" and d["payerName"] == "Juan dela Cruz"
+    assert d["referenceNumber"] == "4821905337164" and d["payerName"] == "Juan dela Cruz"
     assert d["paidAt"] is None  # no exact time: the host sees the window from createdAt to submittedAt
     assert d["reviewFlags"] == [] and d["label"] == "paid" and d["scan"] is None
     assert d["createdAt"] < d["submittedAt"]
@@ -39,17 +40,17 @@ def test_typing_the_reference_and_name_confirms_with_no_time_and_no_notes(admin,
 
 def test_the_sender_name_is_still_required(admin, booking_payload):
     code, headers = _book(admin, booking_payload)
-    res = admin.post(f"/api/bookings/{code}/reference", headers=headers, json={"referenceNumber": "1092 8374 61928"})
+    res = admin.post(f"/api/bookings/{code}/reference", headers=headers, json={"referenceNumber": "4821 9053 37164"})
     assert res.status_code == 422
 
 
 def test_a_reference_can_only_pay_for_one_booking(client, booking_payload):
     a, ha = _book(client, booking_payload)
-    body = {"referenceNumber": "1092 8374 61928", "payerName": "Juan"}
+    body = {"referenceNumber": "4821 9053 37164", "payerName": "Juan"}
     assert client.post(f"/api/bookings/{a}/reference", headers=ha, json=body).status_code == 200
     b, hb = _book(client, booking_payload, customerPhone="09181112222", hour=20)
     res = client.post(f"/api/bookings/{b}/reference", headers=hb, json=body)
-    assert res.status_code == 409 and res.json()["error"]["code"] == "reference_used"
+    assert res.status_code == 400 and res.json()["error"]["code"] == "reference_rejected"
     assert client.get(f"/api/bookings/{b}", headers=hb).json()["status"] == "held"
 
 
@@ -61,7 +62,7 @@ def test_receipt_uploads_are_switched_off(client, booking_payload):
 
 
 # ── One payment, one booking ──────────────────────────────────────────────────
-REF = "1092 8374 61928"
+REF = "4821 9053 37164"
 
 
 def test_the_same_reference_is_refused_however_it_is_written(admin, booking_payload):
@@ -69,15 +70,15 @@ def test_the_same_reference_is_refused_however_it_is_written(admin, booking_payl
     assert admin.post(f"/api/bookings/{first}/reference", headers=h1, json={"referenceNumber": REF, "payerName": "Juan"}).status_code == 200
 
     second, h2 = _book(admin, booking_payload, hour=20)
-    for spelling in ("1092837461928", "1092-8374-61928", "1092 837 461928", "  1092 8374 61928  "):
+    for spelling in ("4821905337164", "4821-9053-37164", "4821 905 337164", "  4821 9053 37164  "):
         res = admin.post(f"/api/bookings/{second}/reference", headers=h2, json={"referenceNumber": spelling, "payerName": "Maria"})
-        assert res.status_code == 409, spelling
+        assert res.status_code == 400, spelling
         err = res.json()["error"]
-        assert err["code"] == "reference_used" and "already linked to another booking" in err["message"]
+        assert err["code"] == "reference_rejected" and err["message"] == REFERENCE_REJECTED
     # the second guest can still pay properly, and the first booking is untouched
     assert admin.get(f"/api/bookings/{second}", headers=h2).json()["status"] == "held"
     assert admin.post(f"/api/bookings/{second}/reference", headers=h2, json={"referenceNumber": "2092 8374 61929", "payerName": "Maria"}).status_code == 200
-    assert admin.get(f"/api/admin/bookings/{first}").json()["referenceNumber"] == "1092837461928"
+    assert admin.get(f"/api/admin/bookings/{first}").json()["referenceNumber"] == "4821905337164"
 
 
 def test_a_rejected_bookings_reference_stays_used(admin, booking_payload):
@@ -87,7 +88,7 @@ def test_a_rejected_bookings_reference_stays_used(admin, booking_payload):
 
     second, h2 = _book(admin, booking_payload, hour=20)
     res = admin.post(f"/api/bookings/{second}/reference", headers=h2, json={"referenceNumber": REF, "payerName": "Maria"})
-    assert res.status_code == 409 and res.json()["error"]["code"] == "reference_used"
+    assert res.status_code == 400 and res.json()["error"]["code"] == "reference_rejected"
 
 
 def test_the_database_itself_refuses_a_second_booking_with_the_same_reference(admin, booking_payload):
@@ -102,6 +103,6 @@ def test_the_database_itself_refuses_a_second_booking_with_the_same_reference(ad
     conn = connect()
     try:
         with pytest.raises(sqlite3.IntegrityError):
-            conn.execute("UPDATE bookings SET reference_number = '1092837461928' WHERE code = ?", (b,))
+            conn.execute("UPDATE bookings SET reference_number = '4821905337164' WHERE code = ?", (b,))
     finally:
         conn.close()

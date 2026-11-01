@@ -147,7 +147,7 @@ def test_non_image_upload_rejected(client, booking_payload):
 
 
 def _reference(client, body, **overrides):
-    payload = {"referenceNumber": "1092 8374 61928", "paidTime": "10:03", "payerName": "Juan dela Cruz"}
+    payload = {"referenceNumber": "4821 9053 37164", "paidTime": "10:03", "payerName": "Juan dela Cruz"}
     payload.update(overrides)
     return client.post(
         f"/api/bookings/{body['booking']['code']}/reference", headers=auth(body["accessToken"]), json=payload
@@ -186,7 +186,7 @@ def test_reference_cannot_be_reused(client, booking_payload, fake_now):
     a = create(client, booking_payload).json()
     _reference(client, a)
     b = create(client, booking_payload, customerPhone="09181112222", hour=20).json()
-    assert _reference(client, b).json()["error"]["code"] == "reference_used"
+    assert _reference(client, b).json()["error"]["code"] == "reference_rejected"  # never says "already used"
 
 
 def test_proof_needs_valid_token(client, booking_payload):

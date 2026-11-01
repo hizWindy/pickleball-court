@@ -73,9 +73,13 @@ class _Seeder:
                     last = exc
         raise RuntimeError(f"No free slot found for {name} on {day}: {last}")
 
+    def demo_reference(self) -> str:
+        """A made-up 13-digit reference that starts 9990 (so it is easy to spot) and passes the same checks a real one must."""
+        return f"9990{(self.n * 7919 + 4817305) % 10**9:09d}"
+
     def paid(self, name: str, day: date, hour: int, **kw) -> tuple[str, int, int]:
         code, token, h, hours = self.book(name, day, hour, **kw)
-        core.submit_reference(self.conn, code, token, ReferenceProofIn(reference_number=f"99900000{self.n:05d}", payer_name=name))
+        core.submit_reference(self.conn, code, token, ReferenceProofIn(reference_number=self.demo_reference(), payer_name=name))
         return code, h, hours
 
     def add(self, code: str, who: str, when: str, sees: str) -> None:
