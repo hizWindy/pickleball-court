@@ -17,6 +17,11 @@ Then run the frontend (`npm run dev` in the repo root). Vite proxies `/api` to p
 
 Tests: `pytest` (they use a throwaway database and a fake clock).
 
+**Demo data for your own computer:** `python -m app.seed_demo` makes nine bookings under one demo number (`0999 000 0001`):
+five paid ones, two **rain-delayed** guests (they see *Rebook now* on "Check my booking"), one unpaid hold and one expired
+one. It prints the codes. Run it again for a fresh set (only the demo bookings are replaced) and it refuses to run on
+Render. Try it: the site's *Check my booking* with a code and that number, and `/admin` > Weather > *Rebook guests*.
+
 ## Booking rules (what the code enforces)
 
 | Rule | Where |
