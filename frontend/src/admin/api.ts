@@ -64,7 +64,7 @@ export const adminApi = {
   /** Who a rain delay on this window would move. Changes nothing. */
   rainDelayPreview: (date: string, fromHour: number, hours: number) =>
     call<RainDelayPreview>(`/api/admin/rain-delay?date=${enc(date)}&fromHour=${fromHour}&hours=${hours}`),
-  /** Give the hours back for everyone in the window (or just `codes`). Nothing is cancelled or refunded. */
+  /** Ask everyone in the window (or just `codes`) to pick a new time; their hours stay closed until then. Nothing is cancelled or refunded. */
   rainDelay: (body: RainDelayBody) => call<RainDelayResult>('/api/admin/rain-delay', { method: 'POST', json: body }),
 
   list: (query: ListQuery) => {
@@ -80,9 +80,12 @@ export const adminApi = {
   confirm: (code: string) => call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/confirm`, { method: 'POST' }),
   /** "They're here": the group is on site, so the booking never goes Late. */
   arrived: (code: string) => call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/arrived`, { method: 'POST' }),
-  /** Put a Late booking (inside the quiet window) or a rain-delayed one back on court. */
+  /** Undo a rain delay, or put back a Late booking whose court was released (within the short undo). */
   restore: (code: string, note?: string) =>
     call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/restore`, { method: 'POST', json: { note: note || null } }),
+  /** Release court (a Late group) or Open these hours (a rain delay): the hours go back on sale. */
+  release: (code: string, note?: string) =>
+    call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/release`, { method: 'POST', json: { note: note || null } }),
   reject: (code: string, reason?: string) =>
     call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/reject`, { method: 'POST', json: { reason: reason || null } }),
   /** The old "cancel", now "void": guests can't cancel, so this is only for mistakes, duplicates and refunds. */

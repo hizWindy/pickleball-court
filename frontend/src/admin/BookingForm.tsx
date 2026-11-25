@@ -81,7 +81,7 @@ const FormBody: React.FC<{
     const taken = new Map<string, string>();
     for (const b of day.bookings) {
       if (b.code === existing?.code) continue;
-      if (b.label === 'late' || b.label === 'rain_delay') continue; // they have given their hours back
+      if (!b.holdsCourt) continue; // a released Late booking has given its hours back
       for (let i = 0; i < b.hours; i++) taken.set(`${b.courtId}|${Date.parse(b.startAt) + i * 3_600_000}`, b.source === 'blocked' ? `blocked (${b.customerName})` : b.customerName);
     }
     let currentClash: string | null = null;
@@ -192,9 +192,11 @@ const FormBody: React.FC<{
         {editing && existing.source === 'online' && (
           <Card className="bg-zinc-50 p-3 text-xs text-zinc-600">This was booked online. Changes you make here don't notify the player, so tell them if you move it.</Card>
         )}
-        {editing && (existing.label === 'late' || existing.label === 'rain_delay') && (
+        {editing && (existing.label === 'late' || existing.label === 'rain_delay' || existing.paidLate) && (
           <Card className="border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
-            {existing.label === 'late' ? 'This booking went Late and its hours were released.' : 'This booking is on a rain delay and its hours were released.'} Saving it at a new time puts it back on court there.
+            {existing.paidLate
+              ? 'This payment came in after the time ran out, and someone else has that slot. Pick a free time here, save, then Reopen and confirm.'
+              : `${existing.label === 'late' ? 'This booking went Late' : 'This booking is on a rain delay'}${existing.holdsCourt ? ' and still holds its hours.' : ' and its hours were released.'} Saving it at a new time puts it on court there.`}
           </Card>
         )}
 

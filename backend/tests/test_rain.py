@@ -108,7 +108,7 @@ def test_preview_lists_who_a_rain_delay_would_affect(admin, booking_payload):
     assert slot_state(admin, 15) == "booked"  # a preview changes nothing
 
 
-def test_a_rain_delay_gives_the_hours_back_and_keeps_the_booking_paid(admin, booking_payload):
+def test_a_rain_delay_keeps_the_hours_closed_and_the_booking_paid(admin, booking_payload):
     code, headers = paid(admin, booking_payload, hour=15, hours=2)
     other = walk_in(admin, hour=20, customerName="Pedro Penduko")
     res = admin.post("/api/admin/rain-delay", json={"date": "2026-10-10", "fromHour": 14, "hours": 7, "note": "Heavy rain"})
@@ -116,12 +116,51 @@ def test_a_rain_delay_gives_the_hours_back_and_keeps_the_booking_paid(admin, boo
     assert [b["code"] for b in res.json()["moved"]] == [code, other]
     b = admin.get(f"/api/admin/bookings/{code}").json()
     assert b["label"] == "rain_delay" and b["status"] == "confirmed" and b["weatherHoldAt"]
+    assert b["holdsCourt"] is True and b["canRelease"] is True and b["restorable"] is True
     assert b["events"][0]["action"] == "rain_delay" and b["events"][0]["detail"] == "Heavy rain"
-    assert slot_state(admin, 15) == "available" and slot_state(admin, 16) == "available"
+    # Nobody can be sold those hours while the guest hasn't picked a new time (plan D4).
+    assert slot_state(admin, 15) == "booked" and slot_state(admin, 16) == "booked"
+    taken = admin.post("/api/bookings", json=booking_payload(hour=15, customerPhone="09181112222"))
+    assert taken.status_code == 409 and taken.json()["error"]["code"] == "slot_taken"
     assert admin.get("/api/admin/counts").json()["rainDelay"] == 2
 
     guest = admin.get(f"/api/bookings/{code}", headers=headers).json()
     assert guest["weatherHold"] is True and guest["reschedule"] == "weather" and guest["late"] is False
+
+
+def test_the_guests_new_time_frees_the_old_hours_in_the_same_step(admin, booking_payload):
+    code, _ = paid(admin, booking_payload, hour=15)
+    admin.post("/api/admin/rain-delay", json={"date": "2026-10-10", "fromHour": 14, "hours": 3})
+    res = admin.post("/api/reschedule", json={"code": code, "customerPhone": "0917 123 4567", "date": "2026-10-11", "hour": 9})
+    assert res.status_code == 200, res.text
+    assert slot_state(admin, 15) == "available" and slot_state(admin, 9, date="2026-10-11") == "booked"
+    assert admin.get(f"/api/admin/bookings/{code}").json()["holdsCourt"] is True
+
+
+def test_open_these_hours_frees_them_and_undo_takes_them_back(admin, booking_payload):
+    code, headers = paid(admin, booking_payload, hour=15)
+    admin.post("/api/admin/rain-delay", json={"date": "2026-10-10", "fromHour": 14, "hours": 3})
+    res = admin.post(f"/api/admin/bookings/{code}/release", json={})
+    assert res.status_code == 200, res.text
+    b = res.json()
+    assert b["label"] == "rain_delay" and b["releasedAt"] and b["holdsCourt"] is False and b["restorable"] is True
+    assert b["events"][0]["action"] == "hours_opened"
+    assert slot_state(admin, 15) == "available"
+    # The guest still picks a new time, and that just takes the new hours.
+    assert admin.get(f"/api/bookings/{code}", headers=headers).json()["reschedule"] == "weather"
+    # Changed your mind (the rain stopped)? Undo takes the hours back while they're free.
+    undone = admin.post(f"/api/admin/bookings/{code}/restore").json()
+    assert undone["label"] == "paid" and undone["holdsCourt"] is True and slot_state(admin, 15) == "booked"
+
+
+def test_undoing_an_opened_rain_delay_fails_if_the_hours_were_sold(admin, booking_payload):
+    code, _ = paid(admin, booking_payload, hour=15)
+    admin.post("/api/admin/rain-delay", json={"date": "2026-10-10", "fromHour": 14, "hours": 3})
+    admin.post(f"/api/admin/bookings/{code}/release", json={})
+    walk_in(admin, hour=15, customerName="Pedro Penduko")
+    res = admin.post(f"/api/admin/bookings/{code}/restore")
+    assert res.status_code == 409 and res.json()["error"]["code"] == "slot_taken"
+    assert admin.get(f"/api/admin/bookings/{code}").json()["label"] == "rain_delay"
 
 
 def test_a_typhoon_window_can_span_several_days(admin, booking_payload):

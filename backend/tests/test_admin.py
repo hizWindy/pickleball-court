@@ -134,7 +134,7 @@ def test_admin_is_locked_when_no_password_is_configured(client, monkeypatch):
 # ── Reviewing payments ────────────────────────────────────────────────────────
 def test_paid_booking_is_simply_paid(admin, booking_payload):
     code, headers = public_booking(admin, booking_payload)
-    assert _counts(admin) == {"toReview": 0, "flagged": 0, "held": 1, "late": 0, "rainDelay": 0}
+    assert _counts(admin) == {"toReview": 0, "flagged": 0, "held": 1, "late": 0, "rainDelay": 0, "paidLate": 0}
     payments = admin.get("/api/admin/counts").json()["payments"]
     pay_by_receipt(admin, code, headers)
     # OCR is off in this test, so the receipt couldn't be read: still Paid, with a note. There is no "to check" queue.
@@ -320,7 +320,7 @@ def test_list_filters_search_and_counts(admin, booking_payload):
     assert everything["total"] == 3
     assert everything["counts"] == {
         "all": 3, "held": 1, "pendingVerification": 0, "confirmed": 2, "rejected": 0, "expired": 0, "cancelled": 0,
-        "toReview": 0, "flagged": 0, "paid": 2, "late": 0, "done": 0, "rainDelay": 0, "blocked": 0,
+        "toReview": 0, "flagged": 0, "paid": 2, "late": 0, "done": 0, "rainDelay": 0, "blocked": 0, "paidLate": 0,
     }
     assert admin.get("/api/admin/bookings", params={"review": "unchecked"}).json()["total"] == 0  # paid is just Paid
 

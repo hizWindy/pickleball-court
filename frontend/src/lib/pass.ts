@@ -9,7 +9,7 @@ export type PassTone = 'green' | 'amber' | 'red' | 'blue' | 'zinc';
 
 export interface PassState {
   /** Short key for the situation, handy for tests and styling. */
-  key: BookingStatus | 'late' | 'rain' | 'arrived';
+  key: BookingStatus | 'late' | 'rain' | 'arrived' | 'paid_late';
   label: string;
   tone: PassTone;
   hint: string;
@@ -29,16 +29,20 @@ export const STATUS_COPY: Record<BookingStatus, Omit<PassState, 'key'>> = {
 };
 
 /**
- * What the pass should say right now. A paid booking can be Late (the court was released),
- * Rain delay (the host moved everyone) or Checked in, and none of those may read "Confirmed".
+ * What the pass should say right now. A paid booking can be Late (the host may give the court to others),
+ * Rain delay (the host moved everyone) or Checked in, and none of those may read "Confirmed". A hold that ran out but
+ * was paid while someone else had the slot says so, not just "Expired".
  */
 export function passState(booking: Booking): PassState {
+  if (booking.status === 'expired' && booking.paidLate) {
+    return { key: 'paid_late', label: 'Payment received', tone: 'amber', hint: 'Someone else booked the slot first. The host will contact you to move or refund it.' };
+  }
   if (booking.status === 'confirmed') {
     if (booking.weatherHold) {
       return { key: 'rain', label: 'Rain delay', tone: 'blue', hint: 'The courts were closed for rain. Pick a new time.' };
     }
     if (booking.late) {
-      return { key: 'late', label: 'Late', tone: 'zinc', hint: 'The court was released. Please contact the host.' };
+      return { key: 'late', label: 'Late', tone: 'zinc', hint: 'You weren\'t on court in time, so the host may give it to others. Please contact the host.' };
     }
     if (booking.arrived) {
       return { key: 'arrived', label: 'Checked in', tone: 'green', hint: "You're checked in. Have a great game!" };

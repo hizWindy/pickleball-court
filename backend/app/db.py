@@ -56,9 +56,11 @@ CREATE TABLE IF NOT EXISTS bookings (
     checked_at          TEXT,   -- when the host looked at an automatically confirmed payment
     review_flags        TEXT,   -- JSON list of {code, message}: what looked off about the proof
     arrived_at          TEXT,   -- the group showed up (the host tapped Arrived)
-    late_at             TEXT,   -- the group was not there in time: the hours were released and the booking is Late
+    late_at             TEXT,   -- the group was not there in time: the booking is Late (it keeps its hours until the host decides)
     reschedule_count    INTEGER NOT NULL DEFAULT 0,  -- guest-initiated reschedules used (a weather delay is free)
-    weather_hold_at     TEXT    -- the host called a rain delay: the hours are free, the guest picks a new time
+    weather_hold_at     TEXT,   -- the host called a rain delay: the guest picks a new time (the hours stay closed until then)
+    released_at         TEXT,   -- the host gave a Late or rain-delayed booking's hours back (Release court / Open these hours)
+    paid_late_at        TEXT    -- a payment came in after the hold ran out and someone else had the slot: kept for the host
 );
 
 CREATE INDEX IF NOT EXISTS idx_bookings_status_expiry ON bookings(status, hold_expires_at);
@@ -166,6 +168,8 @@ MIGRATIONS = [
     ("bookings", "late_at", "TEXT"),
     ("bookings", "reschedule_count", "INTEGER NOT NULL DEFAULT 0"),
     ("bookings", "weather_hold_at", "TEXT"),
+    ("bookings", "released_at", "TEXT"),
+    ("bookings", "paid_late_at", "TEXT"),
     ("receipt_scans", "sender_name", "TEXT"),
     ("receipt_scans", "sender_number", "TEXT"),
 ]
@@ -191,7 +195,8 @@ def apply_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     # Before arrivals were tracked, nothing could be Late. Treat every booking that already started as
     # attended, or the first sweep would mark the whole history Late.
-    had_arrivals = "arrived_at" in {row["name"] for row in conn.execute("PRAGMA table_info(bookings)")}
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(bookings)")}
+    had_arrivals, had_released = "arrived_at" in columns, "released_at" in columns
     for table, column, decl in MIGRATIONS:
         existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing:
@@ -200,6 +205,14 @@ def apply_schema(conn: sqlite3.Connection) -> None:
         conn.execute(
             "UPDATE bookings SET arrived_at = start_at WHERE status = 'confirmed' AND source != 'blocked' AND start_at <= ?",
             (to_iso(clock.now()),),
+        )
+    if not had_released:
+        # Until Nov 2026, going Late and a rain delay gave the hours back at once. Those bookings have no hours any more:
+        # record that they were released, so they aren't taken for bookings that still hold their court.
+        conn.execute(
+            """UPDATE bookings SET released_at = COALESCE(late_at, weather_hold_at)
+               WHERE status = 'confirmed' AND (late_at IS NOT NULL OR weather_hold_at IS NOT NULL)
+                 AND NOT EXISTS (SELECT 1 FROM booking_slots s WHERE s.booking_id = bookings.id)"""
         )
     conn.executemany(
         """INSERT INTO courts (id, name, day_rate, night_rate, sort_order) VALUES (?, ?, ?, ?, ?)

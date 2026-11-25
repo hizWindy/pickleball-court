@@ -22,7 +22,9 @@ Tests: `pytest` (they use a throwaway database and a fake clock). Among them:
   after every step that no court-hour has two owners, the slot table matches the bookings, a payment reference backs one
   booking, every filter chip's number matches its list, and no unpaid hold is stuck. A failure names its seed and step;
   `SIM_DAYS=200 pytest tests/test_simulated_day.py` plays more days.
-- `tests/test_double_booking.py` holds the 2026-11-25 audit's scenarios (marked `xfail` until release 3 of the plan fixes them).
+- `tests/test_double_booking.py` holds the 2026-11-25 audit's scenarios: a phone booking and a paid group losing their
+  hours when nobody tapped Arrived, payments just after the timer, a rain delay. They failed on that day's code and pass
+  since release 3 of the plan.
 
 Load test (a real server on a throwaway database, 100+ simultaneous requests from players and the desk for the same
 court-hours): `.venv\Scripts\python scripts\stress_double_booking.py`. It passes when every court-hour has one owner.
@@ -41,6 +43,7 @@ site's *Check my booking* with a code and that number, and `/admin` > Schedule, 
 | A slot is **held for 10 minutes** (`HOLD_MINUTES`) from "Confirm & hold". The deadline is stored in the database; the phone only shows a countdown to it. | `booking_service.create_booking` |
 | While held, nobody else can book it. Double booking is impossible: one row per court-hour with a primary key. | `booking_slots` table |
 | No proof in time (+10 s grace) → booking **expires** and the slot is released. Runs on every request and every 15 s in the background. | `release_expired`, `main._sweep_forever` |
+| **A payment after the timer** (within `LATE_PAYMENT_MINUTES`, 30) still counts: if nobody took the hours meanwhile they are taken back and the booking confirms as usual; if someone did, the payment is kept on the expired booking (`paid_late_at`, label **Paid late**), the host is pinged and the player is told the host will move or refund it. Later than that: the usual `hold_expired`. The reference rules don't change. | `_held_for_proof`, `_settle_late_payment`, `_keep_late_payment` |
 | Proof = **receipt screenshot** (main path) or **typed reference + payment time + payer name** (fallback). | `submit_receipt`, `submit_reference` |
 | The same receipt image or reference number can never back two bookings, even after deletion or rejection. | unique indexes on `receipt_sha256`, `reference_number` |
 | A typed payment time must fall inside the hold window (±5 min). | `_resolve_paid_time` |
@@ -48,19 +51,20 @@ site's *Check my booking* with a code and that number, and `/admin` > Schedule, 
 | Full payment **confirms the booking at once**. A receipt image is read on our server (amount, reference, date, recipient). **The amount is checked against the checkout total:** equal → confirmed; more → confirmed and flagged `amount_over`; **short, or no amount readable although the OCR worked → the slot stays reserved but the booking waits for the host** (`pending_verification`). Other mismatches are review flags the host can reject. If the OCR engine is unavailable, the booking is still confirmed and flagged `unreadable`. | `submit_receipt`, `receipt_reader.assess`, `HOLD_FOR_HOST` |
 | One payment can never confirm two bookings: the same image (hash) or the same reference number, whether typed or read off a different screenshot. | `submit_receipt`, `uq_bookings_reference` |
 | **No cancellations.** A paid booking is final (no refunds). A guest can only *release an unpaid hold*; anything else answers `409 bookings_final`. The host can still void a booking from the desk (mistakes, duplicates). | `release_hold` |
-| **Late rule (15 min).** A paid booking whose group hasn't arrived `LATE_AFTER_MINUTES` after its start is **Late**: its court-hours are released automatically (status stays `confirmed`, `late_at` is set, no refund). "Arrived" is set only by the host (Arrived button); guests have no way to check in. Walk-ins added for a time that has begun, and blocks, are never late. | `release_late`, `admin_service.mark_arrived` |
-| **Hidden restore window.** For `RESTORE_WINDOW_MINUTES` (5) after it went late the host (only) can **Restore** the booking if the hours are still free. Guests are never told; the public API doesn't expose it. After that, the host can still move the booking with Edit. | `admin_service.restore` |
+| **Late rule (15 min).** A paid booking whose group hasn't arrived `LATE_AFTER_MINUTES` after its start is **Late** (status stays `confirmed`, `late_at` is set, no refund) but **keeps its court until the host decides**: **Arrived** (they're playing: no longer Late) or **Release court** (the hours go back on sale, `released_at`). Giving the hours away by itself let two groups end up on one court when the host hadn't tapped Arrived; an idle court costs less. "Arrived" is set only by the host; guests have no way to check in. Walk-ins added for a time that has begun, and blocks, are never late. | `mark_late`, `admin_service.mark_arrived`, `admin_service.release` |
+| **Undo a release.** For `RESTORE_WINDOW_MINUTES` (5) after releasing a Late booking's court the host (only) can **Restore** it if the hours are still free. Guests are never told. After that, the host can still move the booking with Edit. | `admin_service.restore` |
 | **Moving a booking** happens only when the host calls a weather rebooking (below), because the host is the one watching the weather. Optional, off by default (`GUEST_RESCHEDULE=1`): one self-service move per guest, at least 48 h before the start, same length, new date within 30 days of the original, never to a slot that costs more than was paid (cheaper is allowed, no refund). Proof of ownership = booking code + mobile number (or the device's token). | `reschedule.py` |
-| **Rain delay** (host): gives the hours of paid bookings in a window back and sets `weather_hold_at`. The guest then picks a new time themselves on "Check my booking" (any time, free). The host can undo it with Restore. | `admin_service.rain_delay` |
+| **Rain delay** (host): sets `weather_hold_at` on the paid bookings in a window. Their hours **stay closed** until the guest picks a new time on "Check my booking" (any time, free): the move gives up the old hours and takes the new ones in one step. The host can **Open these hours** sooner (`released_at`), and undo the delay with Restore. | `admin_service.rain_delay`, `admin_service.release`, `reschedule.py` |
+| Which bookings own their hours: an unpaid hold that is still running and a paid booking, Late and rain-delayed ones included, until released. `booking_slots` always holds exactly those bookings' hours; the scripted-day test and the load test check it from the bookings themselves. | `booking_service.holds_court`, `HOLDS_COURT_SQL` |
 | One active hold per mobile number, two per IP. Rate limits on create and proof. The player's IP is stored only while the booking is `held`, then erased. | `create_booking`, `ratelimit.py` |
 | Each hour is priced by its own rate (Morning ₱200 from 5 AM to 6 PM, Evening ₱250 from 6 PM to 5 AM; the booking picker groups start times the same way), plus ₱80 for paddles. Totals are computed on the server only. | `slots.price_hours` |
 | 12 AM–4 AM belong to the previous night's "play day". All times are Manila time. | `slots.py` |
 | A typed reference must look real: GCash 13 numbers, GoTyme `GT` + that day's date + 8 numbers, another bank 10 to 32 letters and numbers (spaces, dashes and a leading "Ref No." are ignored). Lazy fakes (`1111111111111`, `1234567890123`, `1212...`) and a GoTyme number from another day are turned away with the same reply a duplicate gets, same status and body, so a reply never reveals what is already in the system. A wrong shape gets a hint that depends only on what was typed. After 5 turned-away tries a booking is sent to the host (`reference_locked`). A format check cannot prove a payment: the host still checks it in their own app. | `validation.normalize_reference`, `booking_service.submit_reference` |
 | Consent is required, versioned and timestamped per booking. Receipt images are deleted 7 days after the host decides (14 days at most if nobody ever reviews them); the hash is kept. | `CONSENT_VERSION`, `purge_old_receipts` |
 
-Status flow: `held → confirmed` (on full payment) | `pending_verification` (receipt short or amount unreadable: the host decides), then possibly `rejected` by the host; plus `expired` (hold ran out) and `cancelled` (released unpaid hold, or voided by the host).
-`Late` and `rain delay` are not statuses: the booking stays `confirmed` and carries `late_at` / `weather_hold_at`.
-The desk shows one **label** per booking, computed from those: **Paid · Late · Done · Rain delay** (plus Blocked, Paying now, Needs check, Rejected, Expired, Cancelled).
+Status flow: `held → confirmed` (on full payment) | `pending_verification` (receipt short or amount unreadable: the host decides), then possibly `rejected` by the host; plus `expired` (hold ran out; a payment within the late window brings it back to `confirmed`, or keeps it `expired` with `paid_late_at`) and `cancelled` (released unpaid hold, or voided by the host).
+`Late` and `rain delay` are not statuses: the booking stays `confirmed` and carries `late_at` / `weather_hold_at`, and `released_at` once the host gives its hours back.
+The desk shows one **label** per booking, computed from those: **Paid · Late · Done · Rain delay** (plus Paid late, Blocked, Paying now, Rejected, Expired, Cancelled).
 
 ## Reading receipts (OCR): off by default
 
@@ -112,13 +116,16 @@ The courts are open-air, so rain means moving people. `app/weather.py` reads the
 *informs* the host; nothing is moved automatically.
 
 **Rain-delay flow** (admin desk → Weather): pick the window (date, start hour, how many hours) → preview who is affected →
-call it. Every paid booking in the window gives its hours back and becomes **Rain delay** (still paid, nothing cancelled or
-refunded). The host texts each guest (the desk prefills an `sms:` message with the link `/?reschedule=CODE`); the guest picks a
-new time themselves on the site ("Check my booking"), at any time, for free. The host can undo with Restore.
+call it. Every paid booking in the window becomes **Rain delay** (still paid, nothing cancelled or refunded) and keeps its
+hours closed until the guest picks a new time. The host texts each guest (the desk prefills an `sms:` message with the link
+`/?reschedule=CODE`); the guest picks a new time themselves on the site ("Check my booking"), at any time, for free. The host
+can open the hours sooner (**Open hours**) or undo the delay with Restore.
 
 **Telegram alerts (optional)**: set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` and the server messages the host once when a
-booking goes Late ("restore it if they turn up") and once per day when rain is forecast during paid bookings. Each alert is
-sent a single time (`notices_sent`). Without those two settings nothing is sent and nothing else changes.
+booking goes Late ("the court is still theirs: Arrived or Release court"), once when a payment arrives after its time ran out
+and the slot was taken ("move it or refund it"), and once per day when rain is forecast during paid bookings. Each alert is
+sent a single time (`notices_sent`). Without those two settings nothing is sent, and the desk shows the same prompts. Check
+that both are set on Render: under the new Late rule the host's ping is what keeps a court from sitting idle.
 
 ## API
 
@@ -176,8 +183,9 @@ Behind a proxy (Render), start uvicorn with `--proxy-headers --forwarded-allow-i
 | GET / PATCH / DELETE | `/api/admin/bookings/{code}` | detail with history / edit (reschedule is clash-checked) / delete for good |
 | POST | `/api/admin/bookings/{code}/check` | "Looks good": marks an automatically confirmed payment as looked at |
 | POST | `/api/admin/bookings/{code}/confirm` \| `reject` \| `cancel` | confirm also restores a rejected / expired / cancelled booking if its hours are still free, and confirms a short payment once the balance arrived; reject works on online payments, even after automatic confirmation; `cancel` is the host's "void" (guests can't cancel) |
-| POST | `/api/admin/bookings/{code}/arrived` | The group is on site: stops the booking from going Late |
-| POST | `/api/admin/bookings/{code}/restore` | `{note?}`. Puts a Late booking (within the host's `RESTORE_WINDOW_MINUTES`) or a rain-delayed one back on court; `409 slot_taken` if someone booked the hours meanwhile |
+| POST | `/api/admin/bookings/{code}/arrived` | The group is on site: stops the booking from going Late, and ends a Late that still holds its court |
+| POST | `/api/admin/bookings/{code}/release` | `{note?}`. Release court (a Late booking) or Open these hours (a rain delay): its hours go back on sale (`released_at`) |
+| POST | `/api/admin/bookings/{code}/restore` | `{note?}`. Undoes a rain delay, or puts back a Late booking whose court was released (within `RESTORE_WINDOW_MINUTES`); `409 slot_taken` if someone booked the hours meanwhile |
 | GET | `/api/admin/weather` | Next days' hourly rain chance (Open-Meteo, cached 15 min) and the paid bookings caught in it |
 | GET / POST | `/api/admin/rain-delay` | GET `?date&fromHour&hours` previews who is affected; POST `{date, fromHour, hours, codes?, note?}` calls the delay |
 | GET | `/api/admin/bookings/{code}/receipt` | the image, if still stored |

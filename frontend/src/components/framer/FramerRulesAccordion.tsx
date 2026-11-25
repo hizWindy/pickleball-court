@@ -100,7 +100,7 @@ function buildFaq(config: AppConfig | null): AccordionItem[] {
       id: 'late',
       category: 'Bookings',
       question: "What happens if I'm late?",
-      answer: `Be on the court within ${late} minutes of your start time. After that the booking is marked Late, the court is released to other players, and there are no refunds, credits or extensions. When you arrive, let the host know so we know your group is here. Arriving late doesn't extend your time: every session ends at its scheduled hour.`
+      answer: `Be on the court within ${late} minutes of your start time. After that the booking is marked Late, the host may give the court to other players, and there are no refunds, credits or extensions. When you arrive, let the host know so we know your group is here. Arriving late doesn't extend your time: every session ends at its scheduled hour.`
     },
     {
       id: 'equipment-rental',
@@ -229,7 +229,7 @@ export const FramerRulesAccordion: React.FC<{ onReschedule?: () => void }> = ({ 
                     </span>
                   </div>
                   <p className="text-xs sm:text-sm text-amber-900/90 font-medium leading-relaxed mt-1.5">
-                    Be on the court within <strong>{lateMinutes} minutes</strong> of your start time. After that your booking is marked <strong>Late</strong> (a No-Show), the court is released to other players, and there are no refunds. Bookings are final: <strong>no cancellations</strong>.
+                    Be on the court within <strong>{lateMinutes} minutes</strong> of your start time. After that your booking is marked <strong>Late</strong> (a No-Show), the host may give the court to other players, and there are no refunds. Bookings are final: <strong>no cancellations</strong>.
                   </p>
                 </div>
               </div>

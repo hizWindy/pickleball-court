@@ -189,8 +189,19 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
                 <div className="rounded-3xl border border-zinc-300 bg-zinc-100 p-4">
                   <p className="font-heading text-sm font-black uppercase tracking-tight text-zinc-800">Marked Late</p>
                   <p className="mt-1 text-sm leading-relaxed text-zinc-700">
-                    You were more than {lateMinutes} minutes past your start time, so the court was released to other players. Paid bookings aren't
-                    refundable. Please contact the host.
+                    You weren't on court {lateMinutes} minutes after your start time, so the host may give the court to other players. Paid
+                    bookings aren't refundable. If you're on your way, contact the host now.
+                  </p>
+                  <HostActions code={booking.code} className="mt-3" />
+                </div>
+              )}
+
+              {booking.paidLate && (
+                <div className="rounded-3xl border-2 border-amber-300/80 bg-amber-50 p-4">
+                  <p className="font-heading text-sm font-black uppercase tracking-tight text-amber-950">We received your payment</p>
+                  <p className="mt-1 text-sm leading-relaxed text-amber-950/90">
+                    Your payment time had run out and someone else booked that slot first. Your payment is saved: the host will contact you
+                    to move it to another time or refund it.
                   </p>
                   <HostActions code={booking.code} className="mt-3" />
                 </div>
@@ -308,7 +319,7 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
                     </span>
                   </div>
                   <p className="mt-2 text-[11px] sm:text-xs leading-relaxed text-amber-900/90 font-medium">
-                    Be on the court within {lateMinutes} minutes of your start time. After that your booking is marked Late, the court is released to
+                    Be on the court within {lateMinutes} minutes of your start time. After that your booking is marked Late, the host may give the court to
                     other players, and it is non-refundable. Arriving late doesn't extend your time. Strictly non-marking court shoes only.
                   </p>
                 </div>

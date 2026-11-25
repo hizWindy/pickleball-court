@@ -102,6 +102,7 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
   const [preset, setPreset] = useState<{ status: string; nonce: number } | undefined>();
   const lastPayments = useRef<number | null>(null);
   const lastLate = useRef<number | null>(null);
+  const lastPaidLate = useRef<number | null>(null);
   const lastRev = useRef<number | null>(null);
 
   // The desk's screens need these settings, so a failed request is retried (it used to be dropped silently, leaving
@@ -160,11 +161,19 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
           setToast(c.payments - lastPayments.current === 1 ? 'New paid booking.' : 'New paid bookings.');
         }
         lastPayments.current = c.payments;
-        // A group that just didn't turn up: the quiet minutes to restore it are short, so say so right away.
+        // A group that isn't marked here: the court is still theirs until the host decides, so say so right away.
         if (lastLate.current !== null && c.late > lastLate.current) {
-          setToast(c.late - lastLate.current === 1 ? 'A booking just went Late. Restore it if the guest turns up.' : 'Bookings just went Late. Restore them if the guests turn up.');
+          setToast(
+            c.late - lastLate.current === 1
+              ? "A booking just went Late. Tap Arrived if they're playing, or Release court."
+              : "Bookings just went Late. Tap Arrived if they're playing, or Release court."
+          );
         }
         lastLate.current = c.late;
+        if (lastPaidLate.current !== null && c.paidLate > lastPaidLate.current) {
+          setToast('A payment came in after its time ran out, and the slot was taken. Move it or refund it (Bookings, Paid late).');
+        }
+        lastPaidLate.current = c.paidLate;
         // Anything changed anywhere (a new hold, a payment, a guest letting a slot go): reload every open view.
         if (lastRev.current !== null && c.rev !== lastRev.current) setRefreshKey((k) => k + 1);
         lastRev.current = c.rev;
@@ -183,9 +192,10 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
   }, [refreshKey]);
 
   const late = counts?.late ?? 0;
+  const paidLate = counts?.paidLate ?? 0;
   const rainDelay = counts?.rainDelay ?? 0;
   const rainExpected = !!weatherReport?.available && weatherReport.atRisk.length > 0;
-  const attention = late;
+  const attention = late + paidLate;
   useEffect(() => {
     document.title = attention ? `(${attention}) HousePickle Desk` : 'HousePickle Desk';
   }, [attention]);
@@ -240,7 +250,7 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
       <Shell
         tab={tab}
         onTab={goTab}
-        badges={{ late, rainDelay, rainExpected }}
+        badges={{ late, paidLate, rainDelay, rainExpected }}
         onAdd={() => desk.addBooking()}
         onSignOut={signOut}
       >

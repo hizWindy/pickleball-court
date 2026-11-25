@@ -78,11 +78,15 @@ class Settings:
     # is bumped); the quick-pick chips only offer the common lengths, the +/- stepper goes up to this.
     max_hours: int = field(default_factory=lambda: _env_int("MAX_HOURS", 24))
     quick_hours: int = field(default_factory=lambda: _env_int("QUICK_HOURS", 5))
-    # House rule: a group that hasn't arrived this long after its start is Late and the slot is released.
+    # House rule: a group that hasn't arrived this long after its start is Late. It keeps its court until the host decides
+    # (Arrived, or Release court): an idle court costs less than two groups on one court (plan D1).
     late_after_minutes: int = field(default_factory=lambda: _env_int("LATE_AFTER_MINUTES", 15))
-    # Host-only grace after a booking turns Late: the host may still restore it for a guest who pleads.
-    # Guests are never told about it (the published rule is just `late_after_minutes`).
+    # After the host releases a Late booking's court, they can still undo it (Restore) for this long, if the hours are
+    # still free. Guests are never told about it.
     restore_window_minutes: int = field(default_factory=lambda: _env_int("RESTORE_WINDOW_MINUTES", 5))
+    # A payment that arrives this long after the hold ran out still claims the slot if nobody else took it; if someone
+    # did, it is kept for the host to move or refund (plan D3). After that, the usual "your hold ran out".
+    late_payment_minutes: int = field(default_factory=lambda: _env_int("LATE_PAYMENT_MINUTES", 30))
     # Who can move a paid booking. Off (default): only when the host calls a rebooking for bad weather (`weather_hold_at`),
     # because the host is the one watching the weather. On: guests also get one self-service move of their own.
     guest_reschedule: bool = field(default_factory=lambda: _env("GUEST_RESCHEDULE", "0").strip().lower() in ("1", "true", "yes", "on"))

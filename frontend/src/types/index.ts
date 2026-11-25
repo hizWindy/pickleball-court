@@ -65,8 +65,10 @@ export interface AppConfig {
   /** Quick-pick chips for the common lengths: 1 to this many hours. */
   quickHours: number;
   bookingWindowDays: number;
-  /** House rule: a group not there this long after its start is Late and the court is released. */
+  /** House rule: a group not there this long after its start is Late, and the host may give the court to others. */
   lateAfterMinutes: number;
+  /** A payment that comes in this long after the hold ran out still counts (the slot, if nobody took it). */
+  latePaymentMinutes: number;
   /** false: a booking moves only when the host calls a weather rebooking. true: guests also get one self-service move. */
   guestReschedule: boolean;
   /** Self-service rescheduling (when guestReschedule): once per booking, at least this many hours before the start. */
@@ -130,10 +132,12 @@ export interface Booking {
   serverNow: string;
   /** The host marked the group as here. */
   arrived: boolean;
-  /** Not there in time: the court was released. Only the host can put it back. */
+  /** Not there in time: the host may give the court to others. */
   late: boolean;
   /** The host called a rain delay: the guest picks a new time (free, doesn't use the one reschedule). */
   weatherHold: boolean;
+  /** Paid after the hold ran out while someone else had the slot: the host will be in touch (status `expired`). */
+  paidLate: boolean;
   /** Check-in is open right now (from 30 min before the start until the session ends). */
   reschedule: RescheduleState;
   rescheduleCount: number;

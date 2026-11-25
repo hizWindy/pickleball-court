@@ -68,8 +68,10 @@ SORTS = {
     "upcoming_first": None,  # see `_order_sql`: it depends on the time now
 }
 # The labels the list can be filtered by, each with its own count. Together with the statuses that aren't confirmed
-# (held, rejected, expired, cancelled) they add up to "All".
-LABELS = ("paid", "late", "done", "rain_delay", "blocked")
+# (held, rejected, cancelled) they add up to "All"; expired holds that nobody paid have their own filter outside it.
+LABELS = ("paid", "late", "done", "rain_delay", "blocked", "paid_late")
+# An unpaid hold that ran out: clutter, so "All" leaves it out. One that was paid late is not clutter (see `paid_late`).
+_PLAIN_EXPIRED = "(status = 'expired' AND paid_late_at IS NULL)"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -95,6 +97,8 @@ def _label_sql(label: str, now: datetime) -> tuple[str, list[object]]:
         return f"({_PLAYED} AND late_at IS NULL AND weather_hold_at IS NULL AND {_END_SQL} > ?)", [to_iso(now)]
     if label == "blocked":
         return "(status = 'confirmed' AND source = 'blocked')", []
+    if label == "paid_late":
+        return "(status = 'expired' AND paid_late_at IS NOT NULL)", []
     raise BookingError("bad_label", "Unknown label filter.")
 
 
@@ -115,6 +119,8 @@ def label_of(row: sqlite3.Row, now: datetime) -> str:
     status = row["status"]
     if status == "held":
         return "awaiting"
+    if status == "expired" and row["paid_late_at"]:
+        return "paid_late"
     if status not in ("confirmed", "pending_verification"):  # (the second is no longer used: a receipt confirms)
         return status
     if row["source"] == "blocked":
@@ -128,23 +134,37 @@ def label_of(row: sqlite3.Row, now: datetime) -> str:
     return "paid"
 
 
+def _ended(row: sqlite3.Row, now: datetime) -> bool:
+    return from_iso(row["start_at"]) + timedelta(hours=row["hours"]) <= now
+
+
 def _restore_state(row: sqlite3.Row, now: datetime) -> tuple[bool, str | None]:
-    """Can the host put this booking back? A rain delay can always be undone. A Late booking can be restored
-    for `restore_window_minutes` after it went late (the host's quiet grace for a guest who turns up or pleads)."""
+    """Can the host put this booking back? A rain delay can always be undone. A Late booking whose court the host
+    released can be restored for `restore_window_minutes` after that (a quick undo). A Late booking that still holds
+    its court needs no restoring: Arrived is the way back."""
     if row["status"] != "confirmed" or row["source"] == "blocked":
         return False, None
     if row["weather_hold_at"]:
         return True, None
-    if row["late_at"]:
-        until = from_iso(row["late_at"]) + timedelta(minutes=settings.restore_window_minutes)
+    if row["late_at"] and row["released_at"]:
+        until = from_iso(row["released_at"]) + timedelta(minutes=settings.restore_window_minutes)
         return now <= until, to_iso(until)
     return False, None
 
 
 def _can_mark_arrived(row: sqlite3.Row, now: datetime) -> bool:
+    """A paid booking still to finish, whose court is still its own: also a Late one (tapping Arrived ends the Late)."""
     return (
-        row["status"] == "confirmed" and row["source"] != "blocked" and not row["arrived_at"] and not row["late_at"]
-        and not row["weather_hold_at"] and from_iso(row["start_at"]) + timedelta(hours=row["hours"]) > now
+        row["status"] == "confirmed" and row["source"] != "blocked" and not row["arrived_at"] and not row["released_at"]
+        and not row["weather_hold_at"] and not _ended(row, now)
+    )
+
+
+def _can_release(row: sqlite3.Row, now: datetime) -> bool:
+    """Release court (a Late booking) or Open these hours (a rain delay): the hours go back on sale."""
+    return (
+        row["status"] == "confirmed" and row["source"] != "blocked" and not row["released_at"]
+        and bool(row["late_at"] or row["weather_hold_at"]) and not _ended(row, now)
     )
 
 
@@ -220,10 +240,15 @@ def to_admin(row: sqlite3.Row, courts: dict[str, str], now: datetime | None = No
         arrived_at=row["arrived_at"],
         late_at=row["late_at"],
         weather_hold_at=row["weather_hold_at"],
+        released_at=row["released_at"],
+        paid_late_at=row["paid_late_at"],
         reschedule_count=row["reschedule_count"],
+        holds_court=core.holds_court(row),
+        paid_late=row["status"] == "expired" and bool(row["paid_late_at"]),
         restorable=restorable,
         restore_until=restore_until,
         can_mark_arrived=_can_mark_arrived(row, now),
+        can_release=_can_release(row, now),
     )
 
 
@@ -272,20 +297,21 @@ def _like(text: str) -> str:
 def nav_counts(conn: sqlite3.Connection) -> NavCounts:
     now = clock.now()
     core.sweep_if_due(conn, now)
-    restorable_since = to_iso(now - timedelta(minutes=settings.restore_window_minutes))
     row = conn.execute(
         f"""SELECT (SELECT COUNT(*) FROM bookings WHERE {REVIEW_SQL}) AS to_review,
                    (SELECT COUNT(*) FROM bookings WHERE {FLAGGED_SQL}) AS flagged,
                    (SELECT COUNT(*) FROM bookings WHERE status = 'held') AS held,
-                   (SELECT COUNT(*) FROM bookings WHERE {_PLAYED} AND weather_hold_at IS NULL AND late_at >= ?) AS late,
+                   (SELECT COUNT(*) FROM bookings WHERE {_PLAYED} AND weather_hold_at IS NULL AND late_at IS NOT NULL
+                       AND released_at IS NULL AND {_END_SQL} > ?) AS late,
                    (SELECT COUNT(*) FROM bookings WHERE {_PLAYED} AND weather_hold_at IS NOT NULL) AS rain_delay,
+                   (SELECT COUNT(*) FROM bookings WHERE status = 'expired' AND paid_late_at IS NOT NULL) AS paid_late,
                    (SELECT COUNT(*) FROM bookings WHERE source = 'online' AND submitted_at IS NOT NULL) AS payments,
                    (SELECT rev FROM desk_rev WHERE id = 1) AS rev""",
-        (restorable_since,),
+        (to_iso(now),),
     ).fetchone()
     return NavCounts(
         to_review=row["to_review"], flagged=row["flagged"], held=row["held"], late=row["late"], rain_delay=row["rain_delay"],
-        payments=row["payments"], rev=row["rev"] or 0,
+        paid_late=row["paid_late"], payments=row["payments"], rev=row["rev"] or 0,
     )
 
 
@@ -346,8 +372,8 @@ def list_bookings(
     for name in LABELS:
         clause, clause_args = _label_sql(name, now)
         by_label[name] = conn.execute(f"SELECT COUNT(*) FROM bookings{base_sql}{joiner} {clause}", [*args, *clause_args]).fetchone()[0]
-    # "All" leaves out unpaid holds that ran out: they are clutter, and they have their own filter. A search looks at
-    # everything, so a code or a name always turns up.
+    # "All" leaves out unpaid holds that ran out: they are clutter, and they have their own filter (one paid after its
+    # time is not clutter: it stays). A search looks at everything, so a code or a name always turns up.
     all_hides_expired = not settings.all_includes_expired and not (q and q.strip())
 
     filtered_sql, filtered_args = base_sql, list(args)
@@ -365,7 +391,7 @@ def list_bookings(
             raise BookingError("bad_review", "Unknown review filter.")
         filtered_sql += (" AND " if filtered_sql else " WHERE ") + (REVIEW_SQL if review == "unchecked" else FLAGGED_SQL)
     if all_hides_expired and not (status and status != "all") and not label and not review:
-        filtered_sql += (" AND" if filtered_sql else " WHERE") + " status != 'expired'"
+        filtered_sql += (" AND" if filtered_sql else " WHERE") + f" NOT {_PLAIN_EXPIRED}"
 
     order, order_args = _order_sql(sort, now)
     page_size = max(1, min(page_size, PAGE_SIZE_MAX))
@@ -377,7 +403,7 @@ def list_bookings(
         [*filtered_args, *order_args, page_size, (page - 1) * page_size],
     ).fetchall()
     courts = _court_names(conn)
-    everything = sum(counts.values()) - (counts["expired"] if all_hides_expired else 0)
+    everything = sum(counts.values()) - (counts["expired"] - by_label["paid_late"] if all_hides_expired else 0)
     return AdminBookingList(
         items=[to_admin(r, courts, now) for r in rows],
         total=total,
@@ -408,11 +434,12 @@ def schedule(conn: sqlite3.Connection, play_date: date) -> AdminSchedule:
     core.sweep_if_due(conn, now)
     first = to_iso(slot_start(play_date, DAY_START_HOUR))
     last = to_iso(slot_start(play_date, (DAY_START_HOUR - 1) % 24))  # final hour of the play day
-    # A Late booking has given its hours up (no slot rows) but the host must still see it to restore it.
+    # Everything that holds hours that day (Late and rain-delayed bookings too, until released). A Late booking whose court
+    # the host released has no hours any more, but stays on the day so it can be restored.
     rows = conn.execute(
         f"""SELECT * FROM bookings WHERE id IN (
                SELECT DISTINCT booking_id FROM booking_slots WHERE slot_start BETWEEN ? AND ?)
-           OR ({_PLAYED} AND late_at IS NOT NULL AND weather_hold_at IS NULL AND start_at BETWEEN ? AND ?)
+           OR ({_PLAYED} AND late_at IS NOT NULL AND released_at IS NOT NULL AND weather_hold_at IS NULL AND start_at BETWEEN ? AND ?)
            ORDER BY start_at""",
         (first, last, first, last),
     ).fetchall()
@@ -494,10 +521,11 @@ def update(conn: sqlite3.Connection, code: str, data: AdminUpdateIn) -> AdminBoo
         if schedule_changed and row["status"] in ACTIVE:
             core.release_slots(conn, row["id"])
             core.claim_slots(conn, court["name"], court["id"], items, row["id"])
-            if row["status"] == "confirmed" and (row["late_at"] or row["weather_hold_at"] or row["arrived_at"]):
-                # Moving a booking starts it afresh: no longer Late or rain-delayed, and arrival is judged at the new time.
+            if row["status"] == "confirmed" and (row["late_at"] or row["weather_hold_at"] or row["arrived_at"] or row["released_at"]):
+                # Moving a booking starts it afresh: no longer Late or rain-delayed, it holds its new hours, and arrival is
+                # judged at the new time.
                 conn.execute(
-                    "UPDATE bookings SET late_at = NULL, weather_hold_at = NULL, arrived_at = ? WHERE id = ?",
+                    "UPDATE bookings SET late_at = NULL, weather_hold_at = NULL, released_at = NULL, arrived_at = ? WHERE id = ?",
                     (to_iso(now) if start <= now else None, row["id"]),
                 )
 
@@ -537,11 +565,13 @@ def confirm(conn: sqlite3.Connection, code: str) -> AdminBookingDetail:
                 court = _court(conn, row["court_id"])
                 items = price_hours(from_iso(row["start_at"]), row["hours"], court["day_rate"], court["night_rate"])
                 core.claim_slots(conn, court["name"], court["id"], items, row["id"])
-            # Confirming a session that has already begun: the host knows who is on court, so it isn't Late.
+            # Confirming a session that has already begun: the host knows who is on court, so it isn't Late. A reopened
+            # booking holds its hours again, so it is no longer Late, rain-delayed or released either.
             started = to_iso(now) if from_iso(row["start_at"]) <= now else None
             conn.execute(
                 """UPDATE bookings SET status = 'confirmed', decided_at = ?, checked_at = ?, closed_at = NULL, close_reason = NULL,
-                       arrived_at = COALESCE(arrived_at, ?) WHERE id = ?""",
+                       arrived_at = COALESCE(arrived_at, ?), late_at = NULL, weather_hold_at = NULL, released_at = NULL
+                   WHERE id = ?""",
                 (to_iso(now), to_iso(now), started, row["id"]),
             )
             _event(conn, row["code"], "confirmed", f"was {row['status']}" if reopened else None, now)
@@ -597,7 +627,7 @@ def cancel(conn: sqlite3.Connection, code: str, reason: str | None) -> AdminBook
 
 
 def mark_arrived(conn: sqlite3.Connection, code: str) -> AdminBookingDetail:
-    """The group is on site. This is what stops the booking from going Late."""
+    """The group is on site. This stops the booking from going Late, and ends a Late that still holds its court."""
     now = clock.now()
     with write_transaction(conn):
         core.release_expired(conn, now)
@@ -606,18 +636,42 @@ def mark_arrived(conn: sqlite3.Connection, code: str) -> AdminBookingDetail:
             return _detail(conn, row)
         if row["status"] != "confirmed" or row["source"] == "blocked":
             raise Conflict("cannot_arrive", "Only a paid booking can be marked as arrived.")
-        if row["late_at"] or row["weather_hold_at"]:
-            raise Conflict("use_restore", "This booking was released. Use Restore to put it back.")
-        conn.execute("UPDATE bookings SET arrived_at = ? WHERE id = ?", (to_iso(now), row["id"]))
-        _event(conn, row["code"], "arrived", None, now)
+        if row["released_at"] or row["weather_hold_at"]:
+            raise Conflict("use_restore", "This booking gave its hours back. Use Restore to put it back.")
+        conn.execute("UPDATE bookings SET arrived_at = ?, late_at = NULL WHERE id = ?", (to_iso(now), row["id"]))
+        _event(conn, row["code"], "arrived", "They were Late; the court was still theirs" if row["late_at"] else None, now)
+    return _refreshed(conn, code)
+
+
+def release(conn: sqlite3.Connection, code: str, note: str | None) -> AdminBookingDetail:
+    """Give a Late or rain-delayed booking's hours back, so others can book them: Release court (a group that didn't
+    come) or Open these hours (a rain delay whose guest hasn't picked a new time). Nothing is cancelled or refunded."""
+    now = clock.now()
+    with write_transaction(conn):
+        core.release_expired(conn, now)
+        row = _row(conn, code)
+        if row["released_at"] and row["status"] == "confirmed":
+            return _detail(conn, row)
+        if not _can_release(row, now):
+            raise Conflict(
+                "cannot_release", "Only a Late or rain-delayed booking that still holds its court, and hasn't finished, can be released."
+            )
+        core.release_slots(conn, row["id"])
+        conn.execute("UPDATE bookings SET released_at = ? WHERE id = ?", (to_iso(now), row["id"]))
+        rain = bool(row["weather_hold_at"])
+        _event(
+            conn, row["code"], "hours_opened" if rain else "released",
+            (note or "").strip() or ("The hours are open to others until the guest picks a new time" if rain else "The court is open to others"),
+            now,
+        )
     return _refreshed(conn, code)
 
 
 def restore(conn: sqlite3.Connection, code: str, note: str | None) -> AdminBookingDetail:
-    """Put a Late or rain-delayed booking back on the court, if its hours are still free.
+    """Undo a rain delay, or put back a Late booking whose court the host released (within `restore_window_minutes`).
 
-    A Late booking can be restored for `restore_window_minutes` after it went late; nobody else sees that window.
-    Someone may have booked the hours meanwhile: then nothing changes and the host sorts it out with the guests."""
+    A booking that gave its hours back takes them again, if they are still free. Someone may have booked them meanwhile:
+    then nothing changes and the host sorts it out with the guests. A rain delay that still holds its hours just ends."""
     now = clock.now()
     with write_transaction(conn):
         core.release_expired(conn, now)
@@ -625,26 +679,30 @@ def restore(conn: sqlite3.Connection, code: str, note: str | None) -> AdminBooki
         weather_hold = bool(row["weather_hold_at"])
         if row["status"] != "confirmed" or not (row["late_at"] or weather_hold):
             raise Conflict("not_restorable", "Only a Late or rain-delayed booking can be restored.")
+        if row["late_at"] and not weather_hold and not row["released_at"]:
+            raise Conflict("use_arrived", "This booking still holds its court. Tap Arrived when the group is here.")
         restorable, _ = _restore_state(row, now)
         if not restorable:
             raise Conflict(
                 "restore_window_closed",
                 "The time to restore this booking has passed. Use Edit to move it to a free time instead.",
             )
-        court = _court(conn, row["court_id"])
-        items = price_hours(from_iso(row["start_at"]), row["hours"], court["day_rate"], court["night_rate"])
-        try:
-            core.claim_slots(conn, court["name"], court["id"], items, row["id"])
-        except Conflict:
-            raise Conflict(
-                "slot_taken",
-                "Someone booked those hours first, so this booking can't be put back. Talk to both groups, "
-                "or use Edit to move this one to a free time.",
-            ) from None
-        # A restored booking is on court now. A rain delay undone before the start keeps waiting for its group.
+        if row["released_at"]:
+            court = _court(conn, row["court_id"])
+            items = price_hours(from_iso(row["start_at"]), row["hours"], court["day_rate"], court["night_rate"])
+            try:
+                core.claim_slots(conn, court["name"], court["id"], items, row["id"])
+            except Conflict:
+                raise Conflict(
+                    "slot_taken",
+                    "Someone booked those hours first, so this booking can't be put back. Talk to both groups, "
+                    "or use Edit to move this one to a free time.",
+                ) from None
+        # A restored Late booking is on court now. A rain delay undone before the start keeps waiting for its group.
         arrived = to_iso(now) if (not weather_hold or from_iso(row["start_at"]) <= now) else None
         conn.execute(
-            "UPDATE bookings SET late_at = NULL, weather_hold_at = NULL, arrived_at = ? WHERE id = ?", (arrived, row["id"])
+            "UPDATE bookings SET late_at = NULL, weather_hold_at = NULL, released_at = NULL, arrived_at = ? WHERE id = ?",
+            (arrived, row["id"]),
         )
         _event(conn, row["code"], "restored", (note or "").strip() or ("Rain delay undone" if weather_hold else "Late booking restored"), now)
     return _refreshed(conn, code)
@@ -708,8 +766,10 @@ def rain_delay_preview(conn: sqlite3.Connection, play_date: date, from_hour: int
 
 
 def rain_delay(conn: sqlite3.Connection, data: RainDelayIn) -> RainDelayResult:
-    """Call a rain delay: every paid booking in the window (or just the `codes` chosen) gives its hours back and
-    waits for the guest to pick a new time. Nothing is cancelled or refunded, and the guest's one reschedule is untouched."""
+    """Call a rain delay: every paid booking in the window (or just the `codes` chosen) waits for the guest to pick a
+    new time. Its hours stay closed until then (plan D4): the guest's move gives them up and takes the new ones in one
+    step, and the host can open them sooner (`release`). Nothing is cancelled or refunded, and the guest's one
+    reschedule is untouched."""
     now = clock.now()
     start, end = _rain_window(data.date, data.from_hour, data.hours)
     chosen = {core.normalize_code(c) for c in data.codes} if data.codes is not None else None
@@ -721,7 +781,6 @@ def rain_delay(conn: sqlite3.Connection, data: RainDelayIn) -> RainDelayResult:
                 continue
             if from_iso(row["start_at"]) + timedelta(hours=row["hours"]) <= now:
                 continue  # already finished
-            core.release_slots(conn, row["id"])
             conn.execute("UPDATE bookings SET weather_hold_at = ? WHERE id = ?", (to_iso(now), row["id"]))
             _event(conn, row["code"], "rain_delay", (data.note or "").strip() or "Rain delay called", now)
             moved.append(row["code"])

@@ -38,7 +38,7 @@ SIM_DAYS = int(os.getenv("SIM_DAYS", "50"))
 COURTS = ("court-1", "court-2")
 PHONES = [f"0917{n:07d}" for n in (1234567, 2345678, 3456789, 4567890, 5678901, 6789012)]
 NAMES = ["Maria Santos", "Pedro Penduko", "Ana Reyes", "Carlo Dizon", "Liza Tan", "Juan dela Cruz", "Grace Lim", "Ben Ocampo"]
-LABELS = admin_service.LABELS  # paid, late, done, rain_delay, blocked
+LABELS = admin_service.LABELS  # paid, late, done, rain_delay, blocked, paid_late
 STATUS_LABELS = {"held": "awaiting", "rejected": "rejected", "cancelled": "cancelled"}  # the status chips, and their label
 # What a player may hear back when paying. A payment after the timer may be turned away (or kept for the host), and the
 # desk may have sorted the booking out already.
@@ -76,6 +76,7 @@ class Day:
         self.order: dict[str, int] = {}  # booking code -> when we made it (so random picks replay the same way)
         self.holds: list[dict] = []  # unpaid online holds, and what their player will do and when
         self.refs: list[str] = []  # references already used for a payment
+        self.last_refusal: str | None = None  # why the last booking attempt was turned away
         clock.current = slot_start(start, DAY_START_HOUR)
         self.end = slot_start(start + timedelta(days=1), DAY_START_HOUR)
 
@@ -122,7 +123,9 @@ class Day:
                 return ref
 
     # ── Players ───────────────────────────────────────────────────────────────
-    def player_books(self, ahead=None, hours=None, court=None, plan=None, phone=None) -> str | None:
+    def player_books(self, ahead=None, hours=None, court=None, plan=None, phone=None, acts_after: int | None = None) -> str | None:
+        """A player holds a slot. `plan`: pay (in time), late (after the timer), leave (lets it go) or ignore (never
+        pays). `acts_after` (seconds) sets the moment exactly."""
         ahead = ahead if ahead is not None else self.rng.choice([1, 1, 2, 3, 4, 6, 9, 14, 20, 26])
         play_date, hour = self.hour_from_now(ahead)
         phone = phone or self.rng.choice(PHONES)
@@ -132,16 +135,21 @@ class Day:
                 customer_name=self.rng.choice(NAMES), customer_phone=phone, payment_method="gcash",
                 consent=True, consent_version=settings.consent_version,
             ), ip=f"phone-{phone[-2:]}")
-        except BookingError:
+        except BookingError as exc:
+            self.last_refusal = exc.code
             return None
         plan = plan or self.rng.choices(["pay", "late", "leave", "ignore"], weights=[60, 15, 10, 15])[0]
         deadline = from_iso(booking.hold_expires_at)
         acts_at = {
             "pay": self.now + timedelta(seconds=self.rng.randint(30, settings.hold_minutes * 60 - 5)),
-            "late": deadline + timedelta(seconds=settings.hold_grace_seconds + self.rng.randint(1, 300)),
+            # Mostly within the late-payment window (the hour may still be free, or someone may have taken it), now and
+            # then after it.
+            "late": deadline + timedelta(seconds=settings.hold_grace_seconds + self.rng.choice([5, 60, 300, 900, 1500, 2400])),
             "leave": self.now + timedelta(seconds=self.rng.randint(10, 300)),
             "ignore": None,
         }[plan]
+        if acts_after is not None:
+            acts_at = self.now + timedelta(seconds=acts_after)
         self.holds.append({"code": self.remember(booking.code), "token": token, "plan": plan, "at": acts_at, "name": booking.customer_name})
         return booking.code
 
@@ -187,12 +195,19 @@ class Day:
         return self.remember(res.code) if res else None
 
     def desk_marks_arrivals(self, forget: float = 0.25) -> None:
-        """The desk taps Arrived for groups that are starting or playing, but misses some."""
+        """The desk taps Arrived for groups that are starting or playing (a Late one too: it ends the Late), but misses
+        some."""
         soon = to_iso(self.now + timedelta(minutes=30))
-        for row in self.rows("status = 'confirmed' AND source != 'blocked' AND arrived_at IS NULL AND late_at IS NULL "
+        for row in self.rows("status = 'confirmed' AND source != 'blocked' AND arrived_at IS NULL AND released_at IS NULL "
                              "AND weather_hold_at IS NULL AND start_at <= ?", soon):
             if from_iso(row["start_at"]) + timedelta(hours=row["hours"]) > self.now and self.rng.random() >= forget:
                 attempt(admin_service.mark_arrived, self.conn, row["code"])
+
+    def desk_releases(self, chance: float = 0.4) -> None:
+        """Release court for some Late groups, and Open these hours for some rain delays."""
+        for row in self.rows("status = 'confirmed' AND released_at IS NULL AND (late_at IS NOT NULL OR weather_hold_at IS NOT NULL)"):
+            if self.rng.random() < chance:
+                attempt(admin_service.release, self.conn, row["code"], None)
 
     def desk_edits(self) -> None:
         row = self.pick(self.rows("status IN ('held', 'confirmed') AND start_at > ?", to_iso(self.now)))
@@ -212,8 +227,9 @@ class Day:
         attempt(admin_service.update, self.conn, row["code"], body)
 
     def desk_restores(self) -> None:
-        for row in self.rows("status = 'confirmed' AND late_at IS NOT NULL AND weather_hold_at IS NULL"):
-            if self.rng.random() < 0.5:
+        """Undo a release for a group that turned up after all, and now and then undo a rain delay."""
+        for row in self.rows("status = 'confirmed' AND (late_at IS NOT NULL OR weather_hold_at IS NOT NULL)"):
+            if self.rng.random() < (0.5 if row["late_at"] and not row["weather_hold_at"] else 0.15):
                 attempt(admin_service.restore, self.conn, row["code"], "Turned up")
 
     def desk_calls_rain(self, hours: int | None = None) -> None:
@@ -304,8 +320,10 @@ class Day:
             assert counts["all"] == sum(n for label, n in shown.items() if label != "expired"), f"{at}: All isn't every chip but Expired"
             for label in LABELS:
                 assert shown[label] == counts[label], f"{at}: {shown[label]} show {label} but the chip says {counts[label]}"
-            for status, label in {**STATUS_LABELS, "expired": "expired"}.items():
+            for status, label in STATUS_LABELS.items():
                 assert shown[label] == counts[status], f"{at}: {shown[label]} show {label} but the chip says {counts[status]}"
+            # Expired lists every hold that ran out, the ones paid after their time included.
+            assert shown["expired"] + shown["paid_late"] == counts["expired"], f"{at}: the Expired chip"
             if full:  # and tapping each chip lists exactly that many
                 for label in LABELS:
                     assert listing(label=label).total == counts[label], f"{at}: chip {label}"
@@ -322,28 +340,59 @@ class Day:
 # ── The fixed day ─────────────────────────────────────────────────────────────
 def test_a_fixed_day(conn, fake_now):
     day = Day(conn, fake_now, random.Random(0), "fixed day")  # Sat Oct 10, from 5:00 AM
-    phones = iter(PHONES)
+    phones = (f"0918{n:07d}" for n in range(1000, 1100))  # a phone of its own for every player (one hold cap each)
+    status = lambda code: conn.execute("SELECT * FROM bookings WHERE code = ?", (code,)).fetchone()  # noqa: E731
+    slots_of = lambda code: [r[0] for r in conn.execute(  # noqa: E731
+        "SELECT s.slot_start FROM booking_slots s JOIN bookings b ON b.id = s.booking_id WHERE b.code = ? ORDER BY 1", (code,)
+    )]
     assert day.desk_adds(ahead=0, court="court-1", name="Early bird")  # 5-6 AM, at the desk now
-    assert day.player_books(ahead=11, court="court-2", plan="pay", phone=next(phones))  # 4 PM: rained out later
-    assert day.player_books(ahead=14, hours=3, court="court-1", plan="pay", phone=next(phones))  # 7-10 PM: goes Late
-    assert day.player_books(ahead=13, court="court-2", plan="ignore", phone=next(phones))  # 6 PM, never pays
-    assert day.player_books(ahead=15, court="court-2", plan="late", phone=next(phones))  # 8 PM, pays after the timer
+    rain_phone = next(phones)
+    rained_out = day.player_books(ahead=11, hours=1, court="court-2", plan="pay", phone=rain_phone)  # 4 PM: rained out later
+    group = day.player_books(ahead=14, hours=3, court="court-1", plan="pay", phone=next(phones))  # 7-10 PM: goes Late
+    assert rained_out and group
+    assert day.player_books(ahead=13, hours=1, court="court-2", plan="ignore", phone=next(phones))  # 6 PM, never pays
+    revived = day.player_books(ahead=15, hours=1, court="court-2", plan="late", phone=next(phones), acts_after=11 * 60)  # 8 PM, 1 min late
+    slow = day.player_books(ahead=13, hours=1, court="court-1", plan="late", phone=next(phones), acts_after=14 * 60)  # 6 PM, 4 min late
+    assert revived and slow, day.last_refusal
     assert day.desk_adds(ahead=16, hours=2, court="court-2", name="Phone group")  # 9-11 PM, booked by phone
     assert day.desk_adds(ahead=8, court="court-1", kind="block")  # 1 PM: net repair
     assert day.desk_adds(ahead=18, hours=3, court="court-1", name="Night owls")  # 11 PM - 2 AM
     assert day.desk_adds(ahead=23, court="court-2", name="Last game")  # 4 AM
     day.settle(full=True)
+    # 5:12: the slow payer's hold has run out, and a fast one takes 6 PM on Court 1 before the money arrives.
+    day.advance(minutes=12)
+    fast = day.player_books(ahead=13, hours=1, court="court-1", plan="pay", phone=next(phones))
+    assert fast, f"6 PM on Court 1 should be free again once the slow payer's hold ran out ({day.last_refusal})"
+    day.settle()
+    day.advance(minutes=8)  # 5:20: both late payers have paid
+    day.settle()
+    assert status(revived)["status"] == "confirmed"  # the hour was still free: taken back
+    assert status(slow)["status"] == "expired" and status(slow)["paid_late_at"]  # it wasn't: kept for the host
+
     while day.now < day.end:
         day.advance(minutes=10)
         hour, minute = day.now.astimezone(MANILA).hour, day.now.minute
         if (hour, minute) == (15, 0):
             day.desk_calls_rain(hours=2)  # rain closes the courts 3-5 PM
-        if (hour, minute) == (17, 0):
-            day.guests_rebook()
-        # Nobody taps Arrived for the 7-10 PM group, so it goes Late at 7:15; at 7:20 someone wants 9 PM on that court.
+            assert status(rained_out)["weather_hold_at"] and core.holds_court(status(rained_out))
+            assert day.player_books(ahead=1, hours=1, court="court-2", phone=next(phones)) is None  # its 4 PM stays closed
+            assert day.last_refusal == "slot_taken"
+        if (hour, minute) == (17, 0):  # the rained-out guest picks tomorrow 10 AM: the old hours go, the new are taken
+            old = slots_of(rained_out)
+            reschedule.reschedule(conn, RescheduleIn(code=rained_out, customer_phone=rain_phone, court_id="court-2",
+                                                    date=date(2026, 10, 11), hour=10), None)
+            assert old and slots_of(rained_out) == [to_iso(slot_start(date(2026, 10, 11), 10))]
+        # Nobody taps Arrived for the 7-10 PM group, so it goes Late at 7:15 and keeps its court.
         day.desk_marks_arrivals(forget=1.0 if hour in (18, 19) else 0.0)
         if (hour, minute) == (19, 20):
-            day.player_books(ahead=2, court="court-1", plan="pay", phone=next(phones))
+            core.sweep(conn)  # (the background sweep marks it Late)
+            assert status(group)["late_at"] and core.holds_court(status(group)) and len(slots_of(group)) == 3
+            assert day.player_books(ahead=2, hours=1, court="court-1", phone=next(phones)) is None  # 9 PM is still theirs
+            assert day.last_refusal == "slot_taken"
+        if (hour, minute) == (19, 30):
+            assert admin_service.release(conn, group, "Never came").released_at  # the host decides: release the court
+            assert slots_of(group) == []
+            assert day.player_books(ahead=2, hours=1, court="court-1", plan="pay", phone=next(phones)), day.last_refusal  # now 9 PM sells
         day.settle()
     day.close()
 
@@ -357,8 +406,8 @@ def test_a_random_day(conn, fake_now, seed):
         day.advance(minutes=rng.choice([5, 10, 15, 20, 30]))
         for _ in range(rng.randint(0, 3)):
             action = rng.choices(
-                ["book", "walk_in", "phone", "block", "edit", "restore", "rain", "rebook", "other"],
-                weights=[40, 10, 12, 3, 8, 6, 2, 6, 4],
+                ["book", "walk_in", "phone", "block", "edit", "release", "restore", "rain", "rebook", "other"],
+                weights=[40, 10, 12, 3, 8, 6, 6, 2, 6, 4],
             )[0]
             if action == "book":
                 day.player_books()
@@ -370,6 +419,8 @@ def test_a_random_day(conn, fake_now, seed):
                 day.desk_adds(ahead=rng.randint(1, 8), hours=rng.randint(1, 3), kind="block")
             elif action == "edit":
                 day.desk_edits()
+            elif action == "release":
+                day.desk_releases()
             elif action == "restore":
                 day.desk_restores()
             elif action == "rain":

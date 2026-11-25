@@ -25,7 +25,10 @@ const MAIN: Chip[] = [
   { key: 'late', label: 'Late', count: (c) => c.late },
   { key: 'done', label: 'Done', count: (c) => c.done },
   { key: 'rain_delay', label: 'Rain delay', count: (c) => c.rainDelay },
+  { key: 'paid_late', label: 'Paid late', count: (c) => c.paidLate },
 ];
+/** Chips that only show up once there is something under them. */
+const WHEN_ANY = new Set<FilterKey>(['rain_delay', 'paid_late']);
 // Rare states, tucked away. With "All" they cover every booking (expired holds only show here, not under "All").
 const MORE: Chip[] = [
   { key: 'held', label: 'Paying now', count: (c) => c.held },
@@ -169,9 +172,9 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
 
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-0.5 sm:mx-0 sm:flex-wrap sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Filter bookings">
           {MAIN.map((c) => {
-            // Rain delay only shows up once there is one to look at.
-            if (c.key === 'rain_delay' && counts && !c.count(counts) && status !== c.key) return null;
-            return chip(c);
+            // Rain delay and Paid late only show up once there is one to look at.
+            if (WHEN_ANY.has(c.key) && counts && !c.count(counts) && status !== c.key) return null;
+            return chip(c, c.key === 'paid_late' ? 'amber' : 'plain');
           })}
           <button type="button" aria-expanded={showMore} aria-controls="more-filters" onClick={() => setMoreOpen((o) => !o)} className={chipClass(!!moreSelected)}>
             {moreSelected ? moreSelected.label : 'More'}
@@ -261,8 +264,10 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
 /** The small grey line under the badge: how they paid, who they are, or what is happening. */
 function detailLine(b: AdminBooking): string {
   if (b.source === 'blocked') return 'Court blocked';
-  if (b.label === 'late' && b.lateAt) return `Went Late at ${fmtTime(b.lateAt)}`;
-  if (b.label === 'rain_delay') return 'Waiting to pick a new time';
+  if (b.label === 'late' && b.releasedAt) return `Court released at ${fmtTime(b.releasedAt)}`;
+  if (b.label === 'late' && b.lateAt) return `Late since ${fmtTime(b.lateAt)} · court still theirs`;
+  if (b.label === 'rain_delay') return b.holdsCourt ? 'Waiting to pick a new time · hours closed' : 'Waiting to pick a new time · hours open';
+  if (b.label === 'paid_late') return 'Paid after the time ran out · move or refund';
   return [b.source === 'walk_in' && 'Walk-in', b.customPrice && 'Custom price', METHOD_LABEL[b.paymentMethod], b.customerPhone].filter((p) => p && p !== '—').join(' · ');
 }
 
@@ -275,7 +280,8 @@ const Row: React.FC<{ b: AdminBooking; now: number; q: QuickApi; onOpen: () => v
       className={cx(
         'relative overflow-hidden rounded-2xl border bg-white transition',
         'hover:border-zinc-300 hover:shadow-sm',
-        late ? 'border-dashed border-amber-400 bg-amber-50/40' : 'border-zinc-200',
+        // A Late booking that still holds its court needs a decision (solid); one that was released is just an outline.
+        late ? (b.holdsCourt ? 'border-amber-400 bg-amber-50/60' : 'border-dashed border-amber-400 bg-amber-50/40') : b.paidLate ? 'border-red-300 bg-red-50/40' : 'border-zinc-200',
         blocked && 'bg-[repeating-linear-gradient(135deg,var(--color-white),var(--color-white)_8px,#f4f4f5_8px,#f4f4f5_16px)]'
       )}
     >

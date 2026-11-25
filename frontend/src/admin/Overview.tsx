@@ -54,7 +54,8 @@ const Section: React.FC<{ title: string; note?: string; children: React.ReactNod
 );
 
 /**
- * What can't wait: a Late booking the host can still restore, and guests waiting to pick a new time after rain.
+ * What can't wait: a Late group whose court is still theirs (the host decides), a released one that can still be
+ * restored, payments that came in after their time ran out, and guests waiting to pick a new time after rain.
  * Loads on its own, so it shows even if the analytics below are slow.
  */
 const NeedsYou: React.FC<{ o: Overview | null }> = ({ o }) => {
@@ -64,16 +65,16 @@ const NeedsYou: React.FC<{ o: Overview | null }> = ({ o }) => {
   const lateCount = counts?.late ?? 0;
   const now = useNow(lateCount > 0 ? 1000 : 30000); // the restore countdown ticks every second
   const { data: late } = useRemote('late-now', () => adminApi.list({ label: 'late', sort: 'start_desc', pageSize: 12 }), {
-    enabled: lateCount > 0,
     intervalMs: 20000,
     version: desk.refreshKey,
   });
-  const lateNow = lateCount > 0 && late ? late.items.filter((b) => restoreLeft(b, now) !== null) : [];
+  const lateNow = late ? late.items.filter((b) => (b.holdsCourt && b.canRelease) || restoreLeft(b, now) !== null) : [];
 
   const rainWaiting = counts?.rainDelay ?? 0;
+  const paidLate = counts?.paidLate ?? 0;
 
   if (!counts && !o) return null;
-  if (lateNow.length === 0 && rainWaiting === 0) {
+  if (lateNow.length === 0 && rainWaiting === 0 && paidLate === 0) {
     return (
       <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm font-medium text-emerald-900">
         <CheckCircle2 className="h-5 w-5 shrink-0 text-[#15803D]" /> You're all caught up. Nothing needs you right now.
@@ -85,8 +86,25 @@ const NeedsYou: React.FC<{ o: Overview | null }> = ({ o }) => {
     <section aria-label="Needs you now" className="space-y-2.5">
       <Label>Needs you now</Label>
 
+      {paidLate > 0 && (
+        <button
+          type="button"
+          onClick={() => desk.goto('bookings', { status: 'paid_late' })}
+          className="group flex w-full items-center gap-4 rounded-2xl border border-red-300 bg-red-50 p-4 text-left transition hover:bg-red-100/70 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-600 font-heading text-lg font-bold text-white">{paidLate}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-heading text-base font-bold text-red-950">
+              {paidLate === 1 ? 'A payment came in after its time ran out' : `${paidLate} payments came in after their time ran out`}
+            </span>
+            <span className="block text-sm text-red-900/80">Someone else had the slot. Move each one to a free time, or refund it.</span>
+          </span>
+          <ArrowRight className="h-5 w-5 shrink-0 text-red-800 transition-transform group-hover:translate-x-0.5" />
+        </button>
+      )}
+
       {lateNow.map((b) => (
-        <div key={b.code} className="rounded-2xl border-2 border-dashed border-amber-400 bg-amber-50 p-4">
+        <div key={b.code} className={cx('rounded-2xl border-2 border-amber-400 bg-amber-50 p-4', !b.holdsCourt && 'border-dashed')}>
           <button
             type="button"
             onClick={() => desk.openBooking(b.code)}
@@ -99,7 +117,7 @@ const NeedsYou: React.FC<{ o: Overview | null }> = ({ o }) => {
               <span className="block truncate font-heading text-base font-bold text-amber-950">{b.customerName} is Late</span>
               <span className="block text-sm text-amber-900/80">
                 {b.courtName} · {hourSpan(b.hour, b.hours)}
-                {b.lateAt ? ` · went Late at ${fmtTime(b.lateAt)}` : ''}
+                {b.releasedAt ? ` · court released at ${fmtTime(b.releasedAt)}` : ' · the court is still theirs: here, or release it?'}
               </span>
             </span>
           </button>

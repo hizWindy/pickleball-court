@@ -111,7 +111,7 @@ export const WeatherPage: React.FC = () => {
         <Heading
           id="rebook-h"
           title="Rebook guests"
-          note="Rain or typhoon? One tap gives the affected hours back and asks those guests to pick a new time. Nothing is cancelled or refunded."
+          note="Rain or typhoon? One tap asks the affected guests to pick a new time; their hours stay closed until they do. Nothing is cancelled or refunded."
         />
         <RebookCard rebook={rebook} onChoose={() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
       </section>
@@ -564,7 +564,8 @@ const RainDelayForm: React.FC = () => {
           }
         >
           <p>
-            {chosen.length === 1 ? '1 booking' : `${chosen.length} bookings`} on {winText(win)} will give their hours back right now.
+            {chosen.length === 1 ? '1 booking' : `${chosen.length} bookings`} on {winText(win)} will be asked to pick a new time. Their hours stay closed until
+            they do.
           </p>
           <p>
             Nothing is cancelled or refunded. Each guest keeps their paid booking and picks a new time themselves (free). You'll get a message to send each of them next.
@@ -590,7 +591,7 @@ const WaitingList: React.FC<{ q: QuickApi }> = ({ q }) => {
       <Heading
         id="waiting-h"
         title={data && data.total > 0 ? `Waiting to rebook (${data.total})` : 'Waiting to rebook'}
-        note="These guests gave their hours back and haven't picked a new time yet. They do it on the site with the link in your message."
+        note="These guests haven't picked a new time yet (their hours stay closed until they do, unless you open them). They do it on the site with the link in your message."
       />
       {error && !data && <Card className="p-4 text-sm text-zinc-600">{error.message}</Card>}
       {!data && !error && <div className="h-24 animate-pulse rounded-2xl bg-zinc-100" />}

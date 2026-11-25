@@ -77,7 +77,8 @@ function statusOf(b: Booking): Status {
 
 /** Why a booking can't be moved online, in words that fit its state. */
 function whyNotMovable(b: Booking): string {
-  if (b.late) return 'It was marked Late, so the court was released. Please contact the host.';
+  if (b.late) return 'It was marked Late, so the host may give the court to others. Please contact the host.';
+  if (b.paidLate) return 'Your payment came in after your time ran out and someone else had the slot. The host will contact you to move or refund it.';
   if (b.arrived) return "You're already checked in for this session.";
   if (b.status === 'held') return 'Your payment window is still open. Open your pass to finish paying.';
   if (b.status === 'expired') return 'The payment time ran out, so the slot was released. You can book again from the home page.';

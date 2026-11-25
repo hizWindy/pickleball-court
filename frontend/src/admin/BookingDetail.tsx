@@ -7,8 +7,8 @@ import { adminApi } from './api';
 import { useDesk } from './desk';
 import { arrivable, clock, manilaHour, METHOD_LABEL, PROVIDER_LABEL, restoreLeft, stamp, hourSpan, telHref } from './format';
 import { useNow, useRemote } from './hooks';
-import { lateMessage, rainMessage } from './messages';
-import { ArrivedBtn, ContactBtns, RestoreBtn } from './QuickActions';
+import { lateMessage, paidLateMessage, rainMessage } from './messages';
+import { ArrivedBtn, ContactBtns, ReleaseBtn, RestoreBtn } from './QuickActions';
 import { Btn, Card, CopyBtn, cx, Dialog, ErrorNote, Label, LabelBadge, Sheet, Tag, TextArea } from './ui';
 import { useQuickActions } from './useQuickActions';
 import type { AdminBookingDetail } from './types';
@@ -29,11 +29,15 @@ const EVENT_LABEL: Record<string, string> = {
   edited: 'Edited',
   walk_in_added: 'Added by you',
   blocked: 'Court blocked',
-  went_late: 'Went Late: the court was released',
+  went_late: 'Went Late: the court is held until you decide',
+  released: 'You released the court',
+  hours_opened: 'You opened the hours to others',
   restored: 'Restored to the court',
   arrived: 'You marked the group as here',
   checked_in: 'The player checked in',
-  rain_delay: 'Rain delay: hours given back',
+  rain_delay: 'Rain delay: hours held for the new time',
+  paid_after_timer: 'Paid after the timer: the hours were still free',
+  paid_late: 'Paid after the timer: the slot was taken',
   guest_rescheduled: 'The player moved it to a new time',
   rain_rescheduled: 'The player picked a new time after the rain',
 };
@@ -122,10 +126,19 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
         </div>
       );
     } else if (confirmed && b.source !== 'blocked') {
-      // Paid, Late, Done or Rain delay: the main action depends on which.
+      // Paid, Late, Done or Rain delay: the main action depends on which. A Late group that still holds its court is the
+      // host's call: they're here after all, or the court goes to others.
       const main =
-        restoreLeft(b, now) !== null ? (
-          <RestoreBtn b={b} q={q} size="lg" className="w-full" />
+        b.label === 'late' && b.holdsCourt && (arrivable(b, now) || b.canRelease) ? (
+          <div className="flex gap-2">
+            <ArrivedBtn b={b} q={q} now={now} size="lg" className="flex-1" />
+            <ReleaseBtn b={b} q={q} size="lg" className="flex-1" />
+          </div>
+        ) : restoreLeft(b, now) !== null ? (
+          <div className="flex gap-2">
+            {b.label === 'rain_delay' && <ReleaseBtn b={b} q={q} size="lg" className="flex-1" />}
+            <RestoreBtn b={b} q={q} size="lg" className="flex-1" />
+          </div>
         ) : arrivable(b, now) ? (
           <ArrivedBtn b={b} q={q} now={now} size="lg" className="w-full" />
         ) : null;
@@ -187,6 +200,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
 
               {b.label === 'late' && <LateNote b={b} now={now} minutes={desk.config?.lateAfterMinutes ?? 15} />}
               {b.label === 'rain_delay' && <RainNote b={b} />}
+              {b.paidLate && <PaidLateNote b={b} />}
 
               {b.source === 'online' && b.submittedAt && <PaymentProof b={b} onZoom={() => setZoom(true)} />}
               {b.status === 'held' && (
@@ -553,15 +567,34 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
   );
 };
 
-/** A booking that went Late: what happened, and the way back while there is one. */
+/** A booking that went Late: what happened, and what the host can do about it. */
 const LateNote: React.FC<{ b: AdminBookingDetail; now: number; minutes: number }> = ({ b, now, minutes }) => {
   const canRestore = restoreLeft(b, now) !== null;
   return (
-    <Card className="border-dashed border-amber-400 bg-amber-50 p-4">
-      <p className="font-heading font-bold text-amber-950">{b.lateAt ? `Went Late at ${fmtTime(b.lateAt)}` : 'Late'}</p>
+    <Card className={cx('border-amber-400 bg-amber-50 p-4', !b.holdsCourt && 'border-dashed')}>
+      <p className="font-heading font-bold text-amber-950">
+        {b.lateAt ? `Went Late at ${fmtTime(b.lateAt)}` : 'Late'}
+        {b.releasedAt ? ` · court released at ${fmtTime(b.releasedAt)}` : ''}
+      </p>
       <p className="mt-1 text-sm text-amber-900">
-        The group wasn't here {minutes} minutes after the start, so the court was released and its hours are open to others. The booking stays paid.{' '}
-        {canRestore ? 'If they turn up, tap Restore.' : 'The time to restore it has passed. To seat them anyway, use Edit to move it to a free time.'}
+        {b.holdsCourt ? (
+          <>
+            Nobody tapped Arrived {minutes} minutes after the start. The court is still theirs until you decide:{' '}
+            {b.canRelease ? (
+              <>
+                tap <strong>Arrived</strong> if they're playing, or <strong>Release court</strong> to open the hours to others.
+              </>
+            ) : (
+              'the session is over.'
+            )}{' '}
+            The booking stays paid either way.
+          </>
+        ) : (
+          <>
+            You released the court, so its hours are open to others. The booking stays paid.{' '}
+            {canRestore ? 'If they turn up, tap Restore.' : 'The time to restore it has passed. To seat them anyway, use Edit to move it to a free time.'}
+          </>
+        )}
       </p>
       {b.customerPhone && (
         <div className="mt-3 flex gap-2">
@@ -581,7 +614,10 @@ const RainNote: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
         <CloudRain className="h-5 w-5 shrink-0" /> Rain delay{b.weatherHoldAt ? ` · ${stamp(b.weatherHoldAt)}` : ''}
       </p>
       <p className="mt-1 text-sm text-sky-900">
-        The hours are open again. Nothing is cancelled or refunded: the guest keeps their paid booking and picks a new time on the site (free). Changed your mind? Undo puts it back.
+        {b.holdsCourt
+          ? 'The hours stay closed until the guest picks a new time on the site (free); then the old hours open by themselves. Open hours if you want to sell them sooner.'
+          : 'You opened the hours to others. The guest still picks a new time on the site (free).'}{' '}
+        Nothing is cancelled or refunded. Changed your mind? Undo puts it back.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <ContactBtns b={b} message={message} className="flex-1" />
@@ -590,6 +626,25 @@ const RainNote: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
     </Card>
   );
 };
+
+/** A payment that came in after the hold ran out, while someone else had the slot: the host moves it or refunds it. */
+const PaidLateNote: React.FC<{ b: AdminBookingDetail }> = ({ b }) => (
+  <Card className="border-red-300 bg-red-50 p-4">
+    <p className="font-heading font-bold text-red-950">
+      Paid after the time ran out{b.paidLateAt ? ` · ${stamp(b.paidLateAt)}` : ''}
+    </p>
+    <p className="mt-1 text-sm text-red-900">
+      {b.payerName ?? 'The player'} paid {peso(b.total)} after their hold ran out, but someone else had already booked the slot. The player was
+      told you'll contact them. Check the payment in your app, then either move it (<strong>Edit</strong> to a free time, then
+      <strong> Reopen and confirm</strong>) or refund it and leave it here.
+    </p>
+    {b.customerPhone && (
+      <div className="mt-3 flex gap-2">
+        <ContactBtns b={b} message={paidLateMessage(b)} className="flex-1" />
+      </div>
+    )}
+  </Card>
+);
 
 const Timeline: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
   const items: { at: string; title: string; detail?: string | null }[] = [{ at: b.createdAt, title: b.source === 'online' ? 'Booked online' : 'Added' }];

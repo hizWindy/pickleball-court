@@ -98,9 +98,9 @@ export function buildPolicies(n: PolicyNumbers = DEFAULT_POLICY_NUMBERS): HouseR
       tag: 'Late Rule',
       tagColor: 'amber',
       isCrucial: true,
-      summary: `Not on court within ${n.lateAfterMinutes} minutes of your start? The booking is marked Late and the court goes to others.`,
+      summary: `Not on court within ${n.lateAfterMinutes} minutes of your start? The booking is marked Late and the host may give the court to others.`,
       details:
-        `Guests who fail to arrive within ${spelled(n.lateAfterMinutes)} minutes of their reserved schedule without prior notice shall be considered a No-Show (shown as "Late" on your pass), and the court is released to other players. No-Shows are not entitled to refunds, credits, or extensions.`,
+        `Guests who fail to arrive within ${spelled(n.lateAfterMinutes)} minutes of their reserved schedule without prior notice shall be considered a No-Show (shown as "Late" on your pass), and the host may give the court to other players. No-Shows are not entitled to refunds, credits, or extensions.`,
     },
     {
       id: 'policy-late-arrival',

@@ -12,9 +12,10 @@ from app.validation import clean_name, normalize_ph_mobile
 
 AdminPayment = PaidWith  # an online method, cash at the desk, or "none" for a block
 Source = Literal["online", "walk_in", "blocked"]
-# What the host sees on a booking. Day to day only the first four matter: Paid, Late, Done, Rain delay.
+# What the host sees on a booking. Day to day only the first four matter: Paid, Late, Done, Rain delay. `paid_late`: the
+# hold ran out, then a payment came in and someone else had the slot (the host moves or refunds it).
 AdminLabel = Literal[
-    "paid", "late", "done", "rain_delay", "blocked", "awaiting", "rejected", "expired", "cancelled"
+    "paid", "late", "done", "rain_delay", "blocked", "awaiting", "rejected", "expired", "cancelled", "paid_late"
 ]
 
 
@@ -100,10 +101,15 @@ class AdminBookingOut(ApiModel):
     arrived_at: str | None
     late_at: str | None
     weather_hold_at: str | None
+    released_at: str | None  # the host gave a Late or rain-delayed booking's hours back
+    paid_late_at: str | None
     reschedule_count: int
-    restorable: bool  # Late (inside the host's short grace) or rain-delayed: the host can put it back
-    restore_until: str | None  # end of that grace for a Late booking; guests are never told about it
+    holds_court: bool  # owns its court-hours right now (a Late or rain-delayed booking does, until released)
+    paid_late: bool  # paid after its hold ran out and someone else had the slot: move it or refund it
+    restorable: bool  # released Late (inside the host's short undo) or rain-delayed: the host can put it back
+    restore_until: str | None  # end of that undo for a released Late booking; guests are never told about it
     can_mark_arrived: bool
+    can_release: bool  # Late or rain-delayed and still holding its hours: Release court / Open these hours
 
 
 class AdminBookingDetail(AdminBookingOut):
@@ -128,6 +134,7 @@ class StatusCounts(ApiModel):
     done: int
     rain_delay: int
     blocked: int  # courts the host closed (maintenance, events)
+    paid_late: int  # holds that ran out and were paid while someone else had the slot (they show under All)
 
 
 class AdminBookingList(ApiModel):
@@ -142,8 +149,9 @@ class NavCounts(ApiModel):
     to_review: int
     flagged: int
     held: int
-    late: int  # Late bookings the host can still restore
+    late: int  # Late bookings still holding their court: the host decides (Arrived, or Release court)
     rain_delay: int  # guests waiting to pick a new time
+    paid_late: int  # payments that came in after the hold ran out and the slot was taken: move or refund
     payments: int  # online payments received so far: the desk says so when it goes up
     rev: int  # changes whenever any booking changes: the desk reloads its views when it moves
 

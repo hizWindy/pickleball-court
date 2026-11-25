@@ -102,10 +102,12 @@ def test_hold_expires_and_releases_slot(client, booking_payload, fake_now):
     assert slot_state(client, "2026-10-10", 19) == "available"
     b = client.get(f"/api/bookings/{body['booking']['code']}", headers=auth(body["accessToken"])).json()
     assert b["status"] == "expired"
+    # A payment soon after is still taken (see test_late_payment.py); once the late window is over, the hold is simply over.
+    fake_now.advance(minutes=30)
     res = client.post(
         f"/api/bookings/{b['code']}/receipt", headers=auth(body["accessToken"]), files={"receipt": ("r.png", PNG)}
     )
-    assert res.status_code == 410
+    assert res.status_code == 410 and res.json()["error"]["code"] == "hold_expired"
 
 
 def test_booking_survives_refresh_until_deadline(client, booking_payload, fake_now):

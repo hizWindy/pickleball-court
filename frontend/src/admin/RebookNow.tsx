@@ -65,7 +65,7 @@ export interface Rebook {
 }
 
 /**
- * One tap to rebook: look up who plays in the window, ask once ("Rebook 5 guests?"), then give their hours back.
+ * One tap to rebook: look up who plays in the window, ask once ("Rebook 5 guests?"), then ask them to pick new times.
  * Every guest keeps their paid booking and picks a new time themselves, free. Nothing is cancelled or refunded.
  */
 export function useRebook(): Rebook {
@@ -140,7 +140,8 @@ export function useRebook(): Rebook {
           }
         >
           <p>
-            Everyone playing <strong className="text-zinc-950">{asking.win.label}</strong> gives their hours back right now and picks a new time themselves.
+            Everyone playing <strong className="text-zinc-950">{asking.win.label}</strong> picks a new time themselves. Their hours stay closed until they
+            do (you can open them sooner from each booking).
           </p>
           <ul className="divide-y divide-zinc-100 rounded-xl bg-zinc-50 px-3">
             {asking.bookings.slice(0, 6).map((b) => (
@@ -206,7 +207,7 @@ const RebookResult: React.FC<{ moved: AdminBooking[]; label: string; onDone: () 
       <p className="mt-1 text-sm text-sky-900">
         {moved.length === 0
           ? 'Those bookings had already finished or changed.'
-          : `Everyone playing ${label} gave their hours back. Nothing is cancelled or refunded. Tell them to open the website and tap “Check my booking”.`}
+          : `Everyone playing ${label} is asked to pick a new time; their hours stay closed until they do. Nothing is cancelled or refunded. Tell them to open the website and tap “Check my booking”.`}
       </p>
       {moved.length > 0 && (
         <div className="mt-3 space-y-2.5 rounded-xl bg-white/80 p-3 text-xs text-sky-950">

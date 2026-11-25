@@ -14,8 +14,10 @@ const NAV: { tab: Tab; label: string; Icon: typeof LayoutDashboard }[] = [
 const clockFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 export interface NavBadges {
-  /** Late bookings the host can still restore. */
+  /** Late bookings whose court is still theirs: the host decides. */
   late: number;
+  /** Payments that came in after their time ran out while the slot was taken. */
+  paidLate: number;
   /** Guests waiting to pick a new time after a rain delay. */
   rainDelay: number;
   /** Paid bookings fall in forecast rain. */
@@ -49,8 +51,9 @@ const Badge: React.FC<{ n: number; label: string; tone?: 'amber' | 'blue'; class
 const Marker: React.FC<{ tab: Tab; badges: NavBadges; floating?: boolean }> = ({ tab, badges, floating }) => {
   if (tab === 'bookings') {
     const className = floating ? 'absolute -right-3 -top-2' : undefined;
-    // A Late booking can only be restored for a few minutes: that's the one thing worth a number here.
-    return <Badge n={badges.late} label={`${badges.late} late, can be restored`} className={className} />;
+    // What needs the host now: a Late group's court (theirs, or release it?) and payments that came in too late.
+    const n = badges.late + badges.paidLate;
+    return <Badge n={n} label={`${n} need you: ${badges.late} late, ${badges.paidLate} paid after the time ran out`} className={className} />;
   }
   if (tab === 'weather') {
     if (badges.rainDelay > 0) {

@@ -6,7 +6,7 @@ import { adminApi } from './api';
 import { useDesk } from './desk';
 import { arrivable, hourSpan, isNight, PLAY_HOURS } from './format';
 import { useNow, useRemote } from './hooks';
-import { ArrivedIconBtn, RestoreIconBtn } from './QuickActions';
+import { ArrivedIconBtn, ReleaseIconBtn, RestoreIconBtn } from './QuickActions';
 import { courtHoursBooked, DAY_ROWS, nowOffset, schedulePosition } from './scheduleLayout';
 import { Btn, cx } from './ui';
 import { useQuickActions } from './useQuickActions';
@@ -18,6 +18,8 @@ const TONE = {
   paid: 'border-emerald-600 bg-emerald-50 text-emerald-950 hover:bg-emerald-100',
   done: 'border-zinc-400 bg-zinc-100 text-zinc-600 hover:bg-zinc-200/70',
   held: 'border-sky-500 bg-sky-50 text-sky-950 hover:bg-sky-100',
+  late: 'border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100',
+  rain: 'border-indigo-500 bg-indigo-50 text-indigo-950 hover:bg-indigo-100',
   blocked: 'border-zinc-500 bg-[repeating-linear-gradient(135deg,#f4f4f5,#f4f4f5_6px,#e4e4e7_6px,#e4e4e7_12px)] text-zinc-800 hover:brightness-95',
 } as const;
 
@@ -25,13 +27,18 @@ const toneOf = (b: AdminBooking): keyof typeof TONE =>
   b.source === 'blocked'
     ? 'blocked'
     : b.status === 'held'
-        ? 'held'
-        : b.label === 'done'
-          ? 'done'
-          : 'paid';
+      ? 'held'
+      : b.label === 'late'
+        ? 'late'
+        : b.label === 'rain_delay'
+          ? 'rain'
+          : b.label === 'done'
+            ? 'done'
+            : 'paid';
 
-/** Late and rain-delayed bookings have given their hours back: they are shown, but they do not take up the court. */
-const releasedHours = (b: AdminBooking) => b.label === 'late' || b.label === 'rain_delay';
+/** A Late or rain-delayed booking keeps its court until the host releases it; then it is drawn as an outline. */
+const releasedHours = (b: AdminBooking) => !b.holdsCourt;
+const PILL: Partial<Record<keyof typeof TONE, string>> = { late: 'Late', rain: 'Rain delay' };
 
 export const SchedulePage: React.FC = () => {
   const desk = useDesk();
@@ -152,9 +159,9 @@ export const SchedulePage: React.FC = () => {
           <div className="pointer-events-none absolute inset-y-0 right-0 left-14 grid" style={{ gridTemplateColumns: `repeat(${courts.length || 2}, minmax(0, 1fr))` }}>
             {courts.map((c) => (
               <div key={c.id} className="relative">
-                {/* Late bookings first, so a booking made for the freed hours sits on top of them */}
+                {/* Released Late bookings first, so a booking made for the freed hours sits on top of them */}
                 {blocks(c.id)
-                  .filter(({ b }) => b.label === 'late')
+                  .filter(({ b }) => releasedHours(b))
                   .map(({ b, a, z }) => {
                     // The dashed outline shows the hours that reopened and lets taps through to the empty cells;
                     // only the first hour carries the guest name and the Restore button.
@@ -186,11 +193,12 @@ export const SchedulePage: React.FC = () => {
                     );
                   })}
                 {blocks(c.id)
-                  .filter(({ b }) => b.label !== 'late')
+                  .filter(({ b }) => !releasedHours(b))
                   .map(({ b, a, z }) => {
                     const tone = toneOf(b);
                     const tall = z - a >= 1.5;
-                    const canArrive = arrivable(b, now);
+                    // A Late group that still holds the court: the host decides here (they're here, or free the court).
+                    const buttons = (arrivable(b, now) ? 1 : 0) + (b.canRelease ? 1 : 0);
                     return (
                       <div
                         key={b.code}
@@ -200,9 +208,11 @@ export const SchedulePage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => desk.openBooking(b.code)}
+                          aria-label={`${b.customerName}${PILL[tone] ? `, ${PILL[tone]}` : ''}, ${hourSpan(b.hour, b.hours)}. Open booking`}
                           className={cx(
                             'block h-full w-full cursor-pointer px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#15803D]',
-                            canArrive && 'pr-[3.1rem]'
+                            buttons === 1 && 'pr-[3.1rem]',
+                            buttons === 2 && 'pr-[6rem]'
                           )}
                         >
                           <span className="flex items-center gap-1 text-[13px] font-bold leading-tight">
@@ -210,13 +220,23 @@ export const SchedulePage: React.FC = () => {
                             <span className="truncate">{b.customerName}</span>
                           </span>
                           <span className="block truncate text-[11px] font-medium leading-tight opacity-75">{hourSpan(b.hour, b.hours)}</span>
+                          {PILL[tone] && (
+                            <span className={cx('mt-0.5 inline-block rounded px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-white', tone === 'late' ? 'bg-amber-500' : 'bg-indigo-500')}>
+                              {PILL[tone]}
+                            </span>
+                          )}
                           {tall && tone === 'held' && (
                             <span className="mt-1 inline-block rounded bg-white/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide">
                               Paying now
                             </span>
                           )}
                         </button>
-                        {canArrive && <ArrivedIconBtn b={b} q={q} now={now} className="absolute right-0.5 top-0.5" />}
+                        {buttons > 0 && (
+                          <span className="absolute right-0.5 top-0.5 flex gap-0.5">
+                            <ArrivedIconBtn b={b} q={q} now={now} />
+                            <ReleaseIconBtn b={b} q={q} />
+                          </span>
+                        )}
                       </div>
                     );
                   })}
@@ -238,7 +258,8 @@ export const SchedulePage: React.FC = () => {
         {[
           ['bg-emerald-600', 'Paid'],
           ['bg-zinc-400', 'Done'],
-          ['bg-amber-500', 'Needs a look'],
+          ['bg-amber-500', 'Late (court still theirs)'],
+          ['bg-indigo-500', 'Rain delay'],
           ['bg-sky-500', 'Player is paying'],
           ['bg-zinc-500', 'Blocked'],
         ].map(([dot, label]) => (
@@ -247,7 +268,7 @@ export const SchedulePage: React.FC = () => {
           </li>
         ))}
         <li className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm border-2 border-dashed border-amber-500" /> Late (hours reopened)
+          <span className="h-2.5 w-2.5 rounded-sm border-2 border-dashed border-amber-500" /> Late, court released
         </li>
         <li className="text-indigo-400">Evening hours (6 PM – 5 AM) are shaded</li>
       </ul>

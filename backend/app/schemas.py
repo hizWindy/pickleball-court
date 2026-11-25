@@ -49,6 +49,7 @@ class ConfigOut(ApiModel):
     payment_accounts: list[PaymentAccountOut]
     paddle_fee: int
     hold_minutes: int
+    late_payment_minutes: int  # how long after the hold runs out a payment is still taken (the slot, if still free)
     max_hours: int  # the stepper's limit
     quick_hours: int  # how many quick-pick chips (1..n hours) to show
     booking_window_days: int
@@ -149,8 +150,9 @@ class BookingOut(ApiModel):
     server_now: str
     # What the pass needs to know once the booking is paid
     arrived: bool  # the host marked the group as here
-    late: bool  # not there in time: the hours were released (the host may still sort it out)
+    late: bool  # not there in time: the host may give the court to others
     weather_hold: bool  # the host called a rain delay: pick a new time
+    paid_late: bool  # paid after the hold ran out, and someone else had the slot: the host will be in touch
     reschedule: RescheduleState
     reschedule_count: int
     # Why a payment is waiting for the host instead of confirming, and what the receipt showed

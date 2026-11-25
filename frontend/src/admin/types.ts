@@ -6,9 +6,10 @@ export type Source = 'online' | 'walk_in' | 'blocked';
 
 /**
  * The one word on a booking. Day to day it's Paid, Late, Done (and Rain delay when you've called one);
- * the rest are rare states. A Late or rain-delayed booking is still `status: 'confirmed'`.
+ * the rest are rare states. A Late or rain-delayed booking is still `status: 'confirmed'`. `paid_late`: the hold ran
+ * out, then a payment came in while someone else had the slot (status `expired`): move it or refund it.
  */
-export type AdminLabel = 'paid' | 'late' | 'done' | 'rain_delay' | 'blocked' | 'awaiting' | 'rejected' | 'expired' | 'cancelled';
+export type AdminLabel = 'paid' | 'late' | 'done' | 'rain_delay' | 'blocked' | 'awaiting' | 'rejected' | 'expired' | 'cancelled' | 'paid_late';
 
 export interface AdminBooking {
   code: string;
@@ -48,16 +49,26 @@ export interface AdminBooking {
   needsReview: boolean;
   /** The host marked the group as on site (this is what stops a booking going Late). */
   arrivedAt: string | null;
-  /** When the court was released because the group didn't show up. */
+  /** When the group was Late: 15 min after the start without Arrived. The court stays theirs until the host decides. */
   lateAt: string | null;
-  /** When a rain delay gave the hours back. */
+  /** When the host called a rain delay. */
   weatherHoldAt: string | null;
+  /** When the host gave a Late or rain-delayed booking's hours back (Release court / Open these hours). */
+  releasedAt: string | null;
+  /** When a payment came in after the hold ran out, while someone else had the slot. */
+  paidLateAt: string | null;
   rescheduleCount: number;
-  /** Late (inside the quiet window) or rain-delayed: the host can put it back with Restore. */
+  /** Owns its court-hours right now: a Late or rain-delayed booking does until it is released. */
+  holdsCourt: boolean;
+  /** Paid after its hold ran out, and the slot was taken: move it to a free time, or refund it. */
+  paidLate: boolean;
+  /** Released Late (inside the short undo) or rain-delayed: the host can put it back with Restore. */
   restorable: boolean;
-  /** End of that quiet window for a Late booking (guests are never told). Null for rain delays. */
+  /** End of that undo for a released Late booking (guests are never told). Null for rain delays. */
   restoreUntil: string | null;
   canMarkArrived: boolean;
+  /** Late or rain-delayed and still holding its court: Release court / Open these hours. */
+  canRelease: boolean;
 }
 
 export interface ReviewFlag {
@@ -111,6 +122,8 @@ export interface StatusCounts {
   rainDelay: number;
   /** Courts the host closed. */
   blocked: number;
+  /** Paid after the hold ran out, with the slot taken (they show under All, and under Expired). */
+  paidLate: number;
 }
 
 export interface AdminBookingList {
@@ -125,7 +138,7 @@ export interface ListQuery {
   q?: string;
   status?: string;
   review?: 'unchecked' | 'flagged';
-  label?: 'paid' | 'late' | 'done' | 'rain_delay' | 'blocked';
+  label?: 'paid' | 'late' | 'done' | 'rain_delay' | 'blocked' | 'paid_late';
   dateFrom?: string;
   dateTo?: string;
   courtId?: string;
@@ -139,10 +152,12 @@ export interface NavCounts {
   toReview: number;
   flagged: number;
   held: number;
-  /** Late bookings the host can still restore. */
+  /** Late bookings still holding their court: the host decides (Arrived, or Release court). */
   late: number;
   /** Guests waiting to pick a new time after a rain delay. */
   rainDelay: number;
+  /** Payments that came in after the hold ran out while the slot was taken: move or refund them. */
+  paidLate: number;
   /** Online payments received so far: the desk announces it when this goes up. */
   payments: number;
   /** Goes up whenever any booking changes (a new hold, a payment, a release...). */

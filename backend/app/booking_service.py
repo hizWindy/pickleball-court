@@ -4,9 +4,10 @@ Lifecycle:
 
     held ──(receipt or reference)──▶ confirmed ──(host spots a problem)──▶ rejected
      │                                    │
-     │                       (group not there 15 min after the start: still `confirmed`, but `late_at`
-     │                        is set and the hours are released. The host can restore it.)
-     ├─(hold runs out)──▶ expired
+     │                       (group not there 15 min after the start: still `confirmed`, `late_at` is set and it
+     │                        keeps its hours until the host decides: Arrived, or Release court (`released_at`).)
+     ├─(hold runs out)──▶ expired ──(paid within LATE_PAYMENT_MINUTES, hours still free)──▶ confirmed
+     │                       └─(paid then, but someone else has the hours: stays expired, `paid_late_at`, for the host)
      └─(player or host releases an unpaid hold)──▶ deleted: an unpaid hold that was let go leaves no record
 
 * There is no cancellation of a paid booking. The only way out is to reschedule (see `reschedule.py`).
@@ -58,17 +59,16 @@ log = logging.getLogger("housepickle")
 ACTIVE_STATUSES = ("held", "pending_verification", "confirmed")
 _CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTVWXYZ"  # no 0/O, 1/I/L, U
 
-# Which bookings own their court-hours right now: an unpaid hold that is still running and a paid booking, unless it
-# went Late or was rain-delayed (those gave their hours back). `booking_slots` must hold exactly these bookings' hours;
-# the scripted-day test and the load test check that from the bookings themselves. Keep the two versions in step.
-HOLDS_COURT_SQL = (
-    "(status IN ('held', 'pending_verification', 'confirmed') AND late_at IS NULL AND weather_hold_at IS NULL)"
-)
+# Which bookings own their court-hours right now: an unpaid hold that is still running and a paid booking, Late and
+# rain-delayed ones included, until the host gives the hours back (`released_at`). `booking_slots` must hold exactly
+# these bookings' hours; the scripted-day test and the load test check that from the bookings themselves. Keep the two
+# versions in step.
+HOLDS_COURT_SQL = "(status IN ('held', 'pending_verification', 'confirmed') AND released_at IS NULL)"
 
 
 def holds_court(row: sqlite3.Row | dict) -> bool:
     """`HOLDS_COURT_SQL` for one booking row."""
-    return row["status"] in ACTIVE_STATUSES and not row["late_at"] and not row["weather_hold_at"]
+    return row["status"] in ACTIVE_STATUSES and not row["released_at"]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -119,8 +119,8 @@ def record_event(conn: sqlite3.Connection, code: str, action: str, detail: str |
 
 
 def release_expired(conn: sqlite3.Connection, now: datetime | None = None) -> int:
-    """Free the slots nobody is using any more: unpaid holds past their deadline, and bookings whose
-    group hasn't shown up in time. Returns the number of holds expired. Must run inside a write transaction."""
+    """Free the slots of unpaid holds past their deadline, and mark the groups that haven't shown up in time as Late.
+    Returns the number of holds expired. Must run inside a write transaction."""
     now = now or clock.now()
     cutoff = to_iso(now - timedelta(seconds=settings.hold_grace_seconds))
     rows = conn.execute(
@@ -132,7 +132,7 @@ def release_expired(conn: sqlite3.Connection, now: datetime | None = None) -> in
             (to_iso(now), row["id"]),
         )
         release_slots(conn, row["id"])
-    release_late(conn, now)
+    mark_late(conn, now)
     return len(rows)
 
 
@@ -157,12 +157,14 @@ def sweep_if_due(conn: sqlite3.Connection, now: datetime | None = None) -> None:
             release_expired(conn, now)
 
 
-def release_late(conn: sqlite3.Connection, now: datetime) -> int:
-    """House rule: a group that isn't there `late_after_minutes` after its start is Late and its hours open up.
+def mark_late(conn: sqlite3.Connection, now: datetime) -> int:
+    """House rule: a group that isn't there `late_after_minutes` after its start is Late.
 
-    The booking stays `confirmed` (it was paid, and nothing is refunded); `late_at` records when it went late.
-    The host can still restore it for a short while (see `restore_window_minutes`), but guests never hear of that.
-    Blocks, rain-delayed bookings and groups the host has marked arrived are never late."""
+    The booking stays `confirmed` (it was paid, and nothing is refunded) and keeps its hours: the host decides, with
+    Arrived (they're here after all: no longer Late) or Release court (the hours go to others). Giving the hours away
+    by itself let two groups end up on one court when the busy host hadn't tapped Arrived (plan D1); an idle court
+    costs less. `late_at` records when it went late. Blocks, rain-delayed bookings and groups the host has marked
+    arrived are never late."""
     cutoff = to_iso(now - timedelta(minutes=settings.late_after_minutes))
     rows = conn.execute(
         """SELECT id, code, start_at FROM bookings
@@ -171,11 +173,13 @@ def release_late(conn: sqlite3.Connection, now: datetime) -> int:
         (cutoff,),
     ).fetchall()
     for row in rows:
-        # The moment it became late, not the moment we noticed: the host's restore window counts from here.
+        # The moment it became late, not the moment we noticed.
         late_at = from_iso(row["start_at"]) + timedelta(minutes=settings.late_after_minutes)
         conn.execute("UPDATE bookings SET late_at = ? WHERE id = ?", (to_iso(late_at), row["id"]))
-        release_slots(conn, row["id"])
-        record_event(conn, row["code"], "went_late", f"Not there {settings.late_after_minutes} min after the start; hours released", now)
+        record_event(
+            conn, row["code"], "went_late",
+            f"Not there {settings.late_after_minutes} min after the start; the court is held until you decide", now,
+        )
         log.info("booking %s went late", row["code"])
     return len(rows)
 
@@ -290,6 +294,7 @@ def to_view(conn: sqlite3.Connection, row: sqlite3.Row, now: datetime | None = N
         arrived=bool(row["arrived_at"]),
         late=row["status"] == "confirmed" and bool(row["late_at"]) and not row["weather_hold_at"],
         weather_hold=row["status"] == "confirmed" and bool(row["weather_hold_at"]),
+        paid_late=row["status"] == "expired" and bool(row["paid_late_at"]),
         reschedule=reschedule_state(row, now),
         reschedule_count=row["reschedule_count"],
         pending_reason=pending_reason,
@@ -330,6 +335,7 @@ def get_config(conn: sqlite3.Connection) -> ConfigOut:
         ],
         paddle_fee=settings.paddle_fee,
         hold_minutes=settings.hold_minutes,
+        late_payment_minutes=settings.late_payment_minutes,
         max_hours=settings.max_hours,
         quick_hours=min(settings.quick_hours, settings.max_hours),
         booking_window_days=settings.booking_window_days,
@@ -453,16 +459,66 @@ def create_booking(conn: sqlite3.Connection, data: CreateBookingIn, ip: str) -> 
     return to_view(conn, row, now), token
 
 
-def _held_for_proof(conn: sqlite3.Connection, code: str, token: str | None, now: datetime) -> sqlite3.Row:
+PAID_AFTER_EXPIRY = (
+    "Your time ran out and someone else booked that slot. We've saved your payment and the host will contact you to "
+    "move or refund it."
+)
+
+
+def _held_for_proof(conn: sqlite3.Connection, code: str, token: str | None, now: datetime) -> tuple[sqlite3.Row, bool]:
+    """The booking a payment is for, and whether its hold has already run out. A payment that comes in up to
+    `late_payment_minutes` after the deadline is still taken (see `_settle_late_payment`); later than that, the hold is
+    simply over."""
     release_expired(conn, now)
     row = _authorized(conn, code, token)
     if row["status"] == "expired":
-        raise Gone("hold_expired", f"Your {settings.hold_minutes}-minute hold ran out, so the slot was released. Please book again.")
+        if row["submitted_at"]:  # a late payment for it is already on record
+            raise Conflict("already_submitted", "Payment proof was already submitted for this booking.")
+        if now - from_iso(row["hold_expires_at"]) > timedelta(minutes=settings.late_payment_minutes):
+            raise Gone("hold_expired", f"Your {settings.hold_minutes}-minute hold ran out, so the slot was released. Please book again.")
+        return row, True
     if row["submitted_at"] and row["status"] in ("pending_verification", "confirmed"):
         raise Conflict("already_submitted", "Payment proof was already submitted for this booking.")
     if row["status"] != "held":
         raise Conflict("not_held", "This booking is no longer waiting for payment.")
-    return row
+    return row, False
+
+
+def _settle_late_payment(conn: sqlite3.Connection, row: sqlite3.Row, now: datetime) -> bool:
+    """A payment arrived after the hold ran out (plan item 9). If its hours are all still free, take them back: the
+    booking is held again and the payment confirms it as usual (True). If someone else has any of them, nothing is
+    taken (False): the caller keeps the payment on the expired booking for the host. Inside the write transaction, so
+    nobody can take the hours between the look and the claim."""
+    court = conn.execute("SELECT * FROM courts WHERE id = ?", (row["court_id"],)).fetchone()
+    items = price_hours(from_iso(row["start_at"]), row["hours"], court["day_rate"], court["night_rate"])
+    starts = [to_iso(i.start) for i in items]
+    marks = ",".join("?" * len(starts))
+    if conn.execute(f"SELECT 1 FROM booking_slots WHERE court_id = ? AND slot_start IN ({marks})", (court["id"], *starts)).fetchone():
+        return False
+    claim_slots(conn, court["name"], court["id"], items, row["id"])
+    conn.execute("UPDATE bookings SET status = 'held', closed_at = NULL, close_reason = NULL WHERE id = ?", (row["id"],))
+    record_event(conn, row["code"], "paid_after_timer", f"Paid {_late_by(row, now)} after the hold ran out; the hours were still free", now)
+    return True
+
+
+def _keep_late_payment(conn: sqlite3.Connection, row: sqlite3.Row, now: datetime, **fields: object) -> None:
+    """Someone else has the hours: the booking stays expired, but the payment is kept on it for the host to move it to
+    a free time or refund it. The reference stays spent like any other."""
+    cols = ", ".join(f"{k} = ?" for k in fields)
+    conn.execute(
+        f"UPDATE bookings SET submitted_at = ?, paid_late_at = ?, {cols} WHERE id = ?",
+        (to_iso(now), to_iso(now), *fields.values(), row["id"]),
+    )
+    record_event(
+        conn, row["code"], "paid_late",
+        f"Paid {_late_by(row, now)} after the hold ran out, but someone else had booked the slot. Move it to a free time or refund it.",
+        now,
+    )
+
+
+def _late_by(row: sqlite3.Row, now: datetime) -> str:
+    seconds = max(0, int((now - from_iso(row["hold_expires_at"])).total_seconds()))
+    return f"{seconds // 60} min {seconds % 60} s" if seconds >= 60 else f"{seconds} s"
 
 
 def _confirm_with_proof(conn: sqlite3.Connection, booking_id: str, now: datetime, flags: list, **fields: object) -> None:
@@ -524,9 +580,10 @@ def submit_receipt(
 
     now = clock.now()
     stored = None
+    kept_late = False
     try:
         with write_transaction(conn):
-            row = _held_for_proof(conn, code, token, now)
+            row, late = _held_for_proof(conn, code, token, now)
             if payment_used(conn, receipt_sha256=digest):
                 raise Conflict(
                     "receipt_used", "This receipt was already used for another booking. Upload the receipt for this payment."
@@ -539,11 +596,15 @@ def submit_receipt(
                 )
             flags = receipt_reader.assess(reading, expected_payment(row, now), engine_ran=lines is not None)
             stored = receipts.save(row["id"], data, ext, digest)
-            _confirm_with_proof(
-                conn, row["id"], now, flags, proof_type="receipt", receipt_path=stored.path, receipt_sha256=stored.sha256,
-                payer_name=payer_name, reference_number=ref,
-                paid_at=to_iso(reading.paid_at) if reading and reading.paid_at else None,
+            proof = dict(
+                proof_type="receipt", receipt_path=stored.path, receipt_sha256=stored.sha256, payer_name=payer_name,
+                reference_number=ref, paid_at=to_iso(reading.paid_at) if reading and reading.paid_at else None,
             )
+            if late and not _settle_late_payment(conn, row, now):
+                _keep_late_payment(conn, row, now, review_flags=json.dumps([{"code": f.code, "message": f.message} for f in flags]), **proof)
+                kept_late = True
+            else:
+                _confirm_with_proof(conn, row["id"], now, flags, **proof)
             conn.execute(
                 """INSERT OR REPLACE INTO receipt_scans (booking_id, engine, provider, amount_centavos, reference, paid_at,
                        recipient_name, recipient_number, sender_name, sender_number, success, raw_text, duration_ms, created_at)
@@ -567,6 +628,8 @@ def submit_receipt(
         if stored is not None:
             receipts.delete(stored.path)
         raise
+    if kept_late:  # after the commit: the payment is on record, and the player is told what happens next
+        raise Conflict("paid_after_expiry", PAID_AFTER_EXPIRY)
     return to_view(conn, row, now)
 
 
@@ -609,8 +672,9 @@ def _refuse_reference(strike_key: str, booking_code: str, raw: str, reason: str)
 
 def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, data: ReferenceProofIn) -> BookingOut:
     now = clock.now()
+    kept_late = False
     with write_transaction(conn):
-        row = _held_for_proof(conn, code, token, now)
+        row, late = _held_for_proof(conn, code, token, now)
         strike_key = f"reference:{row['code']}"
         if ratelimit.struck_out(strike_key, REFERENCE_TRIES, REFERENCE_TRIES_WINDOW):
             raise TooMany("reference_locked", REFERENCE_LOCKED)
@@ -635,14 +699,18 @@ def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, dat
             raise _refuse_reference(strike_key, row["code"], ref, f"already on {taken}")
         # In reference mode every booking is typed in, so a note on each one would only be noise for the host.
         flags = receipt_reader.typed_flags() if settings.proof_mode == "receipt" else []
+        proof = dict(proof_type="reference", reference_number=ref, paid_at=to_iso(paid_at) if paid_at else None, payer_name=data.payer_name)
         try:
-            _confirm_with_proof(
-                conn, row["id"], now, flags, proof_type="reference", reference_number=ref,
-                paid_at=to_iso(paid_at) if paid_at else None, payer_name=data.payer_name,
-            )
+            if late and not _settle_late_payment(conn, row, now):
+                _keep_late_payment(conn, row, now, **proof)
+                kept_late = True
+            else:
+                _confirm_with_proof(conn, row["id"], now, flags, **proof)
         except sqlite3.IntegrityError:  # the unique index is the last line of defence
             raise _refuse_reference(strike_key, row["code"], ref, "taken at the same moment") from None
         row = conn.execute("SELECT * FROM bookings WHERE id = ?", (row["id"],)).fetchone()
+    if kept_late:  # after the commit: the payment is on record, and the player is told what happens next
+        raise Conflict("paid_after_expiry", PAID_AFTER_EXPIRY)
     return to_view(conn, row, now)
 
 

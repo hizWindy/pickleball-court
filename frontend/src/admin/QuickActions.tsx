@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, MessageSquare, Phone, RotateCcw } from 'lucide-react';
+import { Check, DoorOpen, MessageSquare, Phone, RotateCcw } from 'lucide-react';
 import { fmtCountdown } from '../lib/time';
 import { arrivable, restoreLeft, smsHref, telHref } from './format';
 import { useNow } from './hooks';
@@ -31,12 +31,22 @@ export const RestoreBtn: React.FC<{ b: AdminBooking; q: QuickApi; size?: Size; v
   );
 };
 
-/** "They're here": stops a booking going Late. Only offered when the session is close or under way. */
+/** "They're here": stops a booking going Late, and ends a Late one. Only offered when the session is close or under way. */
 export const ArrivedBtn: React.FC<{ b: AdminBooking; q: QuickApi; now: number; size?: Size; className?: string }> = ({ b, q, now, size = 'md', className }) => {
   if (!arrivable(b, now)) return null;
   return (
     <Btn variant="primary" size={size} className={className} loading={q.busy === `arrived:${b.code}`} disabled={!!q.busy} onClick={() => q.arrived(b)}>
       <Check className="h-4 w-4" strokeWidth={3} /> Arrived
+    </Btn>
+  );
+};
+
+/** Release court (a Late group that isn't coming) or Open hours (a rain delay): the hours go back on sale. */
+export const ReleaseBtn: React.FC<{ b: AdminBooking; q: QuickApi; size?: Size; className?: string }> = ({ b, q, size = 'md', className }) => {
+  if (!b.canRelease) return null;
+  return (
+    <Btn variant="outline" size={size} className={className} loading={q.busy === `release:${b.code}`} disabled={!!q.busy} onClick={() => q.release(b)}>
+      <DoorOpen className="h-4 w-4" /> {b.label === 'rain_delay' ? 'Open hours' : 'Release court'}
     </Btn>
   );
 };
@@ -62,17 +72,32 @@ export const ContactBtns: React.FC<{ b: Pick<AdminBooking, 'customerName' | 'cus
 };
 
 /**
- * The one-tap actions a booking row can carry: Call, Text and Restore on a Late one (and a rain delay),
- * Arrived on a paid one that is starting. Renders nothing when there is nothing to do.
+ * The one-tap actions a booking row can carry: on a Late one that still holds its court, Arrived and Release court; on a
+ * released Late one, Restore; on a rain delay, Open hours and Undo; Call and Text on both; Arrived on a paid one that is
+ * starting. Renders nothing when there is nothing to do.
  */
 export const RowActions: React.FC<{ b: AdminBooking; q: QuickApi; now: number; className?: string }> = ({ b, q, now, className }) => {
+  if (b.label === 'late' && b.holdsCourt) {
+    // The court is still theirs until the host decides: here after all, or let others have it.
+    if (!arrivable(b, now) && !b.canRelease && !b.customerPhone) return null;
+    return (
+      <div className={cx('flex flex-wrap gap-2', className)}>
+        <div className="flex w-full gap-2 xs:w-auto xs:flex-1 sm:max-w-sm">
+          <ArrivedBtn b={b} q={q} now={now} className="flex-1" />
+          <ReleaseBtn b={b} q={q} className="flex-1" />
+        </div>
+        <ContactBtns b={b} message={lateMessage(b)} className="flex-1 xs:flex-none" />
+      </div>
+    );
+  }
   if (b.label === 'late' || b.label === 'rain_delay') {
     const canRestore = restoreLeft(b, now) !== null;
-    if (!b.customerPhone && !canRestore) return null;
+    if (!b.customerPhone && !canRestore && !b.canRelease) return null;
     return (
       // Restore gets its own full-width line on a phone (the countdown needs the room); Call and Text share the next.
       <div className={cx('flex flex-wrap gap-2', className)}>
         <ContactBtns b={b} message={b.label === 'late' ? lateMessage(b) : rainMessage(b)} className="flex-1 xs:flex-none" />
+        <ReleaseBtn b={b} q={q} className="flex-1 xs:flex-none" />
         {/* Undoing a rain delay is the quieter choice here: the message to the guest comes first */}
         <RestoreBtn b={b} q={q} variant={b.label === 'late' ? 'primary' : 'outline'} className="order-first w-full xs:order-last xs:w-auto xs:min-w-0 xs:flex-1 sm:max-w-sm" />
       </div>
@@ -124,6 +149,24 @@ export const ArrivedIconBtn: React.FC<{ b: AdminBooking; q: QuickApi; now: numbe
     >
       <Check className="h-4 w-4" strokeWidth={3} />
       <span>Here</span>
+    </button>
+  );
+};
+
+/** Release court / Open hours, squeezed into a schedule block. */
+export const ReleaseIconBtn: React.FC<{ b: AdminBooking; q: QuickApi; className?: string }> = ({ b, q, className }) => {
+  if (!b.canRelease) return null;
+  const rain = b.label === 'rain_delay';
+  return (
+    <button
+      type="button"
+      disabled={!!q.busy}
+      onClick={() => q.release(b)}
+      aria-label={rain ? `Open ${b.customerName}'s hours to others` : `Release the court ${b.customerName} booked`}
+      className={cx(iconBtn, 'bg-white text-zinc-800 ring-1 ring-zinc-400 hover:bg-zinc-50', className)}
+    >
+      <DoorOpen className={cx('h-4 w-4', q.busy === `release:${b.code}` && 'animate-pulse')} />
+      <span>{rain ? 'Open' : 'Free'}</span>
     </button>
   );
 };

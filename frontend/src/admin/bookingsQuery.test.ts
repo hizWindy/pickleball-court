@@ -26,6 +26,7 @@ describe('the Bookings list query', () => {
 
   it('asks for labels and statuses the way the server expects', () => {
     expect(listQuery({ ...ALL, filter: 'blocked' }, TODAY)).toMatchObject({ label: 'blocked', status: undefined });
+    expect(listQuery({ ...ALL, filter: 'paid_late' }, TODAY)).toMatchObject({ label: 'paid_late', status: undefined });
     expect(listQuery({ ...ALL, filter: 'expired' }, TODAY)).toMatchObject({ status: 'expired', label: undefined });
     expect(listQuery({ ...ALL, filter: 'paid' }, TODAY)).toMatchObject({ label: 'paid', sort: 'start_asc' });
   });

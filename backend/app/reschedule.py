@@ -117,12 +117,14 @@ def reschedule(conn: sqlite3.Connection, data: RescheduleIn, token: str | None) 
             )
 
         old = (row["court_id"], row["start_at"])
-        core.release_slots(conn, row["id"])  # a rain-delayed booking has none: that's fine
+        # The old hours go and the new ones are taken in one step (a rain-delayed booking keeps its old hours until now,
+        # unless the host opened them already: then there are none to give back, and that's fine).
+        core.release_slots(conn, row["id"])
         core.claim_slots(conn, court["name"], court["id"], items, row["id"])  # a clash rolls the whole move back
         weather = bool(row["weather_hold_at"])
         conn.execute(
             """UPDATE bookings SET court_id = ?, start_at = ?, reschedule_count = reschedule_count + ?,
-                   weather_hold_at = NULL, late_at = NULL, arrived_at = NULL WHERE id = ?""",
+                   weather_hold_at = NULL, late_at = NULL, released_at = NULL, arrived_at = NULL WHERE id = ?""",
             (court["id"], to_iso(start), 0 if weather else 1, row["id"]),
         )
         kept = f" (kept ₱{row['court_cost']:,} paid; the new slot costs ₱{new_cost:,})" if new_cost < row["court_cost"] else ""

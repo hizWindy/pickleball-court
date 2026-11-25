@@ -87,12 +87,15 @@ export function App() {
     if (current) setPass({ code: booking.code, token: current.token, booking, autoDownload: true });
   }, []);
 
-  const handleLockClosed = useCallback((booking: Booking | null, reason: 'expired' | 'cancelled' | 'gone') => {
+  const handleLockClosed = useCallback((booking: Booking | null, reason: 'expired' | 'cancelled' | 'gone' | 'paid_late') => {
     const current = lockRef.current;
     device.clearActiveHold();
     setLock(null);
     if (reason === 'gone' && current) {
       device.forgetPass(current.code);
+    } else if (reason === 'paid_late' && current) {
+      // Paid after the time ran out while someone else had the slot: the pass says the payment is saved for the host.
+      setPass({ code: current.code, token: current.token, booking: booking ?? undefined });
     } else if (reason === 'expired') {
       setToast('Your hold expired, so the slot was released. Pick a time to book again.');
       setSheet({ date: booking?.playDate });

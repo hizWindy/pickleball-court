@@ -37,6 +37,7 @@ def _sweep_once(ticks: int) -> None:
             log.info("deleted %d old receipt image(s)", n)
         if notify.enabled():
             notify.check_late(conn)
+            notify.check_paid_late(conn)
             if ticks % 120 == 1:  # about every 30 minutes
                 notify.check_rain(conn)
     finally:
@@ -44,7 +45,7 @@ def _sweep_once(ticks: int) -> None:
 
 
 async def _sweep_forever() -> None:
-    """Free overdue holds and late bookings even when nobody is browsing, so the record is accurate for admin.
+    """Free overdue holds and mark late bookings even when nobody is browsing, so the record is accurate for admin.
     Roughly once an hour, also delete receipt images past their retention period. Runs off the event loop
     because Telegram and the weather forecast are network calls."""
     ticks = 0

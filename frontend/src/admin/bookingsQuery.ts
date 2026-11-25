@@ -7,12 +7,12 @@ export const PAGE = 25;
 export const SERVER_PAGE_MAX = 200;
 
 /** A chip: "All", a label (the word on a booking) or one of the rare statuses tucked under More. */
-export type FilterKey = 'all' | 'paid' | 'late' | 'done' | 'rain_delay' | 'blocked' | 'held' | 'rejected' | 'expired' | 'cancelled';
+export type FilterKey = 'all' | 'paid' | 'late' | 'done' | 'rain_delay' | 'paid_late' | 'blocked' | 'held' | 'rejected' | 'expired' | 'cancelled';
 /** The date box. */
 export type DateRange = 'upcoming' | 'past' | 'all';
 
-export type LabelKey = 'paid' | 'late' | 'done' | 'rain_delay' | 'blocked';
-const LABELS = new Set<FilterKey>(['paid', 'late', 'done', 'rain_delay', 'blocked']);
+export type LabelKey = 'paid' | 'late' | 'done' | 'rain_delay' | 'blocked' | 'paid_late';
+const LABELS = new Set<FilterKey>(['paid', 'late', 'done', 'rain_delay', 'blocked', 'paid_late']);
 const STATUSES = new Set<FilterKey>(['held', 'rejected', 'expired', 'cancelled']);
 export const isLabel = (key: FilterKey): key is LabelKey => LABELS.has(key);
 

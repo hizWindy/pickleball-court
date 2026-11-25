@@ -23,3 +23,11 @@ export function rainMessage(b: AdminBooking): string {
 export function lateMessage(b: AdminBooking): string {
   return `Hi ${firstName(b.customerName)}! HousePickle Club here. Your ${b.courtName} booking on ${plainWhen(b)} has started. Are you still coming?`;
 }
+
+/** For a guest whose payment came in after their time ran out, when someone else had taken the slot. */
+export function paidLateMessage(b: AdminBooking): string {
+  return (
+    `Hi ${firstName(b.customerName)}! HousePickle Club here. We got your payment for ${b.courtName} on ${plainWhen(b)}, ` +
+    `but your time had run out and someone else booked that slot first. Would you like another time, or a refund?`
+  );
+}

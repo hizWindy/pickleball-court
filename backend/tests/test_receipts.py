@@ -275,7 +275,7 @@ def test_matching_receipt_confirms_with_nothing_to_look_at(admin, booking_payloa
     assert d["referenceNumber"] == "7305118642950"
     assert d["scan"]["amount"] == 250 and d["scan"]["provider"] == "gcash" and d["scan"]["engine"] == "rapidocr"
     assert d["scan"]["recipientNumber"] == "+63 912 828 5344"
-    assert _counts(admin) == {"toReview": 0, "flagged": 0, "held": 0, "late": 0, "rainDelay": 0}
+    assert _counts(admin) == {"toReview": 0, "flagged": 0, "held": 0, "late": 0, "rainDelay": 0, "paidLate": 0}
 
 
 def test_suspicious_receipt_still_confirms_but_is_flagged(admin, booking_payload, ocr_reads):

@@ -85,7 +85,9 @@ class _Seeder:
 
     def demo_reference(self, digits: int = 13) -> str:
         """A made-up reference that starts 9990 (so it is easy to spot) and passes the same checks a real one must:
-        GCash's 13 numbers, or 16 for a MariBank one. (Checked: none of the first 5,000 looks made up.)"""
+        GCash's 13 numbers, or 16 for a MariBank one. A new one on every call. (Checked: none of the first 5,000 looks
+        made up.)"""
+        self.n += 1
         return f"9990{(self.n * 7919 + 4817305) * 104729 % 10 ** (digits - 4):0{digits - 4}d}"
 
     def paid(self, name: str, day: date, hour: int, method: str = "gcash", **kw) -> tuple[str, int, int]:
@@ -152,6 +154,22 @@ def run(many: bool = False) -> list[tuple[str, str, str, str]]:
         with write_transaction(conn):
             core.release_expired(conn, now)
         s.add(code, "Ella Cruz", _label(later, h, n), "Expired (the payment time ran out; under More → Expired)")
+
+        # A payment that came in a few minutes after the time ran out, when someone else had just booked the slot.
+        slow, slow_token, h, n = s.book("Nico Ramos", later, 18)
+        conn.execute("UPDATE bookings SET hold_expires_at = ? WHERE code = ?", (to_iso(now - timedelta(minutes=3)), slow))
+        with write_transaction(conn):
+            core.release_expired(conn, now)
+        row = conn.execute("SELECT court_id FROM bookings WHERE code = ?", (slow,)).fetchone()
+        fast, fast_token, _, _ = s.book("Rosa Mendoza", later, h)
+        if conn.execute("SELECT court_id FROM bookings WHERE code = ?", (fast,)).fetchone()["court_id"] == row["court_id"]:
+            core.submit_reference(conn, fast, fast_token, ReferenceProofIn(reference_number=s.demo_reference(), payer_name="Rosa Mendoza"))
+            try:
+                core.submit_reference(conn, slow, slow_token, ReferenceProofIn(reference_number=s.demo_reference(), payer_name="Nico Ramos"))
+            except Conflict:
+                pass  # paid_after_expiry: kept for the host
+            s.add(fast, "Rosa Mendoza", _label(later, h, n), "Confirmed (booked the slot while Nico's time had run out)")
+            s.add(slow, "Nico Ramos", _label(later, h, n), "Paid late: move it or refund it (red, under All)")
 
         # The hours that are easy to get wrong, on both courts: the first (5 AM) and last (4 AM) of the play day, the
         # busiest (7 PM), and one that runs past midnight. Each must sit in the row with its own label on the Schedule.

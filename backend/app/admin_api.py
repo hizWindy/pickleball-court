@@ -156,6 +156,12 @@ def restore_booking(code: str, data: NoteIn | None = None, conn: sqlite3.Connect
     return svc.restore(conn, code, data.note if data else None)
 
 
+@router.post("/bookings/{code}/release", response_model=AdminBookingDetail, dependencies=Guard, **OUT)
+def release_booking(code: str, data: NoteIn | None = None, conn: sqlite3.Connection = Conn) -> AdminBookingDetail:
+    """Release court (a Late booking) or Open these hours (a rain delay): the hours go back on sale."""
+    return svc.release(conn, code, data.note if data else None)
+
+
 @router.post("/bookings/{code}/reject", response_model=AdminBookingDetail, dependencies=Guard, **OUT)
 def reject_booking(code: str, data: ReasonIn | None = None, conn: sqlite3.Connection = Conn) -> AdminBookingDetail:
     return svc.reject(conn, code, data.reason if data else None)

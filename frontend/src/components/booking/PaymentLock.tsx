@@ -18,8 +18,11 @@ interface Props {
   token: string;
   initial?: Booking;
   onSubmitted: (booking: Booking) => void;
-  onClosed: (booking: Booking | null, reason: 'expired' | 'cancelled' | 'gone') => void;
+  /** `paid_late`: paid after the time ran out while someone else had the slot (the payment is kept for the host). */
+  onClosed: (booking: Booking | null, reason: 'expired' | 'cancelled' | 'gone' | 'paid_late') => void;
 }
+
+const PAID_LATE_TEXT = "Your time ran out and someone else booked that slot. We've saved your payment and the host will contact you to move or refund it.";
 
 /**
  * The payment window (`config.holdMinutes`). It covers the whole screen and the page behind it
@@ -53,6 +56,10 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   const [confirmRelease, setConfirmRelease] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  // After the time ran out: the player says they already paid (a payment within the late window still counts) ...
+  const [lateEntry, setLateEntry] = useState(false);
+  // ... and the server kept it because someone else had booked the slot meanwhile.
+  const [paidLateMsg, setPaidLateMsg] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const left = useCountdown(booking?.holdExpiresAt ?? null);
@@ -60,7 +67,9 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   const lateMinutes = config?.lateAfterMinutes ?? 15;
   const policies = policiesFor(config);
   const totalMs = holdMinutes * 60_000;
-  const timeUp = booking != null && left <= 0 && !busy;
+  const timeUp = booking != null && left <= 0 && (!busy || lateEntry || !!paidLateMsg);
+  // A payment sent within this long of the deadline is still taken by the server (the slot, if nobody took it).
+  const canPayLate = booking != null && left <= 0 && left + (config?.latePaymentMinutes ?? 0) * 60_000 > 0;
 
   useEffect(() => {
     if (!ref) return;
@@ -76,6 +85,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
       setLoadError(null);
       if (b.status === 'pending_verification' || b.status === 'confirmed') onSubmitted(b);
       else if (b.status === 'cancelled' || b.status === 'rejected') onClosed(b, 'cancelled');
+      else if (b.status === 'expired' && b.paidLate) setPaidLateMsg((m) => m ?? PAID_LATE_TEXT);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) onClosed(null, 'gone');
       else setLoadError(errorMessage(e));
@@ -139,7 +149,14 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   };
 
   const handleProofError = (e: unknown) => {
+    if (e instanceof ApiError && e.code === 'paid_after_expiry') {
+      // Paid after the time ran out and someone else had the slot: the payment is kept and the host will be in touch.
+      setPaidLateMsg(e.message || PAID_LATE_TEXT);
+      setError(null);
+      return;
+    }
     if (e instanceof ApiError && e.code === 'hold_expired') {
+      setLateEntry(false);
       sync();
     }
     if (e instanceof ApiError && (e.code === 'reference_rejected' || e.code === 'reference_locked')) {
@@ -219,6 +236,97 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
     }
   };
 
+  /** The typed proof: reference number and sender's name. Shown in step 2, and after the time ran out ("Already paid?"). */
+  const referenceForm = (offerReceipt: boolean) => (
+    <form onSubmit={submitReference} className="space-y-4 rounded-3xl border border-zinc-200 bg-white p-4 text-left">
+      <div>
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <label htmlFor="pay-ref" className="text-sm font-semibold text-zinc-800">Reference number (from your receipt)</label>
+          {canPaste && (
+            <button type="button" onClick={pasteReference} className="flex min-h-9 items-center gap-1 rounded-full px-2.5 text-xs font-semibold text-[#15803D] hover:bg-emerald-50 cursor-pointer">
+              <ClipboardPaste className="h-3.5 w-3.5" /> Paste
+            </button>
+          )}
+        </div>
+        <input
+          id="pay-ref"
+          ref={refInput}
+          value={ref}
+          onChange={(e) => {
+            const el = e.target;
+            // A GCash number is spaced as it is typed (4-3-6, like the receipt), but only when typing at the end so the cursor never jumps.
+            setRef(el.selectionStart === el.value.length ? formatReference(el.value) : el.value);
+            setRefUsed(false);
+            setError(null);
+            if (!el.value) setRefTouched(false);
+          }}
+          onBlur={() => {
+            if (ref) setRefTouched(true);
+          }}
+          inputMode="text"
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="Paste or type it from your receipt"
+          maxLength={40}
+          required
+          className={cx('w-full rounded-2xl border px-4 py-3 font-mono text-base tracking-wide focus:outline-none focus:ring-4', error ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100' : 'border-zinc-200 focus:border-[#15803D] focus:ring-emerald-100')}
+          aria-invalid={!!error || undefined}
+          aria-describedby="pay-ref-help"
+        />
+        <p id="pay-ref-help" className="mt-1.5 text-xs" aria-live="polite">
+          {refCheck.state === 'ok' ? (
+            <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+              <Check className="h-3.5 w-3.5" strokeWidth={3} /> {SHAPE_LABEL[refCheck.shape]}
+            </span>
+          ) : refCheck.state === 'hint' && refTouched ? (
+            <span className="font-medium text-amber-800">{refCheck.message}</span>
+          ) : (
+            <span className="text-zinc-500">
+              GCash: 13 numbers · GoTyme: starts with GT{booking?.paymentMethod === 'maribank' && ' · MariBank: as on your receipt'}
+            </span>
+          )}
+        </p>
+        <details className="mt-2 text-xs text-zinc-600">
+          <summary className="cursor-pointer font-semibold text-zinc-700">Where do I find it?</summary>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5">
+            <li><strong>GCash:</strong> open Transactions, tap your payment, then copy the Ref No. (13 numbers, like 1092 837 461928).</li>
+            <li><strong>GoTyme:</strong> the reference number is at the bottom of your receipt (it starts with GT).</li>
+            <li><strong>MariBank:</strong> open the transfer in your transaction history and copy its reference number.</li>
+            <li>Paid from another bank or wallet? Use the reference number on that app's receipt.</li>
+          </ul>
+        </details>
+      </div>
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Name of the sender (the account you paid from)</span>
+        <input
+          value={payerName}
+          onChange={(e) => setPayerName(e.target.value)}
+          autoComplete="name"
+          maxLength={80}
+          required
+          className="w-full rounded-2xl border border-zinc-200 px-4 py-3 text-base focus:border-[#15803D] focus:outline-none focus:ring-4 focus:ring-emerald-100"
+        />
+        <span className="mt-1 block text-xs text-zinc-500">The name on your {account?.label ?? 'GCash'} account, so the host can find your payment.</span>
+      </label>
+      <InlineError>{error}</InlineError>
+      {refTrouble && <ReferenceHelp code={code} locked={refTrouble === 'locked'} />}
+      <PrimaryButton type="submit" className="w-full" loading={busy} disabled={refCheck.state !== 'ok' || payerName.trim().length < 2 || refTrouble === 'locked'}>
+        Submit payment details
+      </PrimaryButton>
+      {offerReceipt && config?.proofMode === 'receipt' && (
+        <button
+          type="button"
+          onClick={() => { setMode('receipt'); setError(null); }}
+          className="mx-auto flex items-center gap-1.5 text-sm font-semibold text-[#15803D] cursor-pointer"
+        >
+          <ImagePlus className="h-4 w-4" /> Upload a receipt instead (faster)
+        </button>
+      )}
+    </form>
+  );
+
   return (
     <div className="fixed inset-0 z-[70] flex items-stretch justify-center bg-zinc-950/60 backdrop-blur-sm sm:items-center sm:p-4" role="alertdialog" aria-modal="true" aria-labelledby="pay-title">
       <motion.div
@@ -268,19 +376,51 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
               )}
             </div>
           ) : timeUp ? (
-            <div className="space-y-4 py-8 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100">
-                <AlertTriangle className="h-6 w-6 text-zinc-500" />
+            paidLateMsg ? (
+              <div className="space-y-4 py-8 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100">
+                  <ReceiptText className="h-6 w-6 text-amber-700" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-zinc-950">We received your payment</h3>
+                  <p className="mt-1 text-sm text-zinc-600">{paidLateMsg}</p>
+                </div>
+                <PrimaryButton className="w-full" onClick={() => onClosed(booking, 'paid_late')}>See my booking</PrimaryButton>
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-zinc-950">Time's up</h3>
-                <p className="mt-1 text-sm text-zinc-600">
-                  The {holdMinutes}-minute window ended, so the slot was released. If you already sent money, contact the host
-                  with your receipt.
-                </p>
+            ) : lateEntry && canPayLate ? (
+              <div className="space-y-4 py-2">
+                <div>
+                  <h3 className="text-lg font-bold text-zinc-950">Already paid?</h3>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    Enter the reference from your receipt. If your slot is still free, it's yours again. If someone booked it meanwhile, we keep
+                    your payment and the host contacts you.
+                  </p>
+                </div>
+                {referenceForm(false)}
+                <SecondaryButton className="w-full" onClick={() => setLateEntry(false)} disabled={busy}>Back</SecondaryButton>
               </div>
-              <PrimaryButton className="w-full" onClick={() => onClosed(booking, 'expired')}>Book again</PrimaryButton>
-            </div>
+            ) : (
+              <div className="space-y-4 py-8 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100">
+                  <AlertTriangle className="h-6 w-6 text-zinc-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-zinc-950">Time's up</h3>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    The {holdMinutes}-minute window ended, so the slot was released.{' '}
+                    {canPayLate
+                      ? 'Already sent the money? Enter your reference: if the slot is still free, it is yours.'
+                      : 'If you already sent money, contact the host with your receipt.'}
+                  </p>
+                </div>
+                {canPayLate && (
+                  <SecondaryButton className="w-full" onClick={() => { setLateEntry(true); setError(null); }}>
+                    <ReceiptText className="h-4 w-4" /> Already paid? Enter your reference
+                  </SecondaryButton>
+                )}
+                <PrimaryButton className="w-full" onClick={() => onClosed(booking, 'expired')}>Book again</PrimaryButton>
+              </div>
+            )
           ) : (
             <div className="space-y-6">
               {/* Step 1: send money */}
@@ -399,7 +539,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                       </h4>
                     </div>
                     <p className="mt-1.5 text-xs text-amber-950/90 font-medium leading-relaxed">
-                      Be on court within <strong>{lateMinutes} minutes</strong> of your start time. After that the booking is marked <strong>Late</strong>, the court is released to other players, and it is non-refundable.
+                      Be on court within <strong>{lateMinutes} minutes</strong> of your start time. After that the booking is marked <strong>Late</strong>, the host may give the court to other players, and it is non-refundable.
                     </p>
 
                     <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] font-medium text-amber-900">
@@ -508,93 +648,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                     </button>
                   </div>
                 ) : (
-                  <form onSubmit={submitReference} className="space-y-4 rounded-3xl border border-zinc-200 bg-white p-4">
-                    <div>
-                      <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <label htmlFor="pay-ref" className="text-sm font-semibold text-zinc-800">Reference number (from your receipt)</label>
-                        {canPaste && (
-                          <button type="button" onClick={pasteReference} className="flex min-h-9 items-center gap-1 rounded-full px-2.5 text-xs font-semibold text-[#15803D] hover:bg-emerald-50 cursor-pointer">
-                            <ClipboardPaste className="h-3.5 w-3.5" /> Paste
-                          </button>
-                        )}
-                      </div>
-                      <input
-                        id="pay-ref"
-                        ref={refInput}
-                        value={ref}
-                        onChange={(e) => {
-                          const el = e.target;
-                          // A GCash number is spaced as it is typed (4-3-6, like the receipt), but only when typing at the end so the cursor never jumps.
-                          setRef(el.selectionStart === el.value.length ? formatReference(el.value) : el.value);
-                          setRefUsed(false);
-                          setError(null);
-                          if (!el.value) setRefTouched(false);
-                        }}
-                        onBlur={() => {
-                          if (ref) setRefTouched(true);
-                        }}
-                        inputMode="text"
-                        autoCapitalize="characters"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        autoComplete="off"
-                        placeholder="Paste or type it from your receipt"
-                        maxLength={40}
-                        required
-                        className={cx('w-full rounded-2xl border px-4 py-3 font-mono text-base tracking-wide focus:outline-none focus:ring-4', error ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100' : 'border-zinc-200 focus:border-[#15803D] focus:ring-emerald-100')}
-                        aria-invalid={!!error || undefined}
-                        aria-describedby="pay-ref-help"
-                      />
-                      <p id="pay-ref-help" className="mt-1.5 text-xs" aria-live="polite">
-                        {refCheck.state === 'ok' ? (
-                          <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
-                            <Check className="h-3.5 w-3.5" strokeWidth={3} /> {SHAPE_LABEL[refCheck.shape]}
-                          </span>
-                        ) : refCheck.state === 'hint' && refTouched ? (
-                          <span className="font-medium text-amber-800">{refCheck.message}</span>
-                        ) : (
-                          <span className="text-zinc-500">
-                            GCash: 13 numbers · GoTyme: starts with GT{booking.paymentMethod === 'maribank' && ' · MariBank: as on your receipt'}
-                          </span>
-                        )}
-                      </p>
-                      <details className="mt-2 text-xs text-zinc-600">
-                        <summary className="cursor-pointer font-semibold text-zinc-700">Where do I find it?</summary>
-                        <ul className="mt-1.5 list-disc space-y-1 pl-5">
-                          <li><strong>GCash:</strong> open Transactions, tap your payment, then copy the Ref No. (13 numbers, like 1092 837 461928).</li>
-                          <li><strong>GoTyme:</strong> the reference number is at the bottom of your receipt (it starts with GT).</li>
-                          <li><strong>MariBank:</strong> open the transfer in your transaction history and copy its reference number.</li>
-                          <li>Paid from another bank or wallet? Use the reference number on that app's receipt.</li>
-                        </ul>
-                      </details>
-                    </div>
-                    <label className="block">
-                      <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Name of the sender (the account you paid from)</span>
-                      <input
-                        value={payerName}
-                        onChange={(e) => setPayerName(e.target.value)}
-                        autoComplete="name"
-                        maxLength={80}
-                        required
-                        className="w-full rounded-2xl border border-zinc-200 px-4 py-3 text-base focus:border-[#15803D] focus:outline-none focus:ring-4 focus:ring-emerald-100"
-                      />
-                      <span className="mt-1 block text-xs text-zinc-500">The name on your {account?.label ?? 'GCash'} account, so the host can find your payment.</span>
-                    </label>
-                    <InlineError>{error}</InlineError>
-                    {refTrouble && <ReferenceHelp code={code} locked={refTrouble === 'locked'} />}
-                    <PrimaryButton type="submit" className="w-full" loading={busy} disabled={refCheck.state !== 'ok' || payerName.trim().length < 2 || refTrouble === 'locked'}>
-                      Submit payment details
-                    </PrimaryButton>
-                    {config?.proofMode === 'receipt' && (
-                      <button
-                        type="button"
-                        onClick={() => { setMode('receipt'); setError(null); }}
-                        className="mx-auto flex items-center gap-1.5 text-sm font-semibold text-[#15803D] cursor-pointer"
-                      >
-                        <ImagePlus className="h-4 w-4" /> Upload a receipt instead (faster)
-                      </button>
-                    )}
-                  </form>
+                  referenceForm(true)
                 )}
               </section>
 

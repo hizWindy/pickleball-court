@@ -6,12 +6,14 @@ import { firstName } from './format';
 import { Btn, Dialog } from './ui';
 import type { AdminBooking } from './types';
 
-/** What a screen needs to put a booking back or mark it arrived, with one shared "busy" and one error dialog. */
+/** What a screen needs to put a booking back, mark it arrived or release its court, with one shared "busy" and one error dialog. */
 export interface QuickApi {
-  /** `restore:CODE` or `arrived:CODE` while a request is in flight. */
+  /** `restore:CODE`, `arrived:CODE` or `release:CODE` while a request is in flight. */
   busy: string | null;
   restore: (b: Pick<AdminBooking, 'code' | 'customerName' | 'courtName' | 'label'>) => void;
-  arrived: (b: Pick<AdminBooking, 'code' | 'customerName'>) => void;
+  arrived: (b: Pick<AdminBooking, 'code' | 'customerName' | 'label'>) => void;
+  /** Release court (a Late group) or Open these hours (a rain delay). */
+  release: (b: Pick<AdminBooking, 'code' | 'customerName' | 'courtName' | 'label'>) => void;
 }
 
 interface Problem {
@@ -26,7 +28,9 @@ const PROBLEM_TITLE: Record<string, string> = {
   slot_taken: 'Someone booked those hours',
   restore_window_closed: 'Too late to restore',
   use_restore: 'Already released',
+  use_arrived: 'The court is still theirs',
   not_restorable: "Can't be restored",
+  cannot_release: "Can't be released",
 };
 
 export function useQuickActions(): { q: QuickApi; problemDialog: React.ReactNode } {
@@ -65,7 +69,20 @@ export function useQuickActions(): { q: QuickApi; problemDialog: React.ReactNode
         () => adminApi.restore(b.code),
         b.label === 'rain_delay' ? `Rain delay undone. ${firstName(b.customerName)} is back on ${b.courtName}.` : `${firstName(b.customerName)} is back on ${b.courtName}.`
       ),
-    arrived: (b) => run(`arrived:${b.code}`, b.code, () => adminApi.arrived(b.code), `${firstName(b.customerName)}'s group is marked as here. It won't go Late.`),
+    arrived: (b) =>
+      run(
+        `arrived:${b.code}`,
+        b.code,
+        () => adminApi.arrived(b.code),
+        b.label === 'late' ? `${firstName(b.customerName)}'s group is here. No longer Late.` : `${firstName(b.customerName)}'s group is marked as here. It won't go Late.`
+      ),
+    release: (b) =>
+      run(
+        `release:${b.code}`,
+        b.code,
+        () => adminApi.release(b.code),
+        b.label === 'rain_delay' ? `${b.courtName}'s hours are open to others until ${firstName(b.customerName)} picks a new time.` : `${b.courtName} is open to others now.`
+      ),
   };
 
   const problemDialog = problem && (

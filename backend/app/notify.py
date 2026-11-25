@@ -1,8 +1,9 @@
 """Optional Telegram alerts for the host. Off unless TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are set.
 
-Two things are worth a ping on a phone that isn't looking at the desk:
+Three things are worth a ping on a phone that isn't looking at the desk:
 
-* a booking just went Late (the host's quiet restore window is only a few minutes), and
+* a booking just went Late (its court is held until the host decides: here after all, or release the court),
+* a payment came in after its hold ran out while someone else had the slot (move it or refund it), and
 * rain is forecast during paid bookings (time to think about a rain delay).
 
 Each alert is sent once: `notices_sent` remembers which ones went out. The network call happens outside any
@@ -58,15 +59,16 @@ def _hour(dt: datetime) -> str:
 
 
 def check_late(conn: sqlite3.Connection, now: datetime | None = None) -> int:
-    """Tell the host about bookings that just went Late and can still be restored."""
+    """Tell the host about bookings that just went Late: the court is still theirs until the host decides."""
     if not enabled():
         return 0
     now = now or clock.now()
-    since = to_iso(now - timedelta(minutes=settings.restore_window_minutes))
+    since = to_iso(now - timedelta(hours=1))  # a ping about something long past would only confuse
     rows = conn.execute(
         """SELECT b.code, b.customer_name, b.customer_phone, b.start_at, b.late_at, c.name AS court
            FROM bookings b JOIN courts c ON c.id = b.court_id
-           WHERE b.status = 'confirmed' AND b.source != 'blocked' AND b.weather_hold_at IS NULL AND b.late_at >= ?""",
+           WHERE b.status = 'confirmed' AND b.source != 'blocked' AND b.weather_hold_at IS NULL AND b.released_at IS NULL
+             AND b.late_at >= ?""",
         (since,),
     ).fetchall()
     sent = 0
@@ -75,9 +77,41 @@ def check_late(conn: sqlite3.Connection, now: datetime | None = None) -> int:
         if not _unsent(conn, key):
             continue
         text = (
-            f"⏰ {r['customer_name']} is late for {r['court']} at {_hour(from_iso(r['start_at']))}. "
-            f"The court was released. Open the desk to restore it if they turn up"
-            + (f", or call {r['customer_phone']}." if r["customer_phone"] else ".")
+            f"⏰ {r['customer_name']} isn't marked here for {r['court']} at {_hour(from_iso(r['start_at']))} "
+            f"({settings.late_after_minutes} min after the start). The court is still theirs. Open the desk: tap Arrived if "
+            f"they're playing, or Release court to open it to others"
+            + (f". Their number: {r['customer_phone']}." if r["customer_phone"] else ".")
+        )
+        if send(text):
+            _mark(conn, key, now)
+            sent += 1
+    return sent
+
+
+def check_paid_late(conn: sqlite3.Connection, now: datetime | None = None) -> int:
+    """Tell the host about a payment that came in after its hold ran out, while someone else had the slot."""
+    if not enabled():
+        return 0
+    now = now or clock.now()
+    rows = conn.execute(
+        """SELECT b.code, b.customer_name, b.customer_phone, b.start_at, b.total, b.reference_number, b.payer_name,
+                  b.payment_method, c.name AS court
+           FROM bookings b JOIN courts c ON c.id = b.court_id
+           WHERE b.status = 'expired' AND b.paid_late_at IS NOT NULL AND b.paid_late_at >= ?""",
+        (to_iso(now - timedelta(days=1)),),
+    ).fetchall()
+    sent = 0
+    for r in rows:
+        key = f"paid_late:{r['code']}"
+        if not _unsent(conn, key):
+            continue
+        start = from_iso(r["start_at"]).astimezone(MANILA)
+        text = (
+            f"💸 {r['customer_name']} paid ₱{r['total']:,} after their time ran out, and someone else had booked "
+            f"{r['court']} on {start.strftime('%a %b %d').replace(' 0', ' ')} at {_hour(start)}. "
+            f"Ref {r['reference_number'] or '-'}, sent by {r['payer_name'] or '-'}. "
+            f"Open the desk ({r['code']}) to move it to a free time or refund it"
+            + (f". Their number: {r['customer_phone']}." if r["customer_phone"] else ".")
         )
         if send(text):
             _mark(conn, key, now)
