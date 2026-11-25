@@ -65,7 +65,11 @@ SORTS = {
     "start_desc": "start_at DESC",
     "start_asc": "start_at ASC",
     "created_desc": "created_at DESC",
+    "upcoming_first": None,  # see `_order_sql`: it depends on the time now
 }
+# The labels the list can be filtered by, each with its own count. Together with the statuses that aren't confirmed
+# (held, rejected, expired, cancelled) they add up to "All".
+LABELS = ("paid", "late", "done", "rain_delay", "blocked")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -89,7 +93,21 @@ def _label_sql(label: str, now: datetime) -> tuple[str, list[object]]:
         return f"({_PLAYED} AND late_at IS NULL AND weather_hold_at IS NULL AND {_END_SQL} <= ?)", [to_iso(now)]
     if label == "paid":
         return f"({_PLAYED} AND late_at IS NULL AND weather_hold_at IS NULL AND {_END_SQL} > ?)", [to_iso(now)]
+    if label == "blocked":
+        return "(status = 'confirmed' AND source = 'blocked')", []
     raise BookingError("bad_label", "Unknown label filter.")
+
+
+def _order_sql(sort: str, now: datetime) -> tuple[str, list[object]]:
+    """ORDER BY for a list sort (and its arguments). `upcoming_first`: what is still to be played (or under way) comes
+    first, soonest at the top; then what has ended, latest first."""
+    if sort == "upcoming_first":
+        n = to_iso(now)
+        return (
+            f"CASE WHEN {_END_SQL} > ? THEN 0 ELSE 1 END, CASE WHEN {_END_SQL} > ? THEN start_at END ASC, start_at DESC",
+            [n, n],
+        )
+    return SORTS.get(sort) or SORTS["start_desc"], []
 
 
 def label_of(row: sqlite3.Row, now: datetime) -> str:
@@ -325,9 +343,12 @@ def list_bookings(
     to_review = conn.execute(f"SELECT COUNT(*) FROM bookings{base_sql}{joiner} {REVIEW_SQL}", args).fetchone()[0]
     flagged = conn.execute(f"SELECT COUNT(*) FROM bookings{base_sql}{joiner} {FLAGGED_SQL}", args).fetchone()[0]
     by_label = {}
-    for name in ("paid", "late", "done", "rain_delay"):
+    for name in LABELS:
         clause, clause_args = _label_sql(name, now)
         by_label[name] = conn.execute(f"SELECT COUNT(*) FROM bookings{base_sql}{joiner} {clause}", [*args, *clause_args]).fetchone()[0]
+    # "All" leaves out unpaid holds that ran out: they are clutter, and they have their own filter. A search looks at
+    # everything, so a code or a name always turns up.
+    all_hides_expired = not settings.all_includes_expired and not (q and q.strip())
 
     filtered_sql, filtered_args = base_sql, list(args)
     if status and status != "all":
@@ -343,22 +364,26 @@ def list_bookings(
         if review not in ("unchecked", "flagged"):
             raise BookingError("bad_review", "Unknown review filter.")
         filtered_sql += (" AND " if filtered_sql else " WHERE ") + (REVIEW_SQL if review == "unchecked" else FLAGGED_SQL)
+    if all_hides_expired and not (status and status != "all") and not label and not review:
+        filtered_sql += (" AND" if filtered_sql else " WHERE") + " status != 'expired'"
 
-    order = SORTS.get(sort, SORTS["start_desc"])
+    order, order_args = _order_sql(sort, now)
     page_size = max(1, min(page_size, PAGE_SIZE_MAX))
     page = max(1, page)
     total = conn.execute(f"SELECT COUNT(*) FROM bookings{filtered_sql}", filtered_args).fetchone()[0]
     rows = conn.execute(
+        # `id` last: rows that tie keep one fixed order, so pages never repeat or skip a booking.
         f"SELECT * FROM bookings{filtered_sql} ORDER BY {order}, id LIMIT ? OFFSET ?",
-        [*filtered_args, page_size, (page - 1) * page_size],
+        [*filtered_args, *order_args, page_size, (page - 1) * page_size],
     ).fetchall()
     courts = _court_names(conn)
+    everything = sum(counts.values()) - (counts["expired"] if all_hides_expired else 0)
     return AdminBookingList(
         items=[to_admin(r, courts, now) for r in rows],
         total=total,
         page=page,
         page_size=page_size,
-        counts=StatusCounts(all=sum(counts.values()), to_review=to_review, flagged=flagged, **by_label, **counts),
+        counts=StatusCounts(all=everything, to_review=to_review, flagged=flagged, **by_label, **counts),
     )
 
 
@@ -710,6 +735,13 @@ def delete(conn: sqlite3.Connection, code: str) -> None:
     with write_transaction(conn):
         row = _row(conn, code)
         summary = f"{row['customer_name']} · {play_date_of(from_iso(row['start_at']))} · ₱{row['total']} · was {row['status']}"
+        # The record goes, but its payment stays spent: it can never pay for another booking.
+        for kind, value in (("reference", row["reference_number"]), ("receipt", row["receipt_sha256"])):
+            if value:
+                conn.execute(
+                    "INSERT OR IGNORE INTO spent_payments (kind, value, booking_code, deleted_at) VALUES (?, ?, ?, ?)",
+                    (kind, value, row["code"], to_iso(now)),
+                )
         conn.execute("DELETE FROM bookings WHERE id = ?", (row["id"],))  # slots and access tokens cascade
         if row["status"] != "held":  # an unpaid hold leaves no trace
             _event(conn, row["code"], "deleted", summary, now)
@@ -787,8 +819,9 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
         seconds = (now - from_iso(r["start_at"])).total_seconds()
         elapsed_hours += min(r["hours"], max(0, -int(-seconds // 3600)))  # hours that have started
 
-    window_start = slot_start(start_date, 6)
-    window_end = min(now, slot_start(today + timedelta(days=1), 6))
+    # Court-hours on offer so far in the range: the play days run from 5 AM, like the bookings counted above.
+    window_start = slot_start(start_date, DAY_START_HOUR)
+    window_end = min(now, slot_start(today + timedelta(days=1), DAY_START_HOUR))
     capacity = max(0, int((window_end - window_start).total_seconds() // 3600)) * len(courts)
 
     # Outcome of online bookings created in this window (walk-ins have no payment step to measure).

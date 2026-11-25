@@ -58,6 +58,18 @@ log = logging.getLogger("housepickle")
 ACTIVE_STATUSES = ("held", "pending_verification", "confirmed")
 _CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTVWXYZ"  # no 0/O, 1/I/L, U
 
+# Which bookings own their court-hours right now: an unpaid hold that is still running and a paid booking, unless it
+# went Late or was rain-delayed (those gave their hours back). `booking_slots` must hold exactly these bookings' hours;
+# the scripted-day test and the load test check that from the bookings themselves. Keep the two versions in step.
+HOLDS_COURT_SQL = (
+    "(status IN ('held', 'pending_verification', 'confirmed') AND late_at IS NULL AND weather_hold_at IS NULL)"
+)
+
+
+def holds_court(row: sqlite3.Row | dict) -> bool:
+    """`HOLDS_COURT_SQL` for one booking row."""
+    return row["status"] in ACTIVE_STATUSES and not row["late_at"] and not row["weather_hold_at"]
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _hash_token(token: str) -> str:
@@ -463,6 +475,19 @@ def _confirm_with_proof(conn: sqlite3.Connection, booking_id: str, now: datetime
     )
 
 
+def payment_used(conn: sqlite3.Connection, *, reference: str | None = None, receipt_sha256: str | None = None, exclude_id: str | None = None) -> str | None:
+    """The booking code a payment already backs (or backed, if that booking was deleted), else None.
+    One payment, one booking, ever: even a rejected, voided or deleted booking keeps its payment."""
+    for column, kind, value in (("reference_number", "reference", reference), ("receipt_sha256", "receipt", receipt_sha256)):
+        if not value:
+            continue
+        row = conn.execute(f"SELECT code FROM bookings WHERE {column} = ? AND id IS NOT ?", (value, exclude_id)).fetchone()
+        row = row or conn.execute("SELECT booking_code AS code FROM spent_payments WHERE kind = ? AND value = ?", (kind, value)).fetchone()
+        if row:
+            return row["code"]
+    return None
+
+
 def _last4(value: str) -> str | None:
     digits = "".join(c for c in value or "" if c.isdigit())
     return digits[-4:] if len(digits) >= 4 else None
@@ -502,12 +527,12 @@ def submit_receipt(
     try:
         with write_transaction(conn):
             row = _held_for_proof(conn, code, token, now)
-            if conn.execute("SELECT 1 FROM bookings WHERE receipt_sha256 = ?", (digest,)).fetchone():
+            if payment_used(conn, receipt_sha256=digest):
                 raise Conflict(
                     "receipt_used", "This receipt was already used for another booking. Upload the receipt for this payment."
                 )
             ref = reading.reference if reading else None
-            if ref and conn.execute("SELECT 1 FROM bookings WHERE reference_number = ? AND id != ?", (ref, row["id"])).fetchone():
+            if ref and payment_used(conn, reference=ref, exclude_id=row["id"]):
                 raise Conflict(
                     "payment_used",
                     "This payment was already used for another booking. Upload the receipt for this booking's payment.",
@@ -598,10 +623,11 @@ def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, dat
             raise BookingError("reference_invalid", str(exc)) from None
         # No time is asked for: the payment fell between the booking and this moment (the host sees that window).
         paid_at = _resolve_paid_time(data.paid_time, from_iso(row["created_at"]), now) if data.paid_time else None
-        # One payment, one booking: a reference number is never reused, even by a booking that was later rejected or voided.
-        taken = conn.execute("SELECT code FROM bookings WHERE reference_number = ?", (ref,)).fetchone()
+        # One payment, one booking: a reference number is never reused, even by a booking that was later rejected, voided
+        # or deleted.
+        taken = payment_used(conn, reference=ref)
         if taken:
-            raise _refuse_reference(strike_key, row["code"], ref, f"already on {taken['code']}")
+            raise _refuse_reference(strike_key, row["code"], ref, f"already on {taken}")
         # In reference mode every booking is typed in, so a note on each one would only be noise for the host.
         flags = receipt_reader.typed_flags() if settings.proof_mode == "receipt" else []
         try:

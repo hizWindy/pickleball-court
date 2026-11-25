@@ -15,9 +15,9 @@ import {
 import { motion, useScroll, useTransform } from 'motion/react';
 import { COURT_DETAILS, COURTS, SLOTS_BY_PERIOD } from '../data/mockData';
 import type { BookingDraftSeed, Court, SlotState, TimePeriod, TimeSlot } from '../types';
-import { useAvailability, useConfig } from '../hooks/useBookingData';
-import { serverNowMs } from '../lib/api';
-import { addDays, currentPlayDate, fmtDate } from '../lib/time';
+import { useAvailability } from '../hooks/useBookingData';
+import { useToday } from '../hooks/useToday';
+import { addDays, fmtDate } from '../lib/time';
 
 interface HeroProps {
   onOpenDirectBooking: (seed?: BookingDraftSeed) => void;
@@ -35,8 +35,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenDirectBooking, onCheckBooking 
   const player2ScrollY = useTransform(scrollYProgress, [0, 1], [0, -70]);
   const scrollIndicatorOpacity = useTransform(scrollYProgress, [0, 0.25], [1, 0]);
 
-  const { config } = useConfig();
-  const today = config?.today ?? currentPlayDate(serverNowMs());
+  const today = useToday();
   const [pickedDate, setPickedDate] = useState<string | null>(null);
   const [selectedCourt, setSelectedCourt] = useState<Court>(COURTS[0]);
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);

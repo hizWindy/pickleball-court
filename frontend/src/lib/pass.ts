@@ -1,6 +1,7 @@
 import QRCode from 'qrcode';
 import type { Booking, BookingStatus } from '../types';
 import { COURT_DETAILS } from '../data/mockData';
+import { paymentLabel } from './payment';
 import { downloadBlob } from './saveImage';
 import { fmtReference, fmtSchedule, peso } from './time';
 
@@ -172,7 +173,7 @@ export async function renderPassPng(booking: Booking): Promise<Blob> {
     ['COURT', booking.courtName],
     ['DATE', sched.note ? `${sched.day} (${sched.note})` : sched.day],
     ['TIME', `${sched.time}  ·  ${booking.hours} hr${booking.hours > 1 ? 's' : ''}`],
-    ['TOTAL', `${peso(booking.total)} via ${booking.paymentMethod === 'gcash' ? 'GCash' : 'GoTyme'}${booking.paddles ? '  ·  incl. paddles' : ''}`],
+    ['TOTAL', `${peso(booking.total)} via ${paymentLabel(booking.paymentMethod)}${booking.paddles ? '  ·  incl. paddles' : ''}`],
   ];
   let y = 760;
   for (const [label, value] of rows) {

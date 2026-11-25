@@ -91,6 +91,18 @@ def test_a_rejected_bookings_reference_stays_used(admin, booking_payload):
     assert res.status_code == 400 and res.json()["error"]["code"] == "reference_rejected"
 
 
+def test_a_deleted_bookings_reference_stays_used(admin, booking_payload):
+    # Found by the scripted-day simulation: deleting a record used to free its reference for another booking.
+    first, h1 = _book(admin, booking_payload)
+    admin.post(f"/api/bookings/{first}/reference", headers=h1, json={"referenceNumber": REF, "payerName": "Juan"})
+    assert admin.delete(f"/api/admin/bookings/{first}").status_code == 204
+
+    second, h2 = _book(admin, booking_payload, hour=20)
+    res = admin.post(f"/api/bookings/{second}/reference", headers=h2, json={"referenceNumber": REF, "payerName": "Maria"})
+    assert res.status_code == 400 and res.json()["error"] == {"code": "reference_rejected", "message": REFERENCE_REJECTED}
+    assert admin.get(f"/api/bookings/{second}", headers=h2).json()["status"] == "held"
+
+
 def test_the_database_itself_refuses_a_second_booking_with_the_same_reference(admin, booking_payload):
     import sqlite3
 

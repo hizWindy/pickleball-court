@@ -298,6 +298,10 @@ def test_delete_removes_the_booking_its_slots_and_its_receipt(admin, booking_pay
     assert slot_state(admin, "2026-10-10", 19) == "available"
     assert conn.execute("SELECT action FROM admin_events WHERE booking_code = ?", (code,)).fetchone()[0] == "deleted"
     conn.close()
+    # The record is gone, but that payment is still spent: the same receipt can't pay for another booking.
+    again, headers = public_booking(admin, booking_payload, hour=20)
+    res = admin.post(f"/api/bookings/{again}/receipt", headers=headers, files={"receipt": ("r.png", PNG)})
+    assert res.status_code == 409 and res.json()["error"]["code"] == "receipt_used"
 
 
 def test_unknown_booking_is_404(admin):
@@ -316,7 +320,7 @@ def test_list_filters_search_and_counts(admin, booking_payload):
     assert everything["total"] == 3
     assert everything["counts"] == {
         "all": 3, "held": 1, "pendingVerification": 0, "confirmed": 2, "rejected": 0, "expired": 0, "cancelled": 0,
-        "toReview": 0, "flagged": 0, "paid": 2, "late": 0, "done": 0, "rainDelay": 0,
+        "toReview": 0, "flagged": 0, "paid": 2, "late": 0, "done": 0, "rainDelay": 0, "blocked": 0,
     }
     assert admin.get("/api/admin/bookings", params={"review": "unchecked"}).json()["total"] == 0  # paid is just Paid
 

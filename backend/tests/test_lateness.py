@@ -84,7 +84,7 @@ def test_each_filter_count_matches_what_it_lists_for_the_same_dates(admin, booki
         counts = listing(**dates)["counts"]
         assert {k: counts[k] for k in expected} == expected
         assert listing(**dates)["total"] == counts["all"]
-        for label in ("paid", "late", "done", "rain_delay"):
+        for label in ("paid", "late", "done", "rain_delay", "blocked"):
             assert listing(label=label, **dates)["total"] == counts["rainDelay" if label == "rain_delay" else label], (dates, label)
     assert [b["code"] for b in listing(label="late")["items"]] == [late]
 

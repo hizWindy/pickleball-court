@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Ban, CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { serverNowMs } from '../lib/api';
-import { addDays, currentPlayDate, fmtDate, hourLabel } from '../lib/time';
+import { useToday } from '../hooks/useToday';
+import { addDays, fmtDate, hourLabel } from '../lib/time';
 import { adminApi } from './api';
 import { useDesk } from './desk';
 import { arrivable, hourSpan, isNight, PLAY_HOURS } from './format';
 import { useNow, useRemote } from './hooks';
 import { ArrivedIconBtn, RestoreIconBtn } from './QuickActions';
+import { courtHoursBooked, DAY_ROWS, nowOffset, schedulePosition } from './scheduleLayout';
 import { Btn, cx } from './ui';
 import { useQuickActions } from './useQuickActions';
 import type { AdminBooking } from './types';
@@ -36,16 +37,21 @@ export const SchedulePage: React.FC = () => {
   const desk = useDesk();
   const now = useNow(30000); // re-render every 30 s so the "now" line moves
   const { q, problemDialog } = useQuickActions();
-  const realToday = desk.config?.today ?? currentPlayDate(serverNowMs());
+  const realToday = useToday();
   const [date, setDate] = useState(realToday);
+  // The play day changed while the desk was open (5 AM came): if the host was looking at today, keep showing today.
+  const [seenToday, setSeenToday] = useState(realToday);
+  if (seenToday !== realToday) {
+    setSeenToday(realToday);
+    if (date === seenToday) setDate(realToday);
+  }
   const { data, error } = useRemote(`schedule-${date}`, () => adminApi.schedule(date), { intervalMs: 60000, version: desk.refreshKey });
   const courts = desk.config?.courts ?? [];
   const nowMarker = useRef<HTMLDivElement>(null);
   const scrolledFor = useRef<string | null>(null);
 
-  const dayStart = Date.parse(`${date}T06:00:00+08:00`);
-  const nowIdx = (serverNowMs() - dayStart) / 3_600_000;
-  const showNow = date === realToday && nowIdx >= 0 && nowIdx < 24;
+  const nowRow = nowOffset(now, date);
+  const showNow = nowRow !== null;
 
   useEffect(() => {
     if (!data || scrolledFor.current === date) return;
@@ -54,21 +60,13 @@ export const SchedulePage: React.FC = () => {
   }, [data, date, showNow]);
 
   const blocks = (courtId: string) =>
-    (data?.bookings ?? [])
-      .filter((b) => b.courtId === courtId)
-      .map((b) => {
-        const a = Math.max(0, (Date.parse(b.startAt) - dayStart) / 3_600_000);
-        const z = Math.min(24, (Date.parse(b.endAt) - dayStart) / 3_600_000);
-        return { b, a, z };
-      })
-      .filter(({ a, z }) => z > a);
+    (data?.bookings ?? []).flatMap((b) => {
+      if (b.courtId !== courtId) return [];
+      const span = schedulePosition(b.startAt, b.endAt, date);
+      return span ? [{ b, a: span.top, z: span.bottom }] : [];
+    });
 
-  const bookedHours = (data?.bookings ?? []).reduce((sum, b) => {
-    if (b.source === 'blocked' || releasedHours(b)) return sum;
-    const a = Math.max(0, (Date.parse(b.startAt) - dayStart) / 3_600_000);
-    const z = Math.min(24, (Date.parse(b.endAt) - dayStart) / 3_600_000);
-    return sum + Math.max(0, z - a);
-  }, 0);
+  const bookedHours = courtHoursBooked(data?.bookings ?? [], date, (b) => b.source !== 'blocked' && !releasedHours(b));
   const isToday = date === realToday;
 
   return (
@@ -76,7 +74,7 @@ export const SchedulePage: React.FC = () => {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">Schedule</h1>
-          <p className="mt-0.5 text-sm text-zinc-500">{data ? `${bookedHours} of ${24 * courts.length} court-hours booked` : ' '}</p>
+          <p className="mt-0.5 text-sm text-zinc-500">{data ? `${bookedHours} of ${DAY_ROWS * courts.length} court-hours booked` : ' '}</p>
         </div>
         <div className="hidden sm:block">
           <Btn variant="primary" onClick={() => desk.addBooking({ date })}>
@@ -124,7 +122,7 @@ export const SchedulePage: React.FC = () => {
           ))}
         </div>
 
-        <div className="relative" style={{ height: ROW * 24 }}>
+        <div className="relative" style={{ height: ROW * DAY_ROWS }}>
           {/* Hour rows: tap an empty one to book it */}
           {PLAY_HOURS.map((h, i) => (
             <div key={h} className="absolute inset-x-0 grid" style={{ top: i * ROW, height: ROW, gridTemplateColumns: `3.5rem repeat(${courts.length || 2}, minmax(0, 1fr))` }}>
@@ -226,8 +224,8 @@ export const SchedulePage: React.FC = () => {
             ))}
           </div>
 
-          {showNow && (
-            <div ref={nowMarker} className="pointer-events-none absolute inset-x-0 z-10" style={{ top: nowIdx * ROW }}>
+          {nowRow !== null && (
+            <div ref={nowMarker} className="pointer-events-none absolute inset-x-0 z-10" style={{ top: nowRow * ROW }}>
               <div className="relative h-0.5 bg-[#15803D]">
                 <span className="absolute -top-2.5 left-1 rounded-full bg-[#15803D] px-1.5 py-0.5 font-sport text-[9px] font-extrabold uppercase tracking-wider text-white">Now</span>
               </div>

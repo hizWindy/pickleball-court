@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Ban, Check, CheckCircle2, CloudRain, ImageOff, Info, Maximize2, Pencil, Phone, RotateCcw, ScanText, Trash2, X } from 'lucide-react';
 import { CopyButton } from '../components/booking/ui';
 import { errorMessage } from '../lib/api';
-import { fmtDate, fmtReference, fmtTime, peso } from '../lib/time';
+import { fmtDate, fmtReference, fmtTime, isAfterMidnight, peso } from '../lib/time';
 import { adminApi } from './api';
 import { useDesk } from './desk';
 import { arrivable, clock, manilaHour, METHOD_LABEL, PROVIDER_LABEL, restoreLeft, stamp, hourSpan, telHref } from './format';
@@ -207,7 +207,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
                   {hourSpan(b.hour, b.hours)} <span className="font-medium text-zinc-500">· {b.hours} h</span>
                 </Row>
                 <Row label="Court">{b.courtName}</Row>
-                {b.hour < 6 && <Row label="Note"><span className="font-medium text-zinc-600">Early morning of the next day</span></Row>}
+                {isAfterMidnight(b.hour) && <Row label="Note"><span className="font-medium text-zinc-600">Early morning of the next day</span></Row>}
                 {b.arrivedAt && <Row label="Arrived">{stamp(b.arrivedAt)}</Row>}
                 {b.lateAt && <Row label="Went Late">{stamp(b.lateAt)}</Row>}
                 {b.rescheduleCount > 0 && (

@@ -28,7 +28,10 @@ export interface TimeSlot {
 }
 
 // ── Booking API (mirrors backend/app/schemas.py) ─────────────────────────────
+/** The accounts a player can pay online. */
 export type PaymentMethod = 'gcash' | 'gotyme';
+/** How a booking was paid: online, or cash at the desk for a booking the host added ('none' for a block). */
+export type PaidWith = PaymentMethod | 'cash' | 'none';
 export type BookingStatus = 'held' | 'pending_verification' | 'confirmed' | 'rejected' | 'expired' | 'cancelled';
 export type SlotState = 'available' | 'held' | 'booked' | 'past';
 export type RateType = 'standard' | 'night_owl';
@@ -111,7 +114,7 @@ export interface Booking {
   hours: number;
   customerName: string;
   customerPhoneMasked: string;
-  paymentMethod: PaymentMethod;
+  paymentMethod: PaidWith;
   paddles: boolean;
   lineItems: LineItem[];
   courtCost: number;

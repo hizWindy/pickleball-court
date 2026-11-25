@@ -1,4 +1,5 @@
-import { fmtDate, hourLabel } from '../lib/time';
+import { PAYMENT_LABEL } from '../lib/payment';
+import { addDays, fmtDate, hourLabel, isAfterMidnight, isNightHour, PLAY_DAY_HOURS } from '../lib/time';
 import type { AdminBooking, AdminLabel, AdminPayment } from './types';
 
 export type { AdminLabel };
@@ -22,14 +23,14 @@ export const LABEL: Record<AdminLabel, { label: string; tone: Tone }> = {
 
 export const PROVIDER_LABEL: Record<string, string> = { gcash: 'GCash', gotyme: 'GoTyme', maya: 'Maya', other: 'Another bank' };
 
-export const METHOD_LABEL: Record<AdminPayment, string> = { gcash: 'GCash', gotyme: 'GoTyme', cash: 'Cash', none: '—' };
+export const METHOD_LABEL: Record<AdminPayment, string> = PAYMENT_LABEL;
 
 /** Play-day order: the club's day runs 5 AM to 4:59 AM. */
-export const PLAY_HOURS = [...Array.from({ length: 19 }, (_, i) => i + 5), ...Array.from({ length: 5 }, (_, i) => i)];
+export const PLAY_HOURS = PLAY_DAY_HOURS;
 
 export const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-export const isNight = (hour: number) => hour >= 18 || hour < 5;
+export const isNight = isNightHour;
 
 const manilaHourFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', hourCycle: 'h23' });
 /** Clock hour (0-23, Manila) of an instant. */
@@ -37,6 +38,13 @@ export const manilaHour = (ms: number) => Number(manilaHourFmt.format(ms));
 
 /** "7:00 AM" */
 export const clock = (hour: number) => `${hour % 12 === 0 ? 12 : hour % 12}:00 ${hour < 12 ? 'AM' : 'PM'}`;
+
+/** A start-time choice in a picker: "5:00 AM", or "1:00 AM (after midnight)" for the hours that fall on the next date. */
+export const startChoice = (hour: number) => `${clock(hour)}${isAfterMidnight(hour) ? ' (after midnight)' : ''}`;
+
+/** The hint under a date when the chosen hour is after midnight: "Runs into early Sun, Oct 11". */
+export const nextDayHint = (playDate: string, hour: number): string | undefined =>
+  isAfterMidnight(hour) ? `Runs into early ${fmtDate(addDays(playDate, 1), { weekday: 'short', month: 'short', day: 'numeric' })}` : undefined;
 
 /** "7 – 9 PM" or "11 PM – 2 AM" */
 export function hourSpan(hour: number, hours: number): string {

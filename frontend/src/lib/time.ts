@@ -1,6 +1,20 @@
 // Everything is shown in Manila time, whatever timezone the visitor's phone is set to.
 const TZ = 'Asia/Manila';
 
+/**
+ * The club's play day runs from 5:00 AM to 4:59 AM the next morning: players think of 12-4 AM as the tail of the
+ * night before. Mirrors DAY_START_HOUR in backend/app/slots.py. Everything that places an hour on a day uses this.
+ */
+export const DAY_START_HOUR = 5;
+/** Evening (the ₱250 rate) runs from 6 PM to the end of the play day at 5 AM. */
+export const EVENING_START_HOUR = 18;
+
+/** The hours of a play day in order: 5 AM ... 11 PM, then 12 AM ... 4 AM. */
+export const PLAY_DAY_HOURS: readonly number[] = Array.from({ length: 24 }, (_, i) => (DAY_START_HOUR + i) % 24);
+
+/** 12 AM - 4 AM: hours that belong to the play day before, so they fall on the next calendar date. */
+export const isAfterMidnight = (hour: number) => hour < DAY_START_HOUR;
+
 const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
 const shortDateFmt = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric' });
 const ymdFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -40,12 +54,22 @@ export function daysBetween(a: string, b: string): number {
 /** Manila calendar date of an instant. */
 export const manilaYmd = (iso: string | number | Date) => ymdFmt.format(new Date(iso));
 
+const hourFmt = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', hourCycle: 'h23' });
+
 /** Today's play day: 12 AM - 4:59 AM still belongs to the previous night. */
 export function currentPlayDate(nowMs: number): string {
   const ymd = manilaYmd(nowMs);
-  const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', hourCycle: 'h23' }).format(nowMs));
-  return hour < 5 ? addDays(ymd, -1) : ymd;
+  return isAfterMidnight(Number(hourFmt.format(nowMs))) ? addDays(ymd, -1) : ymd;
 }
+
+/** The instant an hour of a play day starts. 12-4 AM fall on the next calendar date. */
+export function slotStartMs(playDate: string, hour: number): number {
+  const day = isAfterMidnight(hour) ? addDays(playDate, 1) : playDate;
+  return Date.parse(`${day}T${String(hour).padStart(2, '0')}:00:00+08:00`);
+}
+
+/** When a play day begins: 5:00 AM Manila on its date. */
+export const playDayStartMs = (playDate: string) => slotStartMs(playDate, DAY_START_HOUR);
 
 /** "Sat, Oct 10 · 7:00 – 9:00 PM", noting when the session runs past midnight. */
 export function fmtSchedule(startAt: string, endAt: string): { day: string; time: string; note?: string } {
@@ -59,7 +83,7 @@ export function fmtSchedule(startAt: string, endAt: string): { day: string; time
 
 /** For after-midnight starts on a play day: "Early Sun, Oct 11". */
 export function afterMidnightNote(playDate: string, hour: number): string | undefined {
-  if (hour >= 5) return undefined;
+  if (!isAfterMidnight(hour)) return undefined;
   return `Early ${fmtDate(addDays(playDate, 1))}`;
 }
 
@@ -77,7 +101,7 @@ export const pesoExact = (n: number) => `₱${n.toLocaleString('en-PH', { minimu
 export const pesoAuto = (n: number) => (Number.isInteger(n) ? peso(n) : pesoExact(n));
 
 /** 6 PM - 4:59 AM is Evening (the night rate); 5 AM - 5:59 PM is Morning. */
-export const isNightHour = (hour: number) => hour >= 18 || hour < 5;
+export const isNightHour = (hour: number) => hour >= EVENING_START_HOUR || isAfterMidnight(hour);
 
 /** "1 hr", "2 hrs" */
 export const hrsLabel = (n: number) => `${n} hr${n === 1 ? '' : 's'}`;

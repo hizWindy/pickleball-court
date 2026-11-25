@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, CheckCircle2, CloudOff, CloudRain, Minus, Plus, RefreshCw, Search, Sun } from 'lucide-react';
 import { errorMessage, serverNowMs } from '../lib/api';
-import { addDays, currentPlayDate, fmtDate, fmtTime, hourLabel } from '../lib/time';
+import { currentPlayDate, fmtDate, fmtTime, hourLabel } from '../lib/time';
 import { adminApi } from './api';
 import { useDesk } from './desk';
-import { clock, hourSpan, manilaHour, PLAY_HOURS, when } from './format';
+import { hourSpan, manilaHour, nextDayHint, PLAY_HOURS, startChoice, when } from './format';
 import { useNow, useRemote } from './hooks';
 import { HOUR_MS, rainFill, upcomingHours } from './forecast';
 import { GuestRow, RebookCard, useRebook, type RebookWindow } from './RebookNow';
@@ -24,7 +24,7 @@ const dayNumFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', da
 /** "Thu 8" (the date order differs between locales, so it is put together here) */
 const dayLabel = (ms: number) => `${weekdayFmt.format(ms)} ${dayNumFmt.format(ms)}`;
 
-/** The longest a rain delay can run from this hour without leaving the play day (which ends at 6 AM). */
+/** The longest a rain delay can run from this hour without leaving the play day (which ends at 5 AM). */
 const maxHours = (fromHour: number) => 24 - PLAY_HOURS.indexOf(fromHour);
 
 /** The window that covers all of these bookings, from the first start to the last finish. */
@@ -410,7 +410,7 @@ const RainDelayForm: React.FC = () => {
         <div className="grid grid-cols-2 gap-3">
           <Field
             label="Day"
-            hint={win.fromHour < 6 ? `Runs into early ${fmtDate(addDays(win.date, 1), { weekday: 'short', month: 'short', day: 'numeric' })}` : fmtDate(win.date, { weekday: 'long' })}
+            hint={nextDayHint(win.date, win.fromHour) ?? fmtDate(win.date, { weekday: 'long' })}
           >
             {(id) => <TextInput id={id} type="date" value={win.date} onChange={(e) => e.target.value && change({ date: e.target.value })} className="appearance-none" />}
           </Field>
@@ -419,8 +419,7 @@ const RainDelayForm: React.FC = () => {
               <SelectInput id={id} value={win.fromHour} onChange={(e) => change({ fromHour: Number(e.target.value) })}>
                 {PLAY_HOURS.map((h) => (
                   <option key={h} value={h}>
-                    {clock(h)}
-                    {h < 6 ? ' (after midnight)' : ''}
+                    {startChoice(h)}
                   </option>
                 ))}
               </SelectInput>

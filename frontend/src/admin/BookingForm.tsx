@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { AlertCircle, Lock, Minus, Plus } from 'lucide-react';
+import { useToday } from '../hooks/useToday';
 import { errorMessage } from '../lib/api';
 import { normalizePhone } from '../lib/phone';
-import { addDays, fmtDate, hourLabel, peso } from '../lib/time';
+import { hourLabel, peso, slotStartMs as slotMs } from '../lib/time';
 import type { AppConfig } from '../types';
 import { adminApi } from './api';
 import { useDesk, type FormSeed } from './desk';
-import { clock, hourSpan, isNight, PLAY_HOURS } from './format';
+import { hourSpan, isNight, nextDayHint, PLAY_HOURS, startChoice } from './format';
 import { useRemote } from './hooks';
 import { Btn, Card, cx, ErrorNote, Field, Label, Segmented, SelectInput, Sheet, Switch, TextArea, TextInput } from './ui';
 import type { AdminBookingDetail, AdminPayment, CreateBody, UpdateBody } from './types';
@@ -14,10 +15,6 @@ import type { AdminBookingDetail, AdminPayment, CreateBody, UpdateBody } from '.
 export type FormMode = { type: 'create'; seed?: FormSeed } | { type: 'edit'; code: string };
 
 const BLOCK_REASONS = ['Maintenance', 'Tournament', 'Private event', 'Lessons'];
-
-const pad = (n: number) => String(n).padStart(2, '0');
-/** The absolute start of an hour on a play day (12-4 AM belong to the previous day's date). */
-const slotMs = (date: string, hour: number) => Date.parse(`${hour < 5 ? addDays(date, 1) : date}T${pad(hour)}:00:00+08:00`);
 
 function priceOf(config: AppConfig, courtId: string, hour: number, hours: number, paddles: boolean) {
   const court = config.courts.find((c) => c.id === courtId) ?? config.courts[0];
@@ -52,12 +49,13 @@ const FormBody: React.FC<{
   onSaved: (code: string) => void;
 }> = ({ config, mode, existing, onClose, onSaved }) => {
   const desk = useDesk();
+  const today = useToday();
   const seed = mode.type === 'create' ? mode.seed : undefined;
   const editing = !!existing;
 
   const [kind, setKind] = useState<'walk_in' | 'block'>(existing ? (existing.source === 'blocked' ? 'block' : 'walk_in') : (seed?.kind ?? 'walk_in'));
   const [courtId, setCourtId] = useState(existing?.courtId ?? seed?.courtId ?? config.courts[0].id);
-  const [date, setDate] = useState(existing?.playDate ?? seed?.date ?? config.today);
+  const [date, setDate] = useState(existing?.playDate ?? seed?.date ?? today);
   const [hour, setHour] = useState(existing?.hour ?? seed?.hour ?? nextHourInManila());
   const [hours, setHours] = useState(existing?.hours ?? 1);
   const [paddles, setPaddles] = useState(existing?.paddles ?? false);
@@ -210,7 +208,7 @@ const FormBody: React.FC<{
             )}
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Date" hint={hour < 6 ? `Runs into early ${fmtDate(addDays(date, 1), { weekday: 'short', month: 'short', day: 'numeric' })}` : undefined}>
+            <Field label="Date" hint={nextDayHint(date, hour)}>
               {(id) => <TextInput id={id} type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="appearance-none" />}
             </Field>
             <Field label="Starts at">
@@ -218,8 +216,7 @@ const FormBody: React.FC<{
                 <SelectInput id={id} value={hour} onChange={(e) => setHour(Number(e.target.value))}>
                   {PLAY_HOURS.map((h) => (
                     <option key={h} value={h}>
-                      {clock(h)}
-                      {h < 6 ? ' (after midnight)' : ''}
+                      {startChoice(h)}
                     </option>
                   ))}
                 </SelectInput>

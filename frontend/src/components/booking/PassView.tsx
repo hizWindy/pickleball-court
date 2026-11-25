@@ -5,6 +5,7 @@ import confetti from 'canvas-confetti';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { device } from '../../lib/device';
 import { downloadPass, passFileName, passState, qrDataUrl, renderPassPng } from '../../lib/pass';
+import { paymentLabel } from '../../lib/payment';
 import { isIOS, saveImage, saveLabel } from '../../lib/saveImage';
 import { fmtReference, fmtSchedule, peso, pesoAuto } from '../../lib/time';
 import { useConfig } from '../../hooks/useBookingData';
@@ -238,7 +239,7 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
                     <Item label="Date" value={sched.day} sub={sched.note} />
                     <Item label="Time" value={sched.time} />
                     <Item label="Total" value={peso(booking.total)} sub={booking.paddles ? 'Includes paddles' : undefined} />
-                    <Item label="Paid with" value={booking.paymentMethod === 'gcash' ? 'GCash' : 'GoTyme'} />
+                    <Item label="Paid with" value={paymentLabel(booking.paymentMethod)} />
                   </dl>
                 </div>
                 <div className="relative border-t-2 border-dashed border-zinc-200 px-6 py-5">
@@ -333,7 +334,7 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
 
 /** Why a payment is waiting for the host, in plain words, and what (if anything) the guest should do. */
 function PendingNotice({ booking }: { booking: Booking }) {
-  const method = booking.paymentMethod === 'gcash' ? 'GCash' : 'GoTyme';
+  const method = paymentLabel(booking.paymentMethod);
   const paid = booking.amountPaid;
   const remaining = paid != null ? Math.round((booking.total - paid) * 100) / 100 : null;
 

@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { AlertCircle, ArrowLeft, Calendar, Check, ChevronRight, Clock, Lock, Minus, Moon, Pencil, Plus, ShieldCheck, Sparkles, X } from 'lucide-react';
-import { api, ApiError, errorMessage, serverNowMs } from '../../lib/api';
+import { api, ApiError, errorMessage } from '../../lib/api';
+import { useToday } from '../../hooks/useToday';
 import { device } from '../../lib/device';
 import { normalizePhone } from '../../lib/phone';
-import { addDays, afterMidnightNote, currentPlayDate, daysBetween, fmtDate, hourLabel, hourTimeLabel, hrsLabel, isNightHour, peso } from '../../lib/time';
+import { addDays, afterMidnightNote, daysBetween, fmtDate, hourLabel, hourTimeLabel, hrsLabel, isNightHour, peso } from '../../lib/time';
 import { useAvailability, useConfig } from '../../hooks/useBookingData';
 import type { AppConfig, Availability, BookingDraftSeed, BookingWithToken, PaymentMethod, SlotAvailability, TimePeriod } from '../../types';
 import { reviewNotices } from '../../data/houseRules';
@@ -62,7 +63,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const today = config?.today ?? currentPlayDate(serverNowMs());
+  const today = useToday();
   const activeDate = date ?? today;
   const needsAvailability = step === 'time' || step === 'court' || step === 'review';
   const { data: avail, error: availError, refresh } = useAvailability(activeDate, { enabled: needsAvailability });
@@ -296,6 +297,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
               {step === 'review' && config && court && hour != null && (
                 <ReviewStep
                   config={config}
+                  today={today}
                   date={activeDate}
                   hour={hour}
                   hours={hours}
@@ -951,6 +953,7 @@ function DetailsStep({
 // ── Step 5: Review ────────────────────────────────────────────────────────────
 function ReviewStep(props: {
   config: AppConfig;
+  today: string;
   date: string;
   hour: number;
   hours: number;
@@ -972,7 +975,7 @@ function ReviewStep(props: {
   const { config, date, hour, hours } = props;
   const endHour = (hour + hours) % 24;
   const note = afterMidnightNote(date, hour);
-  const days = daysBetween(config.today, date);
+  const days = daysBetween(props.today, date);
   return (
     <div className="space-y-5">
       <StepTitle title="Review your booking" subtitle="Check everything. You can still edit any part." />

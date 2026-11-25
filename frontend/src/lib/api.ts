@@ -21,15 +21,27 @@ export class ApiError extends Error {
 
 // Device clocks are often wrong; every response carries serverNow and we keep the offset.
 let serverOffsetMs = 0;
+const clockListeners = new Set<() => void>();
 
 export const serverNowMs = () => Date.now() + serverOffsetMs;
+
+/** Be told whenever the server's clock is read again (e.g. so "today" is worked out from the right time). */
+export function onServerClock(listener: () => void): () => void {
+  clockListeners.add(listener);
+  return () => {
+    clockListeners.delete(listener);
+  };
+}
 
 function syncClock(payload: unknown) {
   const now = (payload as { serverNow?: string; booking?: { serverNow?: string } } | null);
   const iso = now?.serverNow ?? now?.booking?.serverNow;
   if (iso) {
     const parsed = Date.parse(iso);
-    if (!Number.isNaN(parsed)) serverOffsetMs = parsed - Date.now();
+    if (!Number.isNaN(parsed)) {
+      serverOffsetMs = parsed - Date.now();
+      clockListeners.forEach((listener) => listener());
+    }
   }
 }
 

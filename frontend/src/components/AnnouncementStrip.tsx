@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronRight, Clock, Flame, Sparkles, Sun, X, Zap, type LucideIcon } from 'lucide-react';
 import { useAvailability, useConfig } from '../hooks/useBookingData';
-import { serverNowMs } from '../lib/api';
+import { useToday } from '../hooks/useToday';
 import { dayLabel, isPrimeHour, minutesUntil, primeTime, toPicks, type OpenPick } from '../lib/openSlots';
-import { addDays, currentPlayDate, hourLabel, peso } from '../lib/time';
+import { addDays, hourLabel, peso } from '../lib/time';
 import type { BookingDraftSeed } from '../types';
 
 interface AnnouncementStripProps {
@@ -31,7 +31,7 @@ const seedOf = (p: OpenPick): BookingDraftSeed => ({ date: p.date, hour: p.slot.
  */
 export const AnnouncementStrip: React.FC<AnnouncementStripProps> = ({ onBook }) => {
   const { config } = useConfig();
-  const today = config?.today ?? currentPlayDate(serverNowMs());
+  const today = useToday();
   const tomorrow = addDays(today, 1);
   const { data: todayAvail } = useAvailability(today, { intervalMs: 15000 });
   const { data: tomorrowAvail } = useAvailability(tomorrow, { intervalMs: 30000 });

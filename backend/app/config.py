@@ -79,6 +79,9 @@ class Settings:
     weather_longitude: float = field(default_factory=lambda: float(_env("WEATHER_LONGITUDE", "124.8469")))
     # Rain chance (%) from which the desk warns about a booking.
     rain_warn_percent: int = field(default_factory=lambda: _env_int("RAIN_WARN_PERCENT", 60))
+    # The desk's "All" list leaves out unpaid holds that ran out (they stay under More → Expired). A search still finds
+    # them. Set to 1 to show them under "All" again.
+    all_includes_expired: bool = field(default_factory=lambda: _env("ALL_INCLUDES_EXPIRED", "0").strip().lower() in ("1", "true", "yes", "on"))
     # Optional Telegram alerts to the host (create a bot with @BotFather, send it a message, use your chat id).
     telegram_bot_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN", ""))
     telegram_chat_id: str = field(default_factory=lambda: _env("TELEGRAM_CHAT_ID", ""))

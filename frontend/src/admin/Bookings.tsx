@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Ban, Check, ChevronDown, ChevronRight, Plus, Search, X } from 'lucide-react';
-import { addDays, fmtReference, fmtTime, peso } from '../lib/time';
+import { useToday } from '../hooks/useToday';
+import { fmtReference, fmtTime, peso } from '../lib/time';
 import { adminApi } from './api';
+import { ALL, effectiveRange, isFiltered, listQuery, loadPages, pickFilter, type DateRange, type FilterKey, type ListFilters } from './bookingsQuery';
 import { useDesk } from './desk';
 import { METHOD_LABEL, when } from './format';
 import { useNow, useRemote } from './hooks';
@@ -9,12 +11,6 @@ import { RowActions } from './QuickActions';
 import { Btn, Card, cx, LabelBadge, Num, SelectInput } from './ui';
 import { useQuickActions, type QuickApi } from './useQuickActions';
 import type { AdminBooking, StatusCounts } from './types';
-
-const PAGE = 25;
-const MAX_PAGES = 8;
-
-type FilterKey = 'all' | 'paid' | 'late' | 'done' | 'rain_delay' | 'held' | 'rejected' | 'expired' | 'cancelled';
-type Time = 'upcoming' | 'past' | 'all';
 
 interface Chip {
   key: FilterKey;
@@ -30,15 +26,15 @@ const MAIN: Chip[] = [
   { key: 'done', label: 'Done', count: (c) => c.done },
   { key: 'rain_delay', label: 'Rain delay', count: (c) => c.rainDelay },
 ];
-// Rare states, tucked away.
+// Rare states, tucked away. With "All" they cover every booking (expired holds only show here, not under "All").
 const MORE: Chip[] = [
   { key: 'held', label: 'Paying now', count: (c) => c.held },
+  { key: 'blocked', label: 'Blocked', count: (c) => c.blocked },
   { key: 'rejected', label: 'Rejected', count: (c) => c.rejected },
   { key: 'expired', label: 'Expired', count: (c) => c.expired },
   { key: 'cancelled', label: 'Cancelled', count: (c) => c.cancelled },
 ];
 const MORE_KEYS = new Set<FilterKey>(MORE.map((c) => c.key));
-const LABEL_KEYS = new Set<FilterKey>(['paid', 'late', 'done', 'rain_delay']);
 const ALL_KEYS = new Set<FilterKey>([...MAIN, ...MORE].map((c) => c.key));
 
 /** Shortcuts from other screens land on the matching filter. */
@@ -49,33 +45,32 @@ function filterFrom(raw: string): FilterKey {
 export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: number } }> = ({ presetStatus }) => {
   const desk = useDesk();
   const now = useNow();
+  const today = useToday();
   const { q: quick, problemDialog } = useQuickActions();
-  const [status, setStatus] = useState<FilterKey>('all');
-  const [time, setTime] = useState<Time>('upcoming');
-  const [courtId, setCourtId] = useState('');
+  const [filters, setFilters] = useState<ListFilters>(ALL);
   const [text, setText] = useState('');
-  const [q, setQ] = useState('');
-  const [pages, setPages] = useState(1);
+  const [paging, setPaging] = useState({ list: '', pages: 1 });
   const [moreOpen, setMoreOpen] = useState(false);
 
-  useEffect(() => {
-    if (presetStatus) setStatus(filterFrom(presetStatus.status));
-  }, [presetStatus]);
+  // A shortcut from another screen (e.g. the Late count on the overview) picks that filter.
+  const [seenPreset, setSeenPreset] = useState<number | null>(null);
+  if (presetStatus && presetStatus.nonce !== seenPreset) {
+    setSeenPreset(presetStatus.nonce);
+    setFilters((f) => pickFilter(f, filterFrom(presetStatus.status)));
+  }
 
   useEffect(() => {
-    const t = setTimeout(() => setQ(text.trim()), 300);
+    const t = setTimeout(() => setFilters((f) => (f.q === text.trim() ? f : { ...f, q: text.trim() })), 300);
     return () => clearTimeout(t);
   }, [text]);
-
-  useEffect(() => setPages(1), [status, time, courtId, q]);
 
   // Enter searches at once; a pasted ref no. or booking code that matches one booking opens it straight away.
   const searchNow = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     const term = text.trim();
     if (e.key !== 'Enter' || !term) return;
-    setQ(term);
+    setFilters((f) => ({ ...f, q: term }));
     try {
-      const found = await adminApi.list({ q: term, status: 'all', sort: 'created_desc', pageSize: 1 });
+      const found = await adminApi.list({ q: term, sort: 'created_desc', pageSize: 1 });
       if (found.total === 1) {
         (e.target as HTMLInputElement).blur(); // put the phone keyboard away
         desk.openBooking(found.items[0].code);
@@ -85,39 +80,17 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
     }
   };
 
-  // A search looks at every date. Everything else keeps the dates the host picked, so the number on a chip
-  // (counted for those dates) is exactly what tapping it lists.
-  const ignoreTime = !!q;
-  const today = desk.config?.today;
-  const query = useMemo(() => {
-    const soonestFirst = status === 'paid' || status === 'rain_delay';
-    const latestFirst = status === 'late' || status === 'done';
-    return {
-      q,
-      status: MORE_KEYS.has(status) ? status : 'all',
-      label: LABEL_KEYS.has(status) ? (status as 'paid' | 'late' | 'done' | 'rain_delay') : undefined,
-      courtId,
-      pageSize: PAGE * pages,
-      sort: soonestFirst
-        ? ('start_asc' as const)
-        : latestFirst
-          ? ('start_desc' as const)
-          : ignoreTime
-            ? ('created_desc' as const)
-            : time === 'upcoming'
-              ? ('start_asc' as const)
-              : ('start_desc' as const),
-      dateFrom: !ignoreTime && time === 'upcoming' ? today : undefined,
-      dateTo: !ignoreTime && time === 'past' && today ? addDays(today, -1) : undefined,
-    };
-  }, [q, status, courtId, pages, ignoreTime, time, today]);
-  // The chip numbers depend on the search, dates and court; the rows also on the chip and sort (and the page count).
+  const query = useMemo(() => listQuery(filters, today), [filters, today]);
+  // The chip numbers depend on the search, dates and court; the rows also on the chip and sort. "Show more" keeps the
+  // list and adds pages; any other change starts again from the first page.
   const countsPart = JSON.stringify([query.q, query.dateFrom, query.dateTo, query.courtId]);
-  const { pageSize, ...listQuery } = query;
-  const listPart = JSON.stringify(listQuery);
-  const { data: onHand, dataKey, error, loading } = useRemote(JSON.stringify(['bookings', countsPart, listPart, pageSize]), () => adminApi.list(query), {
-    intervalMs: 90000, version: desk.refreshKey, enabled: !!today, keepPrevious: true,
-  });
+  const listPart = JSON.stringify(query);
+  const pages = paging.list === listPart ? paging.pages : 1;
+  const { data: onHand, dataKey, error, loading } = useRemote(
+    JSON.stringify(['bookings', countsPart, listPart, pages]),
+    () => loadPages(query, pages, adminApi.list), // a quiet refresh reloads just the pages on screen
+    { intervalMs: 90000, version: desk.refreshKey, keepPrevious: true }
+  );
   // The last result stays on hand while a new one loads (or fails), but it must never pass for this filter, like a Late
   // list under the All chip. Rows are only kept for "Show more" (same list, fewer pages); numbers only for the same dates.
   const [, onHandCounts, onHandList] = dataKey ? (JSON.parse(dataKey) as string[]) : [];
@@ -125,18 +98,20 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
   const counts = onHand && onHandCounts === countsPart ? onHand.counts : undefined;
 
   const items = data?.items ?? null;
-
-  const filtered = status !== 'all' || !!q || !!courtId || (!ignoreTime && time !== 'all');
+  const range = effectiveRange(filters);
+  const filtered = isFiltered(filters);
+  const setRange = (next: DateRange) => setFilters((f) => ({ ...f, range: next }));
+  const setCourtId = (next: string) => setFilters((f) => ({ ...f, courtId: next }));
   const clear = () => {
-    setStatus('all');
+    setFilters(ALL);
     setText('');
-    setCourtId('');
-    setTime('all');
   };
   const pick = (next: FilterKey) => {
-    setStatus(next);
+    setFilters((f) => pickFilter(f, next));
+    if (next === 'all') setText(''); // "All" is everything: the search goes too
     if (MORE_KEYS.has(next)) setMoreOpen(true);
   };
+  const status = filters.filter;
 
   const moreSelected = MORE.find((c) => c.key === status);
   const showMore = moreOpen || !!moreSelected;
@@ -212,12 +187,12 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:max-w-md">
-        <SelectInput aria-label="Show bookings from" value={ignoreTime ? 'all' : time} disabled={ignoreTime} onChange={(e) => setTime(e.target.value as Time)}>
+        <SelectInput aria-label="Show bookings from" value={range} disabled={!!filters.q} onChange={(e) => setRange(e.target.value as DateRange)}>
+          <option value="all">All dates</option>
           <option value="upcoming">Today &amp; later</option>
           <option value="past">Earlier dates</option>
-          <option value="all">All dates</option>
         </SelectInput>
-        <SelectInput aria-label="Court" value={courtId} onChange={(e) => setCourtId(e.target.value)}>
+        <SelectInput aria-label="Court" value={filters.courtId} onChange={(e) => setCourtId(e.target.value)}>
           <option value="">Both courts</option>
           {desk.config?.courts.map((c) => (
             <option key={c.id} value={c.id}>
@@ -248,7 +223,7 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
             {filtered ? 'Try another search, or look at all dates and statuses.' : 'Online bookings and walk-ins you add will show up here.'}
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {!ignoreTime && time !== 'all' && <Btn onClick={() => setTime('all')}>Show all dates</Btn>}
+            {range !== 'all' && <Btn onClick={() => setRange('all')}>Show all dates</Btn>}
             {filtered && <Btn onClick={clear}>Clear filters</Btn>}
             <Btn variant="primary" onClick={() => desk.addBooking()}>
               <Plus className="h-4 w-4" /> Add booking
@@ -270,12 +245,11 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
             <span className="text-xs text-zinc-500">
               Showing {data.items.length} of {data.total}
             </span>
-            {data.items.length < data.total && pages < MAX_PAGES && (
-              <Btn onClick={() => setPages((p) => p + 1)} loading={loading}>
+            {data.items.length < data.total && (
+              <Btn onClick={() => setPaging({ list: listPart, pages: pages + 1 })} loading={loading}>
                 Show more
               </Btn>
             )}
-            {data.items.length < data.total && pages >= MAX_PAGES && <span className="text-xs text-zinc-400">Narrow the search to see the rest.</span>}
           </div>
         </>
       )}

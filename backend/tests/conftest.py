@@ -52,7 +52,7 @@ def client(fake_now):
     with TestClient(app) as c:
         conn = connect()
         conn.executescript(
-            "DELETE FROM booking_access; DELETE FROM booking_slots; DELETE FROM bookings;"
+            "DELETE FROM booking_access; DELETE FROM booking_slots; DELETE FROM bookings; DELETE FROM spent_payments;"
             "DELETE FROM admin_sessions; DELETE FROM admin_events; DELETE FROM receipt_scans; DELETE FROM notices_sent;"
         )
         conn.close()

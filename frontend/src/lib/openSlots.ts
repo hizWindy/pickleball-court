@@ -1,5 +1,8 @@
 import { serverNowMs } from './api';
+import { isNightHour } from './time';
 import type { CourtConfig, SlotAvailability } from '../types';
+
+export { isNightHour };
 
 /** An hour that still has at least one free court. */
 export interface OpenPick {
@@ -7,8 +10,6 @@ export interface OpenPick {
   slot: SlotAvailability;
   freeCourts: CourtConfig[];
 }
-
-export const isNightHour = (hour: number) => hour >= 18 || hour < 5;
 
 export function toPicks(date: string, slots: SlotAvailability[] | undefined, courts: CourtConfig[]): OpenPick[] {
   return (slots ?? [])

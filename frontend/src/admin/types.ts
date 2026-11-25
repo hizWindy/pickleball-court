@@ -1,7 +1,7 @@
 // Mirrors backend/app/admin_schemas.py
-import type { BookingStatus, LineItem } from '../types';
+import type { BookingStatus, LineItem, PaidWith } from '../types';
 
-export type AdminPayment = 'gcash' | 'gotyme' | 'cash' | 'none';
+export type AdminPayment = PaidWith;
 export type Source = 'online' | 'walk_in' | 'blocked';
 
 /**
@@ -109,6 +109,8 @@ export interface StatusCounts {
   late: number;
   done: number;
   rainDelay: number;
+  /** Courts the host closed. */
+  blocked: number;
 }
 
 export interface AdminBookingList {
@@ -123,11 +125,12 @@ export interface ListQuery {
   q?: string;
   status?: string;
   review?: 'unchecked' | 'flagged';
-  label?: 'paid' | 'late' | 'done' | 'rain_delay';
+  label?: 'paid' | 'late' | 'done' | 'rain_delay' | 'blocked';
   dateFrom?: string;
   dateTo?: string;
   courtId?: string;
-  sort?: 'start_desc' | 'start_asc' | 'created_desc';
+  /** `upcoming_first`: what is still to play (soonest first), then what has ended (latest first). */
+  sort?: 'start_desc' | 'start_asc' | 'created_desc' | 'upcoming_first';
   page?: number;
   pageSize?: number;
 }

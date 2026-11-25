@@ -127,6 +127,7 @@ class StatusCounts(ApiModel):
     late: int
     done: int
     rain_delay: int
+    blocked: int  # courts the host closed (maintenance, events)
 
 
 class AdminBookingList(ApiModel):

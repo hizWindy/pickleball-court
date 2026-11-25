@@ -2,9 +2,9 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, CalendarSearch, Zap } from 'lucide-react';
 import { useAvailability, useConfig } from '../hooks/useBookingData';
-import { serverNowMs } from '../lib/api';
+import { useToday } from '../hooks/useToday';
 import { dayLabel, minutesUntil, primeTime, toPicks, type OpenPick } from '../lib/openSlots';
-import { addDays, currentPlayDate, hourLabel, peso } from '../lib/time';
+import { addDays, hourLabel, peso } from '../lib/time';
 import type { BookingDraftSeed, CourtConfig } from '../types';
 
 interface NextOpenSlotsProps {
@@ -28,7 +28,7 @@ function startsIn(startAt: string): string | null {
  */
 export const NextOpenSlots: React.FC<NextOpenSlotsProps> = ({ onBook }) => {
   const { config } = useConfig();
-  const today = config?.today ?? currentPlayDate(serverNowMs());
+  const today = useToday();
   const tomorrow = addDays(today, 1);
   const { data: todayAvail, error } = useAvailability(today, { intervalMs: 15000 });
   const { data: tomorrowAvail } = useAvailability(tomorrow, { intervalMs: 30000 });

@@ -144,6 +144,16 @@ CREATE TABLE IF NOT EXISTS notices_sent (
     key        TEXT PRIMARY KEY,
     sent_at    TEXT NOT NULL
 );
+
+-- A payment backs one booking, ever. The unique indexes on bookings enforce that while the booking exists; when the host
+-- deletes a booking for good, its reference number and receipt hash are kept here so they can't pay for another one.
+CREATE TABLE IF NOT EXISTS spent_payments (
+    kind          TEXT NOT NULL CHECK (kind IN ('reference', 'receipt')),
+    value         TEXT NOT NULL,
+    booking_code  TEXT NOT NULL,
+    deleted_at    TEXT NOT NULL,
+    PRIMARY KEY (kind, value)
+);
 """
 
 # Columns added after the first release. CREATE TABLE IF NOT EXISTS won't touch an existing database.

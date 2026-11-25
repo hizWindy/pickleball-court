@@ -16,6 +16,9 @@ import { Shell } from './Shell';
 import type { NavCounts } from './types';
 import { WeatherPage } from './Weather';
 
+/** How old the desk's copy of the settings may get before it is loaded again. */
+const CONFIG_MAX_AGE_MS = 60 * 60_000;
+
 /**
  * The desk is for one person: keep it out of search results, and give it its own app identity so
  * "Add to Home Screen" from here installs the Desk (opening on /admin), not the public site.
@@ -101,22 +104,38 @@ function DeskApp({ onSignedOut }: { onSignedOut: () => void }) {
   const lastLate = useRef<number | null>(null);
   const lastRev = useRef<number | null>(null);
 
-  // The desk's lists wait for these settings, so a failed request is retried (it used to be dropped silently,
-  // leaving the lists on grey placeholders until a refresh).
+  // The desk's screens need these settings, so a failed request is retried (it used to be dropped silently, leaving
+  // the lists on grey placeholders until a refresh). They are loaded again every hour, and when the desk comes back
+  // into view after an hour away, so a desk left open picks up changes such as a new payment timer.
   useEffect(() => {
     let alive = true;
     let timer: number | undefined;
-    const load = (wait: number) =>
+    let loadedAt = 0;
+    let loading = false; // includes the retries after a failure
+    const load = (wait: number) => {
+      loading = true;
       api.config().then(
-        (c) => alive && setConfig(c),
+        (c) => {
+          if (!alive) return;
+          loading = false;
+          loadedAt = Date.now();
+          setConfig(c);
+        },
         () => {
           if (alive) timer = window.setTimeout(() => load(Math.min(wait * 2, 15000)), wait);
         }
       );
+    };
     load(2000);
+    const stale = () => !loading && Date.now() - loadedAt >= CONFIG_MAX_AGE_MS;
+    const hourly = window.setInterval(() => stale() && load(2000), 60_000);
+    const back = () => document.visibilityState === 'visible' && stale() && load(2000);
+    document.addEventListener('visibilitychange', back);
     return () => {
       alive = false;
       window.clearTimeout(timer);
+      window.clearInterval(hourly);
+      document.removeEventListener('visibilitychange', back);
     };
   }, []);
 

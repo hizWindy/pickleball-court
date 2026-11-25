@@ -11,6 +11,9 @@ from pydantic.alias_generators import to_camel
 from app.validation import clean_name, normalize_ph_mobile
 
 PaymentMethod = Literal["gcash", "gotyme"]
+# How a booking was paid, as a guest can see it: online bookings use a PaymentMethod; a booking the host added at the desk
+# (a walk-in or phone booking that the guest later looks up, e.g. to rebook after rain) may be cash.
+PaidWith = Literal["gcash", "gotyme", "cash", "none"]
 BookingStatus = Literal["held", "pending_verification", "confirmed", "rejected", "expired", "cancelled"]
 SlotState = Literal["available", "held", "booked", "past"]
 
@@ -128,7 +131,7 @@ class BookingOut(ApiModel):
     hours: int
     customer_name: str
     customer_phone_masked: str
-    payment_method: PaymentMethod
+    payment_method: PaidWith
     paddles: bool
     line_items: list[LineItemOut]
     court_cost: int

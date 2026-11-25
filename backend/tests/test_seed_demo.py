@@ -7,17 +7,24 @@ from app.config import settings
 
 
 def _rows(admin):
-    items = admin.get("/api/admin/bookings", params={"pageSize": 100}).json()["items"]
-    return [b for b in items if b["customerPhone"] == seed_demo.DEMO_PHONE_STORED]
+    # "All" leaves expired holds out, so they are asked for on their own.
+    items = [b for params in ({}, {"status": "expired"}) for b in admin.get("/api/admin/bookings", params={"pageSize": 200, **params}).json()["items"]]
+    return [b for b in items if b["customerPhone"] == seed_demo.DEMO_PHONE_STORED or b["adminNote"] == seed_demo.DEMO_NOTE]
 
 
 def test_the_seeder_makes_every_state_and_can_run_twice(admin):
     first = seed_demo.run()
     codes = {r[0] for r in first}
-    assert len(codes) == len(first) == 9
+    assert len(codes) == len(first) == 18
 
     labels = sorted(b["label"] for b in _rows(admin))
-    assert labels == ["awaiting", "expired", "paid", "paid", "paid", "paid", "paid", "rain_delay", "rain_delay"]
+    assert labels == sorted(["awaiting", "expired", "late", "blocked", *["paid"] * 12, "rain_delay", "rain_delay"])
+
+    # The hours that are easy to get wrong are there on both courts: 5 AM, 7 PM and 4 AM, and one past midnight.
+    edges = {(b["courtId"], b["hour"]) for b in _rows(admin) if b["customerName"].startswith("Edge")}
+    assert edges == {(c, h) for c in ("court-1", "court-2") for h in (5, 19, 4)}
+    night = next(b for b in _rows(admin) if b["customerName"] == "Night Owls")
+    assert (night["hour"], night["hours"]) == (23, 3)
 
     # A rain-delayed guest can look the booking up and is offered the free rebooking; a paid one is not.
     by_code = {b["code"]: b for b in _rows(admin)}
@@ -29,8 +36,17 @@ def test_the_seeder_makes_every_state_and_can_run_twice(admin):
 
     # Running it again replaces the demo bookings instead of piling up.
     second = seed_demo.run()
-    assert len(_rows(admin)) == 9
+    assert len(_rows(admin)) == 18
     assert not codes & {r[0] for r in second}
+
+
+def test_the_seeder_can_add_enough_bookings_to_page_past_200(admin):
+    rows = seed_demo.run(many=True)
+    assert rows[-1][1] == f"{seed_demo.MANY} regulars"
+    listing = admin.get("/api/admin/bookings", params={"pageSize": 200}).json()
+    assert listing["total"] >= 18 - 1 + seed_demo.MANY and len(listing["items"]) == 200  # (the expired hold isn't under All)
+    second_page = admin.get("/api/admin/bookings", params={"pageSize": 200, "page": 2}).json()["items"]
+    assert len(second_page) == listing["total"] - 200
 
 
 def test_the_seeder_never_touches_a_real_booking(admin, booking_payload):

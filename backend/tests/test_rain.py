@@ -187,6 +187,18 @@ def test_a_rain_delayed_guest_can_move_even_inside_48_hours_and_it_costs_no_resc
     assert admin.get("/api/admin/counts").json()["rainDelay"] == 0
 
 
+def test_a_rain_delayed_walk_in_can_look_up_the_booking_and_pick_a_new_time(admin):
+    # The host sends a walk-in (paid in cash at the desk) the same rebooking link as everyone else.
+    code = walk_in(admin, hour=15, customerPhone="0918 555 0101")
+    admin.post("/api/admin/rain-delay", json={"date": "2026-10-10", "fromHour": 14, "hours": 3})
+    found = admin.post("/api/reschedule/find", json={"code": code, "customerPhone": "0918 555 0101"})
+    assert found.status_code == 200, found.text
+    assert found.json()["booking"]["paymentMethod"] == "cash" and found.json()["booking"]["reschedule"] == "weather"
+    moved = admin.post("/api/reschedule", json={"code": code, "customerPhone": "0918 555 0101", "date": "2026-10-11", "hour": 15})
+    assert moved.status_code == 200, moved.text
+    assert slot_state(admin, 15, date="2026-10-11") == "booked"
+
+
 def test_a_guest_whose_rain_delay_was_for_a_week_ago_still_has_30_days(admin, booking_payload, fake_now):
     code, _ = paid(admin, booking_payload, hour=15)
     admin.post("/api/admin/rain-delay", json={"date": "2026-10-10", "fromHour": 14, "hours": 3})

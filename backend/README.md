@@ -15,12 +15,24 @@ uvicorn app.main:app --reload --port 8000
 
 Then run the frontend (`npm run dev` in the repo root). Vite proxies `/api` to port 8000.
 
-Tests: `pytest` (they use a throwaway database and a fake clock).
+Tests: `pytest` (they use a throwaway database and a fake clock). Among them:
 
-**Demo data for your own computer:** `python -m app.seed_demo` makes nine bookings under one demo number (`0999 000 0001`):
-five paid ones, two **rain-delayed** guests (they see *Rebook now* on "Check my booking"), one unpaid hold and one expired
-one. It prints the codes. Run it again for a fresh set (only the demo bookings are replaced) and it refuses to run on
-Render. Try it: the site's *Check my booking* with a code and that number, and `/admin` > Weather > *Rebook guests*.
+- `tests/test_simulated_day.py` plays one fixed day and 50 random days at the club (players booking, paying late and
+  walking away; the desk adding walk-ins and blocks, editing, forgetting to tap Arrived, calling rain delays) and checks
+  after every step that no court-hour has two owners, the slot table matches the bookings, a payment reference backs one
+  booking, every filter chip's number matches its list, and no unpaid hold is stuck. A failure names its seed and step;
+  `SIM_DAYS=200 pytest tests/test_simulated_day.py` plays more days.
+- `tests/test_double_booking.py` holds the 2026-11-25 audit's scenarios (marked `xfail` until release 3 of the plan fixes them).
+
+Load test (a real server on a throwaway database, 100+ simultaneous requests from players and the desk for the same
+court-hours): `.venv\Scripts\python scripts\stress_double_booking.py`. It passes when every court-hour has one owner.
+
+**Demo data for your own computer:** `python -m app.seed_demo` makes 18 bookings under one demo number (`0999 000 0001`;
+blocks carry a demo note instead): paid ones, two **rain-delayed** guests (they see *Rebook now* on "Check my booking"),
+an unpaid hold, an expired one, a block, a Late booking, and walk-ins at the hours that are easy to get wrong (5 AM,
+7 PM and 4 AM on both courts, and 11 PM - 2 AM). `--many` adds 270 walk-ins to try "Show more" past 200. It prints the
+codes. Run it again for a fresh set (only the demo bookings are replaced) and it refuses to run on Render. Try it: the
+site's *Check my booking* with a code and that number, and `/admin` > Schedule, Bookings and Weather > *Rebook guests*.
 
 ## Booking rules (what the code enforces)
 
@@ -160,7 +172,7 @@ Behind a proxy (Render), start uvicorn with `--proxy-headers --forwarded-allow-i
 | GET | `/api/admin/counts` | `{pending, held}` for the badge |
 | GET | `/api/admin/overview?days=30` | KPIs, daily revenue, busiest hours, weekday, court / method / rate splits, outcomes, up next, regulars |
 | GET | `/api/admin/schedule?date=` | bookings on a play day |
-| GET / POST | `/api/admin/bookings` | list (`q`, `status`, `dateFrom`, `dateTo`, `courtId`, `sort`, `page`, `pageSize`) / add walk-in or block |
+| GET / POST | `/api/admin/bookings` | list (`q`, `status`, `label` = paid, late, done, rain_delay or blocked, `dateFrom`, `dateTo`, `courtId`, `sort` = start_desc, start_asc, created_desc or upcoming_first, `page`, `pageSize` up to 200) / add walk-in or block. With no status or label, the list (and its `all` count) leaves out expired unpaid holds unless there is a search (`ALL_INCLUDES_EXPIRED=1` shows them) |
 | GET / PATCH / DELETE | `/api/admin/bookings/{code}` | detail with history / edit (reschedule is clash-checked) / delete for good |
 | POST | `/api/admin/bookings/{code}/check` | "Looks good": marks an automatically confirmed payment as looked at |
 | POST | `/api/admin/bookings/{code}/confirm` \| `reject` \| `cancel` | confirm also restores a rejected / expired / cancelled booking if its hours are still free, and confirms a short payment once the balance arrived; reject works on online payments, even after automatic confirmation; `cancel` is the host's "void" (guests can't cancel) |
