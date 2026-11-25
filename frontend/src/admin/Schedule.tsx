@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Ban, CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Ban, CalendarDays, ChevronLeft, ChevronRight, Link2, Plus } from 'lucide-react';
 import { useToday } from '../hooks/useToday';
 import { addDays, fmtDate, hourLabel } from '../lib/time';
 import { adminApi } from './api';
@@ -39,6 +39,10 @@ const toneOf = (b: AdminBooking): keyof typeof TONE =>
 /** A Late or rain-delayed booking keeps its court until the host releases it; then it is drawn as an outline. */
 const releasedHours = (b: AdminBooking) => !b.holdsCourt;
 const PILL: Partial<Record<keyof typeof TONE, string>> = { late: 'Late', rain: 'Rain delay' };
+/** Both courts booked at once: each court has its own card, and both carry the link. */
+const both = (b: AdminBooking) => b.linked.length > 0;
+const LinkMark: React.FC<{ b: AdminBooking }> = ({ b }) =>
+  both(b) ? <Link2 className="h-3 w-3 shrink-0" aria-hidden /> : null;
 
 export const SchedulePage: React.FC = () => {
   const desk = useDesk();
@@ -176,10 +180,13 @@ export const SchedulePage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => desk.openBooking(b.code)}
-                            aria-label={`${b.customerName}, Late, ${hourSpan(b.hour, b.hours)}. Open booking`}
+                            aria-label={`${b.customerName}, Late, ${hourSpan(b.hour, b.hours)}${both(b) ? ', both courts' : ''}. Open booking`}
                             className="h-full min-w-0 flex-1 cursor-pointer px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#15803D]"
                           >
-                            <span className="block truncate text-[13px] font-bold leading-tight text-amber-950">{b.customerName}</span>
+                            <span className="flex items-center gap-1 text-[13px] font-bold leading-tight text-amber-950">
+                              <span className="truncate">{b.customerName}</span>
+                              <LinkMark b={b} />
+                            </span>
                             <span className="mt-0.5 inline-block rounded bg-amber-500 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-white">Late</span>
                           </button>
                           <RestoreIconBtn b={b} q={q} className="mr-0.5" />
@@ -208,7 +215,7 @@ export const SchedulePage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => desk.openBooking(b.code)}
-                          aria-label={`${b.customerName}${PILL[tone] ? `, ${PILL[tone]}` : ''}, ${hourSpan(b.hour, b.hours)}. Open booking`}
+                          aria-label={`${b.customerName}${PILL[tone] ? `, ${PILL[tone]}` : ''}, ${hourSpan(b.hour, b.hours)}${both(b) ? ', both courts' : ''}. Open booking`}
                           className={cx(
                             'block h-full w-full cursor-pointer px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#15803D]',
                             buttons === 1 && 'pr-[3.1rem]',
@@ -218,6 +225,7 @@ export const SchedulePage: React.FC = () => {
                           <span className="flex items-center gap-1 text-[13px] font-bold leading-tight">
                             {b.source === 'blocked' && <Ban className="h-3 w-3 shrink-0" />}
                             <span className="truncate">{b.customerName}</span>
+                            <LinkMark b={b} />
                           </span>
                           <span className="block truncate text-[11px] font-medium leading-tight opacity-75">{hourSpan(b.hour, b.hours)}</span>
                           {PILL[tone] && (
@@ -269,6 +277,9 @@ export const SchedulePage: React.FC = () => {
         ))}
         <li className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm border-2 border-dashed border-amber-500" /> Late, court released
+        </li>
+        <li className="flex items-center gap-1.5">
+          <Link2 className="h-3 w-3 text-zinc-600" /> Both courts, one booking
         </li>
         <li className="text-indigo-400">Evening hours (6 PM – 5 AM) are shaded</li>
       </ul>

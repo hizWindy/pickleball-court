@@ -86,11 +86,15 @@ export const adminApi = {
   /** Release court (a Late group) or Open these hours (a rain delay): the hours go back on sale. */
   release: (code: string, note?: string) =>
     call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/release`, { method: 'POST', json: { note: note || null } }),
-  reject: (code: string, reason?: string) =>
-    call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/reject`, { method: 'POST', json: { reason: reason || null } }),
-  /** The old "cancel", now "void": guests can't cancel, so this is only for mistakes, duplicates and refunds. */
-  cancel: (code: string, reason?: string) =>
-    call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/cancel`, { method: 'POST', json: { reason: reason || null } }),
+  /** `bothCourts`: for a two-court booking, reject the payment for both courts (or only this one). */
+  reject: (code: string, reason?: string, bothCourts = false) =>
+    call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/reject`, { method: 'POST', json: { reason: reason || null, bothCourts } }),
+  /**
+   * The old "cancel", now "void": guests can't cancel, so this is only for mistakes, duplicates and refunds.
+   * `bothCourts`: void both courts of a two-court booking (or only this one). An unpaid hold always goes whole.
+   */
+  cancel: (code: string, reason?: string, bothCourts = false) =>
+    call<AdminBookingDetail>(`/api/admin/bookings/${enc(code)}/cancel`, { method: 'POST', json: { reason: reason || null, bothCourts } }),
   remove: (code: string) => call<void>(`/api/admin/bookings/${enc(code)}`, { method: 'DELETE' }),
   receiptUrl: (code: string) => `/api/admin/bookings/${enc(code)}/receipt`,
 };

@@ -100,6 +100,16 @@ export interface LineItem {
   startAt: string;
   rate: number;
   rateType: RateType;
+  /** The court the hour is on: a two-court booking lists each hour once per court. */
+  courtId?: string | null;
+}
+
+/** One court of a booking (a two-court booking has two). The host may end one court on its own. */
+export interface BookingCourt {
+  courtId: string;
+  courtName: string;
+  status: BookingStatus;
+  total: number;
 }
 
 /** Whether the guest can move this booking: once, 48 h ahead (`open`), after a rain delay (`weather`), or not. */
@@ -108,10 +118,15 @@ export type RescheduleState = 'open' | 'weather' | 'used' | 'too_late' | 'unavai
 export type PendingReason = 'amount_short' | 'amount_unreadable';
 
 export interface Booking {
+  /** The booking's code: for two courts, the first court's. */
   code: string;
   status: BookingStatus;
+  /** The (first) court still on. */
   courtId: string;
+  /** Every court still on, e.g. "Court 1 & Court 2". */
   courtName: string;
+  /** Each court of the booking, first court first (one for a one-court booking). Missing from an older server. */
+  courts?: BookingCourt[];
   playDate: string;
   startAt: string;
   endAt: string;
@@ -119,8 +134,10 @@ export interface Booking {
   customerName: string;
   customerPhoneMasked: string;
   paymentMethod: PaidWith;
+  /** Paddle rental: one pair per court. */
   paddles: boolean;
   lineItems: LineItem[];
+  /** For the courts still on, added up: two courts are paid with one payment of `total`. */
   courtCost: number;
   addonsCost: number;
   total: number;
@@ -172,7 +189,8 @@ export interface RescheduleRequest {
 }
 
 export interface CreateBookingRequest {
-  courtId: string;
+  /** One court, or both at once. (The server still takes `courtId` from older versions of the site.) */
+  courtIds: string[];
   date: string;
   hour: number;
   hours: number;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { passState } from './pass';
-import type { Booking } from '../types';
+import { courtsLine, passState } from './pass';
+import type { Booking, BookingCourt } from '../types';
 
 const base = {
   code: 'HPC-AAAA-BBBB', status: 'confirmed', late: false, weatherHold: false, arrived: false, paidLate: false,
@@ -25,5 +25,35 @@ describe('what the pass says', () => {
 
   it('a rain delay still asks for a new time', () => {
     expect(passState(with_({ weatherHold: true })).key).toBe('rain');
+  });
+});
+
+describe('the courts on a pass', () => {
+  const court = (n: number, status: BookingCourt['status'] = 'confirmed'): BookingCourt => ({
+    courtId: `court-${n}`, courtName: `Court ${n}`, status, total: 500,
+  });
+
+  it('one court', () => {
+    expect(courtsLine(with_({ courtName: 'Court 2', courts: [court(2)] }))).toEqual({ label: 'Court', value: 'Court 2', note: undefined });
+  });
+
+  it('both courts at once', () => {
+    expect(courtsLine(with_({ courtName: 'Court 1 & Court 2', courts: [court(1), court(2)] }))).toMatchObject({
+      label: 'Courts', value: 'Court 1 & Court 2', note: undefined,
+    });
+  });
+
+  it('both courts, one of them ended by the host: the pass says so', () => {
+    const line = courtsLine(with_({ courtName: 'Court 1', courts: [court(1), court(2, 'cancelled')] }));
+    expect(line).toEqual({ label: 'Court', value: 'Court 1', note: 'Court 2 is no longer part of this booking' });
+  });
+
+  it('a whole booking rejected keeps both courts and adds no note', () => {
+    const line = courtsLine(with_({ status: 'rejected', courtName: 'Court 1 & Court 2', courts: [court(1, 'rejected'), court(2, 'rejected')] }));
+    expect(line).toMatchObject({ label: 'Courts', note: undefined });
+  });
+
+  it('a booking from an older server (no list of courts)', () => {
+    expect(courtsLine(with_({ courtName: 'Court 1' }))).toMatchObject({ label: 'Court', value: 'Court 1' });
   });
 });

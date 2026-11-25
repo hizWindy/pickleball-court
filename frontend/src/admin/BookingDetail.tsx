@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Ban, Check, CheckCircle2, CloudRain, ImageOff, Info, Maximize2, Pencil, Phone, RotateCcw, ScanText, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Ban, Check, CheckCircle2, ChevronRight, CloudRain, ImageOff, Info, Link2, Maximize2, Pencil, Phone, RotateCcw, ScanText, Trash2, X } from 'lucide-react';
 import { CopyButton } from '../components/booking/ui';
 import { errorMessage } from '../lib/api';
 import { fmtDate, fmtReference, fmtTime, isAfterMidnight, peso } from '../lib/time';
@@ -9,7 +9,7 @@ import { arrivable, clock, manilaHour, METHOD_LABEL, PROVIDER_LABEL, restoreLeft
 import { useNow, useRemote } from './hooks';
 import { lateMessage, paidLateMessage, rainMessage } from './messages';
 import { ArrivedBtn, ContactBtns, ReleaseBtn, RestoreBtn } from './QuickActions';
-import { Btn, Card, CopyBtn, cx, Dialog, ErrorNote, Label, LabelBadge, Sheet, Tag, TextArea } from './ui';
+import { Btn, Card, CopyBtn, CourtsTag, cx, Dialog, ErrorNote, Label, LabelBadge, Segmented, Sheet, Tag, TextArea } from './ui';
 import { useQuickActions } from './useQuickActions';
 import type { AdminBookingDetail } from './types';
 
@@ -66,9 +66,19 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
   const [problem, setProblem] = useState<string | null>(null);
   const [ask, setAsk] = useState<Ask>(null);
   const [reason, setReason] = useState('');
+  // Reject or Void on one court of a two-court booking: both courts (usual: it was one payment), or only this one (D5)
+  const [bothCourts, setBothCourts] = useState(true);
   const [zoom, setZoom] = useState(false);
   const now = useNow(5000);
   const { q, problemDialog } = useQuickActions();
+  const askFor = (a: Ask) => {
+    setBothCourts(true);
+    setAsk(a);
+  };
+  // The other courts of the booking that an action on this one can cover (the ones in the same state)
+  const partners = b ? b.linked.filter((l) => l.status === b.status) : [];
+  const allCourts = b ? [b.courtName, ...partners.map((l) => l.courtName)].sort().join(' & ') : '';
+  const whole = partners.length > 0 && bothCourts;
 
   // An unpaid hold leaves no record once it's let go, so the booking on screen can vanish under us.
   const gone = error?.status === 404;
@@ -117,10 +127,10 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
     if (b.status === 'held') {
       footer = (
         <div className="flex gap-2">
-          <Btn variant="danger" size="lg" onClick={() => setAsk('cancel')} disabled={busy}>
+          <Btn variant="danger" size="lg" onClick={() => askFor('cancel')} disabled={busy}>
             Release hold
           </Btn>
-          <Btn variant="dark" size="lg" className="flex-1" onClick={() => setAsk('confirm-unpaid')} disabled={busy}>
+          <Btn variant="dark" size="lg" className="flex-1" onClick={() => askFor('confirm-unpaid')} disabled={busy}>
             Confirm without proof
           </Btn>
         </div>
@@ -149,11 +159,11 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             {paidOnline && (
-              <Btn variant="danger" size={main ? 'md' : 'lg'} className="flex-1" onClick={() => setAsk('reject')} disabled={busy}>
+              <Btn variant="danger" size={main ? 'md' : 'lg'} className="flex-1" onClick={() => askFor('reject')} disabled={busy}>
                 Reject payment
               </Btn>
             )}
-            <Btn variant="danger" size={main ? 'md' : 'lg'} className="flex-1" onClick={() => setAsk('cancel')} disabled={busy}>
+            <Btn variant="danger" size={main ? 'md' : 'lg'} className="flex-1" onClick={() => askFor('cancel')} disabled={busy}>
               <Ban className="h-4 w-4" /> Void booking
             </Btn>
           </div>
@@ -168,7 +178,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
       );
     } else {
       footer = (
-        <Btn variant="danger" size="lg" className="w-full" onClick={() => setAsk('cancel')} disabled={busy}>
+        <Btn variant="danger" size="lg" className="w-full" onClick={() => askFor('cancel')} disabled={busy}>
           Lift the block
         </Btn>
       );
@@ -187,6 +197,7 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
             <>
               <div className="flex flex-wrap items-center gap-2">
                 <LabelBadge label={b.label} />
+                <CourtsTag linked={b.linked} />
                 {b.source === 'walk_in' && <Tag>Walk-in</Tag>}
                 {b.customPrice && b.source !== 'blocked' && <Tag tone="blue">Custom price</Tag>}
                 {b.arrivedAt && b.source !== 'blocked' && (
@@ -198,11 +209,15 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
 
               {b.source !== 'blocked' && <References b={b} />}
 
+              {b.linked.length > 0 && <LinkedCourts b={b} onOpen={desk.openBooking} />}
+
               {b.label === 'late' && <LateNote b={b} now={now} minutes={desk.config?.lateAfterMinutes ?? 15} />}
               {b.label === 'rain_delay' && <RainNote b={b} />}
               {b.paidLate && <PaidLateNote b={b} />}
 
-              {b.source === 'online' && b.submittedAt && <PaymentProof b={b} onZoom={() => setZoom(true)} />}
+              {b.source === 'online' && b.submittedAt && (
+                b.paymentCode ? <SharedPayment b={b} onOpen={desk.openBooking} /> : <PaymentProof b={b} onZoom={() => setZoom(true)} />
+              )}
               {b.status === 'held' && (
                 <Card className="border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
                   The player is still paying. If nothing arrives by <strong>{stamp(b.holdExpiresAt)}</strong>, the slot is released on its own.
@@ -264,7 +279,8 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
                   })}
                   {b.paddles && <Row label="Paddle rental">{peso(b.addonsCost)}</Row>}
                   {b.customPrice && <Row label="Your adjustment"><span className="text-sky-700">{b.total - b.courtCost - b.addonsCost > 0 ? '+' : '−'}{peso(Math.abs(b.total - b.courtCost - b.addonsCost))}</span></Row>}
-                  <Row label="Total" emphasis>{peso(b.total)}</Row>
+                  <Row label={b.linked.length ? `Total for ${b.courtName}` : 'Total'} emphasis>{peso(b.total)}</Row>
+                  {b.linked.length > 0 && <Row label={`All ${b.linked.length + 1} courts (one payment)`}>{peso(b.groupTotal)}</Row>}
                   <Row label="Paid with">{METHOD_LABEL[b.paymentMethod]}</Row>
                 </Block>
               )}
@@ -295,20 +311,32 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
       {zoom && b && <Lightbox code={code} onClose={() => setZoom(false)} />}
       {problemDialog}
 
-      {ask === 'reject' && (
+      {ask === 'reject' && b && (
         <Dialog
           title="Reject this payment?"
           onClose={() => setAsk(null)}
           actions={
             <>
               <Btn onClick={() => setAsk(null)}>Keep reviewing</Btn>
-              <Btn variant="dark" loading={busy} onClick={() => run(() => adminApi.reject(code, reason.trim()), 'Payment rejected. The hours are free again.')}>
+              <Btn
+                variant="dark"
+                loading={busy}
+                onClick={() =>
+                  run(() => adminApi.reject(code, reason.trim(), whole), whole ? 'Payment rejected for both courts. The hours are free again.' : 'Payment rejected. The hours are free again.')
+                }
+              >
                 Reject payment
               </Btn>
             </>
           }
         >
-          <p>The hours go back on sale right away. The player will see that the payment wasn't verified.</p>
+          {partners.length > 0 && (
+            <CourtScope b={b} partners={partners} both={bothCourts} onBoth={setBothCourts} what="Reject the payment for" />
+          )}
+          <p>
+            {whole ? `The hours on ${allCourts} go back on sale right away.` : 'The hours go back on sale right away.'} The player will see that the
+            payment wasn't verified.
+          </p>
           <div className="flex flex-wrap gap-1.5">
             {REJECT_REASONS.map((r) => (
               <button
@@ -337,13 +365,19 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
                 loading={busy}
                 onClick={() =>
                   run(
-                    () => adminApi.cancel(code, reason.trim()),
-                    b.source === 'blocked' ? 'Block lifted.' : b.status === 'held' ? 'Hold released. The hours are free again.' : 'Booking voided. The hours are free again.',
+                    () => adminApi.cancel(code, reason.trim(), whole),
+                    b.source === 'blocked'
+                      ? 'Block lifted.'
+                      : b.status === 'held'
+                        ? 'Hold released. The hours are free again.'
+                        : whole
+                          ? 'Both courts voided. The hours are free again.'
+                          : 'Booking voided. The hours are free again.',
                     b.status === 'held' // an unpaid hold is erased, so there's nothing left to show
                   )
                 }
               >
-                {b.source === 'blocked' ? 'Lift block' : b.status === 'held' ? 'Release hold' : 'Void booking'}
+                {b.source === 'blocked' ? 'Lift block' : b.status === 'held' ? 'Release hold' : whole ? 'Void both courts' : 'Void booking'}
               </Btn>
             </>
           }
@@ -351,9 +385,15 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
           {b.source === 'blocked' ? (
             <p>The court opens up for booking again.</p>
           ) : b.status === 'held' ? (
-            <p>The player hasn't paid yet. The hours go back on sale right away, and the hold is erased: no record is kept.</p>
+            <p>
+              The player hasn't paid yet. {partners.length > 0 ? `Both courts (${allCourts}) go` : 'The hours go'} back on sale right away, and the
+              hold is erased: no record is kept.
+            </p>
           ) : (
-            <p>Guests can't cancel. Use this only for mistakes, duplicates or a refund you've decided to give. The hours go back on sale.</p>
+            <>
+              {partners.length > 0 && <CourtScope b={b} partners={partners} both={bothCourts} onBoth={setBothCourts} what="Void" />}
+              <p>Guests can't cancel. Use this only for mistakes, duplicates or a refund you've decided to give. The hours go back on sale.</p>
+            </>
           )}
           {b.source !== 'blocked' && b.status !== 'held' && <p>Any refund is between you and the player.</p>}
           {b.source !== 'blocked' && <TextArea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional, only you see this)" maxLength={200} aria-label="Reason" />}
@@ -373,7 +413,10 @@ export const BookingDetail: React.FC<{ code: string; onClose: () => void }> = ({
             </>
           }
         >
-          <p>Use this when the player paid you directly, for example in cash. The booking is locked in and the countdown stops.</p>
+          <p>
+            Use this when the player paid you directly, for example in cash. The booking is locked in and the countdown stops
+            {partners.length > 0 ? `, on both courts (${allCourts}): they were held together` : ''}.
+          </p>
         </Dialog>
       )}
 
@@ -436,7 +479,7 @@ const References: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
         </div>
       </div>
       <div className="min-w-0 px-4 py-3">
-        <Label>Payment ref{b.proofType === 'receipt' && paymentRef ? ' · from receipt' : ''}</Label>
+        <Label>Payment ref{b.paymentCode ? ' · both courts' : b.proofType === 'receipt' && paymentRef ? ' · from receipt' : ''}</Label>
         {paymentRef ? (
           <div className="mt-1 flex items-center justify-between gap-2">
             <span className="truncate font-mono text-base font-bold tracking-wide text-zinc-950">{fmtReference(paymentRef)}</span>
@@ -449,6 +492,80 @@ const References: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
     </Card>
   );
 };
+
+/** The other court(s) of a booking made for both courts at once: one player and one payment, a booking per court here. */
+const LinkedCourts: React.FC<{ b: AdminBookingDetail; onOpen: (code: string) => void }> = ({ b, onOpen }) => (
+  <Card className="p-4">
+    <Label className="flex items-center gap-1.5">
+      <Link2 className="h-3.5 w-3.5" /> Booked together
+    </Label>
+    <p className="mt-1.5 text-sm text-zinc-600">
+      {b.customerName} booked {b.linked.length + 1} courts at once and paid once ({peso(b.groupTotal)} for all). Each court has its own booking here:
+      Arrived, Late and Release go court by court; Reject and Void ask whether to include the other court.
+    </p>
+    <ul className="mt-3 space-y-2">
+      {b.linked.map((l) => (
+        <li key={l.code}>
+          <button
+            type="button"
+            onClick={() => onOpen(l.code)}
+            className="flex w-full items-center justify-between gap-3 rounded-xl border border-zinc-200 px-3 py-2.5 text-left hover:bg-zinc-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15803D]"
+          >
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-zinc-900">{l.courtName}</span>
+              <span className="block font-mono text-[11px] tracking-wide text-zinc-500">{l.code}</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1.5">
+              <LabelBadge label={l.label} />
+              <ChevronRight className="h-4 w-4 text-zinc-400" />
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  </Card>
+);
+
+/** On the second court of a two-court booking: the one payment for both is kept on the first court's booking. */
+const SharedPayment: React.FC<{ b: AdminBookingDetail; onOpen: (code: string) => void }> = ({ b, onOpen }) => (
+  <Card className="flex items-center justify-between gap-3 p-4">
+    <p className="text-sm text-zinc-700">
+      Paid together with the other court: one {METHOD_LABEL[b.paymentMethod]} payment of <strong>{peso(b.groupTotal)}</strong> for both. Check it, or
+      reject it, on <span className="font-mono font-semibold">{b.paymentCode}</span>.
+    </p>
+    {b.paymentCode && (
+      <Btn size="sm" variant="outline" className="shrink-0" onClick={() => onOpen(b.paymentCode!)}>
+        Open
+      </Btn>
+    )}
+  </Card>
+);
+
+/** Reject or Void on one court of a two-court booking: both courts (it was one payment), or only this one (D5). */
+const CourtScope: React.FC<{
+  b: AdminBookingDetail;
+  partners: { courtName: string }[];
+  both: boolean;
+  onBoth: (v: boolean) => void;
+  what: string;
+}> = ({ b, partners, both, onBoth, what }) => (
+  <div className="space-y-1.5">
+    <Segmented
+      label={`${what}: which courts`}
+      value={both ? 'both' : 'one'}
+      onChange={(v) => onBoth(v === 'both')}
+      options={[
+        { value: 'both', label: 'Both courts' },
+        { value: 'one', label: `Only ${b.courtName}` },
+      ]}
+    />
+    <p className="text-xs text-zinc-500">
+      {both
+        ? `${what} the whole booking: ${[b.courtName, ...partners.map((p) => p.courtName)].sort().join(' & ')}.`
+        : `${partners.map((p) => p.courtName).join(' & ')} stays booked, e.g. when only one group came.`}
+    </p>
+  </div>
+);
 
 /**
  * The payment behind an online booking: what the server read off the receipt, compared with the
@@ -463,7 +580,10 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
   const from = fmt.format(new Date(b.createdAt));
   const to = b.submittedAt ? fmt.format(new Date(b.submittedAt)) : null;
   const over = codes.has('amount_over'); // more than the total: for information only
-  const shortBy = codes.has('amount_short') && scan?.amount != null ? b.total - scan.amount : null;
+  // What the payment had to be: the whole booking (both courts of a two-court booking, paid at once)
+  const due = b.groupTotal || b.total;
+  const dueLabel = b.linked.length ? `Total for both courts ${peso(due)}` : `Booking total ${peso(due)}`;
+  const shortBy = codes.has('amount_short') && scan?.amount != null ? due - scan.amount : null;
   // A paid booking is just Paid. Only notes that tell the host something new are shown; a field that couldn't be
   // read already says "Not found" in its row below.
   const notes = b.reviewFlags.filter((f) => NOTE_CODES.has(f.code));
@@ -517,7 +637,7 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
             <ReadRow
               label="Amount"
               ok={!codes.has('amount_short') && !codes.has('amount_missing') && !over}
-              hint={shortBy != null ? `Booking total ${peso(b.total)} · ${peso(shortBy)} short` : `Booking total ${peso(b.total)}`}
+              hint={shortBy != null ? `${dueLabel} · ${peso(shortBy)} short` : dueLabel}
             >
               {scan.amount != null ? peso(scan.amount) : 'Not found'}
             </ReadRow>
@@ -546,10 +666,10 @@ const PaymentProof: React.FC<{ b: AdminBookingDetail; onZoom: () => void }> = ({
               </ReadRow>
             )}
             {b.payerName && <ReadRow label="Sent by">{b.payerName}</ReadRow>}
-            <ReadRow label="Amount due" hint={`Match this in your ${METHOD_LABEL[b.paymentMethod]} app`}>{peso(b.total)}</ReadRow>
+            <ReadRow label="Amount due" hint={`${b.linked.length ? 'Both courts. ' : ''}Match this in your ${METHOD_LABEL[b.paymentMethod]} app`}>{peso(due)}</ReadRow>
           </>
         ) : (
-          <ReadRow label="Amount due" hint={`Booking window ${to ? `${from} – ${to}` : `from ${from}`}`}>{peso(b.total)}</ReadRow>
+          <ReadRow label="Amount due" hint={`Booking window ${to ? `${from} – ${to}` : `from ${from}`}`}>{peso(due)}</ReadRow>
         )}
       </dl>
       {scan?.rawText && (
@@ -634,7 +754,8 @@ const PaidLateNote: React.FC<{ b: AdminBookingDetail }> = ({ b }) => (
       Paid after the time ran out{b.paidLateAt ? ` · ${stamp(b.paidLateAt)}` : ''}
     </p>
     <p className="mt-1 text-sm text-red-900">
-      {b.payerName ?? 'The player'} paid {peso(b.total)} after their hold ran out, but someone else had already booked the slot. The player was
+      {b.payerName ?? 'The player'} paid {peso(b.groupTotal || b.total)}{b.linked.length ? ' (both courts)' : ''} after their hold ran out, but
+      someone else had already booked the slot. The player was
       told you'll contact them. Check the payment in your app, then either move it (<strong>Edit</strong> to a free time, then
       <strong> Reopen and confirm</strong>) or refund it and leave it here.
     </p>

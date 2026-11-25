@@ -69,6 +69,27 @@ export interface AdminBooking {
   canMarkArrived: boolean;
   /** Late or rain-delayed and still holding its court: Release court / Open these hours. */
   canRelease: boolean;
+  /**
+   * Both courts booked at once: each court is its own booking here (Arrived, Late and Release work per court), linked
+   * to the other. The player paid once for both (`groupTotal`); the payment is stored on the first court's booking.
+   */
+  groupId: string | null;
+  /** The other court(s) of the booking. Empty for one court. */
+  linked: LinkedBooking[];
+  /** The whole booking's price, every court of it (this booking's total for one court). */
+  groupTotal: number;
+  /** On the second court: the booking whose record holds the shared payment. */
+  paymentCode: string | null;
+}
+
+/** The other court of a two-court booking. */
+export interface LinkedBooking {
+  code: string;
+  courtId: string;
+  courtName: string;
+  status: BookingStatus;
+  label: AdminLabel;
+  holdsCourt: boolean;
 }
 
 export interface ReviewFlag {

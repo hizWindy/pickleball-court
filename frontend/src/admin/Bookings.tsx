@@ -8,7 +8,7 @@ import { useDesk } from './desk';
 import { METHOD_LABEL, when } from './format';
 import { useNow, useRemote } from './hooks';
 import { RowActions } from './QuickActions';
-import { Btn, Card, cx, LabelBadge, Num, SelectInput } from './ui';
+import { Btn, Card, CourtsTag, cx, LabelBadge, Num, SelectInput } from './ui';
 import { useQuickActions, type QuickApi } from './useQuickActions';
 import type { AdminBooking, StatusCounts } from './types';
 
@@ -196,7 +196,7 @@ export const BookingsPage: React.FC<{ presetStatus?: { status: string; nonce: nu
           <option value="past">Earlier dates</option>
         </SelectInput>
         <SelectInput aria-label="Court" value={filters.courtId} onChange={(e) => setCourtId(e.target.value)}>
-          <option value="">Both courts</option>
+          <option value="">All courts</option>
           {desk.config?.courts.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -302,6 +302,7 @@ const Row: React.FC<{ b: AdminBooking; now: number; q: QuickApi; onOpen: () => v
             <span className="font-medium text-zinc-800">{when(b)}</span>
             <span className="text-zinc-300">•</span>
             <span>{b.courtName}</span>
+            <CourtsTag linked={b.linked} />
           </span>
           {!blocked && (
             <span className="mt-1 flex flex-wrap items-center gap-x-2 font-mono text-[11px] tracking-wide text-zinc-500">

@@ -29,4 +29,8 @@ being sent to the same court.
   free time, then *Reopen and confirm*) or refund it.
 - **Rain delay**: the guests' hours stay closed until each one picks a new time on the site with the link you send. Tap
   **Open hours** on a booking if you'd rather sell those hours sooner.
+- **Both courts** (a 🔗 on the Schedule, a *2 courts* badge in Bookings): one group booked the two courts together and
+  paid once. Each court is its own booking on the desk: tap **Arrived** on each court as its group starts, and if only
+  one group comes, **Release court** on the other one only. *Reject* and *Void* ask whether you mean both courts (the
+  usual: it was one payment) or only the court you opened. The payment is shown on the first court's booking.
 - **Stuck?** Every booking's *History* says what happened and when.

@@ -1,14 +1,14 @@
 """Scripted days at the club (S4 in IMPLEMENTATION_PLAN.md), played on the test clock without waiting.
 
-Players book, pay (some after their timer), walk away or never pay; the desk adds walk-ins, phone bookings and blocks,
-edits, marks arrivals (and sometimes forgets), restores, voids, rejects and calls rain delays; rain-delayed guests pick
-a new time. After every step these must hold:
+Players book one court or both (release 4), pay (some after their timer), walk away or never pay; the desk adds walk-ins,
+phone bookings and blocks, edits, marks arrivals (and sometimes forgets), restores, voids and rejects (one court of a pair
+or both), and calls rain delays; rain-delayed guests pick a new time. After every step these must hold:
 
 1. no court-hour belongs to two bookings that hold the court (worked out from the bookings, not the slot table);
 2. the slot table holds exactly the hours of the bookings that should hold the court, and nothing else;
-3. a payment reference backs at most one booking;
+3. a payment reference backs at most one booking, a two-court one counting as one (its payment is on its first court);
 4. every filter chip's number equals what it lists, for every date choice;
-5. no unpaid hold is left waiting past its deadline.
+5. no unpaid hold is left waiting past its deadline, and the courts of a two-court hold are held and let go together.
 
 "Should hold the court" is `booking_service.holds_court`, the one definition the app, this test and the load test
 share. One fixed day plus 50 random days from fixed seeds: a failure names its seed and step, so it can be replayed with
@@ -123,15 +123,19 @@ class Day:
                 return ref
 
     # ── Players ───────────────────────────────────────────────────────────────
-    def player_books(self, ahead=None, hours=None, court=None, plan=None, phone=None, acts_after: int | None = None) -> str | None:
-        """A player holds a slot. `plan`: pay (in time), late (after the timer), leave (lets it go) or ignore (never
-        pays). `acts_after` (seconds) sets the moment exactly."""
+    def player_books(
+        self, ahead=None, hours=None, court=None, plan=None, phone=None, acts_after: int | None = None, courts: list[str] | None = None
+    ) -> str | None:
+        """A player holds a slot: one court, or (`courts`, or now and then by chance) both. `plan`: pay (in time), late
+        (after the timer), leave (lets it go) or ignore (never pays). `acts_after` (seconds) sets the moment exactly."""
         ahead = ahead if ahead is not None else self.rng.choice([1, 1, 2, 3, 4, 6, 9, 14, 20, 26])
         play_date, hour = self.hour_from_now(ahead)
         phone = phone or self.rng.choice(PHONES)
+        if courts is None:
+            courts = [court] if court else (list(COURTS) if self.rng.random() < 0.2 else [self.rng.choice(COURTS)])
         try:
             booking, token = core.create_booking(self.conn, CreateBookingIn(
-                court_id=court or self.rng.choice(COURTS), date=play_date, hour=hour, hours=hours or self.rng.choice([1, 1, 2, 2, 3]),
+                court_ids=courts, date=play_date, hour=hour, hours=hours or self.rng.choice([1, 1, 2, 2, 3]),
                 customer_name=self.rng.choice(NAMES), customer_phone=phone, payment_method="gcash",
                 consent=True, consent_version=settings.consent_version,
             ), ip=f"phone-{phone[-2:]}")
@@ -177,7 +181,11 @@ class Day:
                 self.refs.append(ref)
 
     def guests_rebook(self) -> None:
+        asked: set[str] = set()
         for row in self.rows("status = 'confirmed' AND weather_hold_at IS NOT NULL"):
+            if (row["group_id"] or row["code"]) in asked:
+                continue  # both courts of one booking: the guest moves it once (and it takes both along)
+            asked.add(row["group_id"] or row["code"])
             if self.rng.random() < 0.5 and row["customer_phone"]:
                 play_date, hour = self.hour_from_now(self.rng.randint(2, 30))
                 attempt(reschedule.reschedule, self.conn, RescheduleIn(
@@ -239,19 +247,21 @@ class Day:
     def desk_sorts_something_out(self) -> None:
         """The rarer desk actions: void, reject a payment, confirm an unpaid hold, delete a record."""
         action = self.rng.choice(["void", "reject", "confirm", "delete"])
+        both = self.rng.random() < 0.5  # for a two-court booking: both courts, or only the one picked
         if action == "void":
             row = self.pick(self.rows("status = 'confirmed'"))
             if row:
-                attempt(admin_service.cancel, self.conn, row["code"], "Duplicate")
+                attempt(admin_service.cancel, self.conn, row["code"], "Duplicate", both_courts=both)
         elif action == "reject":
             row = self.pick(self.rows("status = 'confirmed' AND source = 'online' AND submitted_at IS NOT NULL"))
             if row:
-                attempt(admin_service.reject, self.conn, row["code"], "Not in the app")
+                attempt(admin_service.reject, self.conn, row["code"], "Not in the app", both_courts=both)
         elif action == "confirm":  # paid the host in person: the player has nothing left to do
             row = self.pick(self.rows("status = 'held'"))
             if row:
+                codes = {r["code"] for r in core.group_rows(self.conn, row)}  # (the player knows it by its first court)
                 attempt(admin_service.confirm, self.conn, row["code"])
-                self.holds = [h for h in self.holds if h["code"] != row["code"]]
+                self.holds = [h for h in self.holds if h["code"] not in codes]
         else:
             row = self.pick(self.rows("status != 'held'"))
             if row:  # (its payment stays spent: the strict check in player_acts proves it)
@@ -292,11 +302,23 @@ class Day:
             "SELECT reference_number FROM bookings WHERE reference_number IS NOT NULL GROUP BY reference_number HAVING COUNT(*) > 1"
         ).fetchall()
         assert not twice, f"{self.where()}: references on two bookings: {[r[0] for r in twice]}"  # 3
+        # A two-court booking is one booking: its payment is kept on its first court only.
+        copied = self.conn.execute(
+            """SELECT code FROM bookings WHERE group_id IS NOT NULL AND group_id != id
+                 AND (reference_number IS NOT NULL OR receipt_sha256 IS NOT NULL)"""
+        ).fetchall()
+        assert not copied, f"{self.where()}: a second court stores the payment too: {[r[0] for r in copied]}"  # 3
 
     def check_no_stuck_holds(self) -> None:
         overdue = to_iso(self.now - timedelta(seconds=settings.hold_grace_seconds))
         stuck = self.conn.execute("SELECT code FROM bookings WHERE status = 'held' AND hold_expires_at <= ?", (overdue,)).fetchall()
         assert not stuck, f"{self.where()}: holds still waiting past their deadline: {[r[0] for r in stuck]}"  # 5
+        # The courts of a two-court hold share one timer: all of them still held, or none.
+        split = self.conn.execute(
+            """SELECT group_id FROM bookings WHERE group_id IS NOT NULL GROUP BY group_id
+               HAVING SUM(status = 'held') > 0 AND SUM(status != 'held') > 0"""
+        ).fetchall()
+        assert not split, f"{self.where()}: a two-court hold came apart: {[r[0] for r in split]}"  # 5
 
     def check_chips(self, full: bool) -> None:
         today = current_play_date(self.now)
@@ -358,6 +380,12 @@ def test_a_fixed_day(conn, fake_now):
     assert day.desk_adds(ahead=8, court="court-1", kind="block")  # 1 PM: net repair
     assert day.desk_adds(ahead=18, hours=3, court="court-1", name="Night owls")  # 11 PM - 2 AM
     assert day.desk_adds(ahead=23, court="court-2", name="Last game")  # 4 AM
+    # Both courts at once: 10 AM - 12 PM is free on both. 4 PM is free on Court 1 only (Court 2 has the rained-out
+    # booking), so a two-court booking then takes nothing.
+    pair = day.player_books(ahead=5, hours=2, plan="pay", phone=next(phones), courts=list(COURTS))
+    assert pair, day.last_refusal
+    assert day.player_books(ahead=11, hours=1, plan="pay", phone=next(phones), courts=list(COURTS)) is None
+    assert day.last_refusal == "slot_taken"
     day.settle(full=True)
     # 5:12: the slow payer's hold has run out, and a fast one takes 6 PM on Court 1 before the money arrives.
     day.advance(minutes=12)
@@ -368,6 +396,13 @@ def test_a_fixed_day(conn, fake_now):
     day.settle()
     assert status(revived)["status"] == "confirmed"  # the hour was still free: taken back
     assert status(slow)["status"] == "expired" and status(slow)["paid_late_at"]  # it wasn't: kept for the host
+    # One payment confirmed both courts of the pair, and its reference is stored once.
+    both = conn.execute("SELECT * FROM bookings WHERE group_id = ? ORDER BY court_id", (status(pair)["id"],)).fetchall()
+    assert [(r["court_id"], r["status"]) for r in both] == [("court-1", "confirmed"), ("court-2", "confirmed")]
+    assert [bool(r["reference_number"]) for r in both] == [True, False]
+    assert sorted(slots_of(both[0]["code"]) + slots_of(both[1]["code"])) == sorted(
+        [to_iso(slot_start(date(2026, 10, 10), h)) for h in (10, 11)] * 2
+    )
 
     while day.now < day.end:
         day.advance(minutes=10)

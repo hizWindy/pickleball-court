@@ -83,6 +83,30 @@ class _Seeder:
                     last = exc
         raise RuntimeError(f"No free slot found for {name} on {day}: {last}")
 
+    def pair(self, name: str, day: date, hour: int, hours: int = 2, paddles: bool = False) -> tuple[str, int]:
+        """Both courts at once, paid with one reference (trying later hours if either court is taken)."""
+        last: Exception | None = None
+        first = PLAY_DAY_HOURS.index(hour)
+        for i in range(first, min(first + 12, len(PLAY_DAY_HOURS) - hours + 1)):
+            h = PLAY_DAY_HOURS[i]
+            self.n += 1
+            try:
+                booking, token = core.create_booking(
+                    self.conn,
+                    CreateBookingIn(
+                        court_ids=list(COURTS), date=day, hour=h, hours=hours, paddles=paddles, customer_name=name,
+                        customer_phone=DEMO_PHONE, payment_method="gcash", consent=True,
+                        consent_version=settings.consent_version,
+                    ),
+                    ip=f"demo-{self.n}",
+                )
+            except (Conflict, BookingError) as exc:  # either court taken: try the next hour
+                last = exc
+                continue
+            core.submit_reference(self.conn, booking.code, token, ReferenceProofIn(reference_number=self.demo_reference(), payer_name=name))
+            return booking.code, h
+        raise RuntimeError(f"No hour with both courts free for {name} on {day}: {last}")
+
     def demo_reference(self, digits: int = 13) -> str:
         """A made-up reference that starts 9990 (so it is easy to spot) and passes the same checks a real one must:
         GCash's 13 numbers, or 16 for a MariBank one. A new one on every call. (Checked: none of the first 5,000 looks
@@ -179,6 +203,16 @@ def run(many: bool = False) -> list[tuple[str, str, str, str]]:
                 s.add(s.desk(name, later, hour, court=court), name, _label(later, hour), f"Walk-in on Court {court[-1]}: check its Schedule row")
         s.add(s.desk("Night Owls", later, 23, hours=3, court="court-1"), "Night Owls", _label(later, 23, 3), "Walk-in, 11 PM - 2 AM: runs past midnight")
 
+        # Both courts at once (release 4): one booking and one payment for the player, a card per court on the desk.
+        code, h = s.pair("Santos family", later, 20, paddles=True)
+        s.add(code, "Santos family", _label(later, h, 2), "Both courts, one payment (₱1,160 with paddles): two linked cards")
+        code, h = s.pair("Barkada Cup", tomorrow, 13)
+        second = conn.execute(
+            "SELECT code FROM bookings WHERE group_id = (SELECT id FROM bookings WHERE code = ?) AND code != ?", (code, code)
+        ).fetchone()["code"]
+        admin_service.cancel(conn, second, "Only one group came")
+        s.add(code, "Barkada Cup", _label(tomorrow, h, 2), "Both courts booked, then the host voided Court 2: the pass shows Court 1")
+
         # A court closed for repairs, and a group that never showed up.
         s.add(s.desk("Net repair", tomorrow, 6, hours=2, court="court-2", kind="block"), "Net repair", _label(tomorrow, 6, 2), "Blocked (under More → Blocked)")
         started = (now - timedelta(minutes=settings.late_after_minutes + 1)).astimezone(MANILA).replace(minute=0, second=0, microsecond=0)
@@ -218,7 +252,7 @@ def main() -> None:
     print(
         f"\nTry it:\n"
         f"  Guest : open the site > Check my booking > a code above + mobile {DEMO_PHONE}\n"
-        f"  Admin : /admin > Schedule (the edge hours) and Bookings (every chip)\n"
+        f"  Admin : /admin > Schedule (the edge hours, the linked two-court cards) and Bookings (every chip)\n"
         f"          /admin > Weather > Rebook guests > All of tomorrow (asks the 'Confirmed' guests to rebook)\n"
         f"Run this again any time for fresh demo bookings."
     )

@@ -121,21 +121,42 @@ interface SlotEval {
  * and whether the move is allowed. The booking's own hours count as open (they're given up when it moves).
  * Hours after 5 AM roll into the next play day, so a late start looks at the next day's grid too.
  */
+/** The courts a booking moves with: both, together, for a two-court booking (the ones still on). */
+function movingCourts(b: Booking): string[] {
+  const on = (b.courts ?? []).filter((c) => c.status === b.status).map((c) => c.courtId);
+  return on.length ? on : [b.courtId];
+}
+
 function evaluate(b: Booking, config: AppConfig, avail: Availability, nextAvail: Availability | null): SlotEval[] {
   const startMs = Date.parse(b.startAt);
   const endMs = Date.parse(b.endAt);
+  const mine = movingCourts(b);
   const at = (i: number) => (i < 24 ? avail.slots[i] : nextAvail?.slots[i - 24]);
-  const isOwn = (slot: SlotAvailability) => {
+  const isOwn = (courtId: string, slot: SlotAvailability) => {
     const t = Date.parse(slot.startAt);
-    return !b.weatherHold && slot.courts[b.courtId] === 'booked' && t >= startMs && t < endMs;
+    return !b.weatherHold && mine.includes(courtId) && slot.courts[courtId] === 'booked' && t >= startMs && t < endMs;
   };
-  const isFree = (courtId: string, slot: SlotAvailability | undefined) =>
-    !!slot && (slot.courts[courtId] === 'available' || (courtId === b.courtId && isOwn(slot)));
+  const isFree = (courtId: string, slot: SlotAvailability | undefined) => !!slot && (slot.courts[courtId] === 'available' || isOwn(courtId, slot));
+  // What can be picked: each court for a one-court booking; for two courts, the pair as one choice (both move together,
+  // so both must be free, and the price is theirs added up).
+  const pair = config.courts.filter((c) => mine.includes(c.id));
+  const choices: { court: CourtConfig; ids: string[] }[] =
+    mine.length > 1 && pair.length > 1
+      ? [{
+          court: {
+            id: pair[0].id,
+            name: pair.map((c) => c.name).join(' & '),
+            dayRate: pair.reduce((s, c) => s + c.dayRate, 0),
+            nightRate: pair.reduce((s, c) => s + c.nightRate, 0),
+          },
+          ids: pair.map((c) => c.id),
+        }]
+      : config.courts.map((court) => ({ court, ids: [court.id] }));
 
   return avail.slots.map((slot, i) => {
-    const options: CourtOption[] = config.courts.map((court) => {
+    const options: CourtOption[] = choices.map(({ court, ids }) => {
       let free = true;
-      for (let k = 0; k < b.hours && free; k++) free = isFree(court.id, at(i + k));
+      for (let k = 0; k < b.hours && free; k++) free = ids.every((id) => isFree(id, at(i + k)));
       let cost = 0;
       for (let k = 0; k < b.hours; k++) cost += isNightHour((slot.hour + k) % 24) ? court.nightRate : court.dayRate;
       const same = !b.weatherHold && court.id === b.courtId && Date.parse(slot.startAt) === startMs;
@@ -146,7 +167,7 @@ function evaluate(b: Booking, config: AppConfig, avail: Availability, nextAvail:
     const states = Object.values(slot.courts);
     let kind: SlotKind;
     if (ok.length) kind = 'ok';
-    else if (options.some((o) => o.free && o.same) || isOwn(slot)) kind = 'current';
+    else if (options.some((o) => o.free && o.same) || mine.some((id) => isOwn(id, slot))) kind = 'current';
     else if (options.some((o) => o.free && o.tooCostly)) kind = 'costs_more';
     else if (states.every((s) => s === 'past')) kind = 'past';
     else if (states.some((s) => s === 'available')) kind = 'short';
@@ -760,7 +781,7 @@ function TimeStep({
             </p>
           )}
           <p className="text-xs leading-relaxed text-zinc-500">
-            Times are greyed out when a court isn't free for all {hrsLabel(booking.hours)}, or when the slot costs more than the {peso(booking.courtCost)} you paid for court time.
+            Times are greyed out when {movingCourts(booking).length > 1 ? "your courts aren't both" : "a court isn't"} free for all {hrsLabel(booking.hours)}, or when the slot costs more than the {peso(booking.courtCost)} you paid for court time.
           </p>
         </>
       )}
@@ -787,13 +808,17 @@ function ReviewStep({
   const toTime = `${hourTimeLabel(hour)} – ${hourTimeLabel(endHour)}`;
   const option = selected?.options.find((o) => o.court.id === courtId) ?? null;
   const cheaperBy = option ? booking.courtCost - option.cost : 0;
+  const pair = movingCourts(booking).length > 1;
 
   return (
     <div className="space-y-5">
-      <StepTitle title="Choose your court and confirm" subtitle="Check the new time. This is the last step." />
+      <StepTitle
+        title={pair ? 'Check your courts and confirm' : 'Choose your court and confirm'}
+        subtitle={pair ? 'Both courts move to the new time together. This is the last step.' : 'Check the new time. This is the last step.'}
+      />
 
       <section>
-        <h4 className="mb-2 text-sm font-semibold text-zinc-800">Court</h4>
+        <h4 className="mb-2 text-sm font-semibold text-zinc-800">{pair ? 'Courts' : 'Court'}</h4>
         {loading || !selected ? (
           <div className="h-[72px] animate-pulse rounded-2xl bg-zinc-100" />
         ) : (
@@ -822,11 +847,11 @@ function ReviewStep({
                         {o.same
                           ? 'Your current slot'
                           : !o.free
-                          ? 'Not free for the whole session'
+                          ? pair ? 'Not both free for the whole session' : 'Not free for the whole session'
                           : o.tooCostly
                           ? `Costs ${peso(o.cost - booking.courtCost)} more than you paid`
                           : o.court.id === booking.courtId
-                          ? 'Your court'
+                          ? pair ? 'Your courts, together' : 'Your court'
                           : 'Open'}
                       </span>
                     </div>

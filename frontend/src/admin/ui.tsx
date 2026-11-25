@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Check, Copy, Loader2, X } from 'lucide-react';
+import { Check, Copy, Link2, Loader2, X } from 'lucide-react';
 import { cx } from '../components/booking/ui';
 import { LABEL, type AdminLabel, type Tone } from './format';
 
@@ -49,6 +49,14 @@ export const LabelBadge: React.FC<{ label: AdminLabel; className?: string }> = (
 export const Tag: React.FC<{ tone?: Tone; children: React.ReactNode; className?: string }> = ({ tone = 'zinc', children, className }) => (
   <span className={cx('inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1', TONES[tone].pill, className)}>{children}</span>
 );
+
+/** "2 courts": this booking is one court of a booking made for both at once (its other court is linked to it). */
+export const CourtsTag: React.FC<{ linked: unknown[]; className?: string }> = ({ linked, className }) =>
+  linked.length ? (
+    <Tag tone="dark" className={cx('gap-1', className)}>
+      <Link2 className="h-3 w-3" aria-hidden /> {linked.length + 1} courts
+    </Tag>
+  ) : null;
 
 // ── Buttons ───────────────────────────────────────────────────────────────────
 type Variant = 'primary' | 'dark' | 'danger' | 'outline' | 'ghost';

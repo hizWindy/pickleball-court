@@ -219,6 +219,9 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
   };
 
   const sched = booking ? fmtSchedule(booking.startAt, booking.endAt) : null;
+  // Both courts at once: one hold, one payment for the two
+  const courts = booking?.courts ?? [];
+  const pair = courts.length > 1;
   const isGcash = booking?.paymentMethod === 'gcash';
   // The app the player pays in, by its own name (never "GoTyme" for anything that isn't GCash).
   const appName = account?.label ?? (booking ? paymentLabel(booking.paymentMethod) : 'GCash');
@@ -339,7 +342,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
           <div className="flex items-center gap-4">
             <TimerRing left={left} total={totalMs} />
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#D2EE5E]">Slot on hold</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#D2EE5E]">{pair ? 'Both courts on hold' : 'Slot on hold'}</p>
               <h2 id="pay-title" className="text-lg font-bold leading-tight">Complete your payment</h2>
               {booking && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
@@ -407,7 +410,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                 <div>
                   <h3 className="text-lg font-bold text-zinc-950">Time's up</h3>
                   <p className="mt-1 text-sm text-zinc-600">
-                    The {holdMinutes}-minute window ended, so the slot was released.{' '}
+                    The {holdMinutes}-minute window ended, so {pair ? 'both courts were' : 'the slot was'} released.{' '}
                     {canPayLate
                       ? 'Already sent the money? Enter your reference: if the slot is still free, it is yours.'
                       : 'If you already sent money, contact the host with your receipt.'}
@@ -468,6 +471,11 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                   ) : null}
                   <Row label="Exact amount" value={pesoExact(booking.total)} strong copy={booking.total.toFixed(2)} />
                   <p className="rounded-2xl bg-amber-50 px-3 py-2.5 text-xs font-medium leading-relaxed text-amber-950 ring-1 ring-amber-100">
+                    {pair && (
+                      <>
+                        One payment for both courts ({courts.map((c) => `${c.courtName} ${pesoExact(c.total)}`).join(' + ')}).{' '}
+                      </>
+                    )}
                     Send the exact amount shown. The host checks every payment in {account?.label ?? 'GCash'}.
                   </p>
                   <p className="rounded-2xl bg-zinc-50 px-3 py-2.5 text-xs leading-relaxed text-zinc-600">

@@ -22,6 +22,12 @@ Lifecycle:
   is held. The table's primary key makes double booking impossible.
 * The hold deadline lives in the database; clients only display a countdown to it.
 * Expired holds and late bookings are released lazily on every request and by a background sweep.
+
+Two courts at once (plan item 11): each court is its own row, as at the desk (Schedule, Arrived, Late, rain delay and
+the per-court figures work as for any booking), and the rows share a `group_id`: the id of the first court's row, the
+"lead". The player sees one booking under the lead's code and pays once for all of it; the payment (reference or
+receipt) is stored on the lead row only, so one payment still backs one booking. The rows are created together or not
+at all, share one timer, and expire, are paid and are let go together. The host can still end one court on its own.
 """
 
 from __future__ import annotations
@@ -42,6 +48,7 @@ from app.db import write_transaction
 from app.errors import BookingError, Conflict, Gone, NotFound, TooMany
 from app.schemas import (
     AvailabilityOut,
+    BookingCourtOut,
     BookingOut,
     ConfigOut,
     CourtOut,
@@ -69,6 +76,45 @@ HOLDS_COURT_SQL = "(status IN ('held', 'pending_verification', 'confirmed') AND 
 def holds_court(row: sqlite3.Row | dict) -> bool:
     """`HOLDS_COURT_SQL` for one booking row."""
     return row["status"] in ACTIVE_STATUSES and not row["released_at"]
+
+
+# ── Two courts at once ────────────────────────────────────────────────────────
+# What only the lead row stores: the payment itself. The unique indexes on these keep one payment to one booking.
+PAYMENT_FIELDS = ("reference_number", "receipt_path", "receipt_sha256")
+
+
+def group_rows(conn: sqlite3.Connection, row: sqlite3.Row) -> list[sqlite3.Row]:
+    """Every court of the booking this row belongs to, in court order: just the row itself for a one-court booking."""
+    if not row["group_id"]:
+        return [row]
+    return conn.execute(
+        """SELECT b.* FROM bookings b JOIN courts c ON c.id = b.court_id
+           WHERE b.group_id = ? ORDER BY c.sort_order, b.court_id""",
+        (row["group_id"],),
+    ).fetchall()
+
+
+def lead_row(conn: sqlite3.Connection, row: sqlite3.Row) -> sqlite3.Row:
+    """The row a booking is known by: for two courts, the first court's (its code is the one the player has, and the
+    payment is stored on it). The row itself for a one-court booking, or when the host has deleted the lead."""
+    if not row["group_id"] or row["group_id"] == row["id"]:
+        return row
+    return conn.execute("SELECT * FROM bookings WHERE id = ?", (row["group_id"],)).fetchone() or row
+
+
+def lead_first(rows: list[sqlite3.Row], lead: sqlite3.Row) -> list[sqlite3.Row]:
+    return sorted(rows, key=lambda r: r["id"] != lead["id"])  # stable: the others keep their court order
+
+
+def same_state(conn: sqlite3.Connection, lead: sqlite3.Row) -> list[sqlite3.Row]:
+    """The lead and every other court of its booking in the same state (all held, all expired...), lead first: the rows
+    one payment or one "let go" acts on. Courts the host ended on their own are left alone."""
+    return lead_first([r for r in group_rows(conn, lead) if r["status"] == lead["status"]], lead)
+
+
+def current_rows(rows: list[sqlite3.Row]) -> list[sqlite3.Row]:
+    """The courts a booking stands for now: those still on (held or paid), or all of them when none is."""
+    return [r for r in rows if r["status"] in ACTIVE_STATUSES] or list(rows)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -123,8 +169,11 @@ def release_expired(conn: sqlite3.Connection, now: datetime | None = None) -> in
     Returns the number of holds expired. Must run inside a write transaction."""
     now = now or clock.now()
     cutoff = to_iso(now - timedelta(seconds=settings.hold_grace_seconds))
+    # The courts of a two-court booking share one timer: when one runs out, they all do.
     rows = conn.execute(
-        "SELECT id FROM bookings WHERE status = 'held' AND hold_expires_at <= ?", (cutoff,)
+        """SELECT id FROM bookings WHERE status = 'held' AND (hold_expires_at <= ? OR group_id IN (
+               SELECT group_id FROM bookings WHERE status = 'held' AND group_id IS NOT NULL AND hold_expires_at <= ?))""",
+        (cutoff, cutoff),
     ).fetchall()
     for row in rows:
         conn.execute(
@@ -189,8 +238,16 @@ def sweep(conn: sqlite3.Connection) -> int:
         return release_expired(conn)
 
 
-def claim_slots(conn: sqlite3.Connection, court_name: str, court_id: str, items: list, booking_id: str) -> None:
-    """Take one `booking_slots` row per hour. The primary key turns a clash into a clean Conflict."""
+TAKEN = "{court} at {time} was just taken. Please choose another time or court."
+# A clash on either court of a two-court booking rolls back the whole write: the player is told which court and hour.
+TAKEN_BOTH = "{court} at {time} was just taken, so neither court was booked. Please choose another time, or book one court."
+
+
+def claim_slots(
+    conn: sqlite3.Connection, court_name: str, court_id: str, items: list, booking_id: str, *, taken: str = TAKEN
+) -> None:
+    """Take one `booking_slots` row per hour. The primary key turns a clash into a clean Conflict (worded by `taken`),
+    which rolls back the whole write."""
     for item in items:
         try:
             conn.execute(
@@ -199,7 +256,7 @@ def claim_slots(conn: sqlite3.Connection, court_name: str, court_id: str, items:
             )
         except sqlite3.IntegrityError:
             label = item.start.astimezone(MANILA).strftime("%I:%M %p").lstrip("0")
-            raise Conflict("slot_taken", f"{court_name} at {label} was just taken. Please choose another time or court.") from None
+            raise Conflict("slot_taken", taken.format(court=court_name, time=label)) from None
 
 
 def purge_old_receipts(conn: sqlite3.Connection, now: datetime | None = None) -> int:
@@ -245,6 +302,13 @@ def reschedule_state(row: sqlite3.Row, now: datetime) -> str:
     return "open"
 
 
+def booking_reschedule_state(rows: list[sqlite3.Row], now: datetime) -> str:
+    """`reschedule_state` for a whole booking (its courts still on, the one it is shown by first). A rain delay on any of
+    its courts lets the guest move it, and a move takes all of its courts along."""
+    states = [reschedule_state(r, now) for r in rows]
+    return "weather" if "weather" in states else states[0]
+
+
 def _pending_info(conn: sqlite3.Connection, row: sqlite3.Row) -> tuple[str | None, float | None]:
     """Why a payment is waiting for the host, and the amount the receipt showed."""
     if row["status"] != "pending_verification":
@@ -262,44 +326,64 @@ def _pending_info(conn: sqlite3.Connection, row: sqlite3.Row) -> tuple[str | Non
     return None, amount
 
 
+def _is_late(row: sqlite3.Row) -> bool:
+    return row["status"] == "confirmed" and bool(row["late_at"]) and not row["weather_hold_at"]
+
+
 def to_view(conn: sqlite3.Connection, row: sqlite3.Row, now: datetime | None = None) -> BookingOut:
+    """The booking as the player sees it: one booking, whether it is one court or two. Found by any of its courts, it
+    is shown under the lead's code. If the host ended one court on its own, the booking describes the courts still on
+    (`courts` lists each one with its own status)."""
     now = now or clock.now()
-    court = conn.execute("SELECT * FROM courts WHERE id = ?", (row["court_id"],)).fetchone()
-    start = from_iso(row["start_at"])
-    items = price_hours(start, row["hours"], court["day_rate"], court["night_rate"])
-    pending_reason, amount_paid = _pending_info(conn, row)
+    lead = lead_row(conn, row)
+    rows = group_rows(conn, lead)
+    on = current_rows(rows)
+    main = next((r for r in on if r["id"] == lead["id"]), on[0])  # the court the booking's own fields come from
+    on = lead_first(on, main)
+    courts = {c["id"]: c for c in conn.execute("SELECT * FROM courts")}
+    start = from_iso(main["start_at"])
+    items = [
+        LineItemOut(start_at=to_iso(i.start), rate=i.rate, rate_type=i.rate_type, court_id=r["court_id"])
+        for r in on
+        for i in price_hours(from_iso(r["start_at"]), r["hours"], courts[r["court_id"]]["day_rate"], courts[r["court_id"]]["night_rate"])
+    ]
+    pending_reason, amount_paid = _pending_info(conn, lead)
     return BookingOut(
-        code=row["code"],
-        status=row["status"],
-        court_id=row["court_id"],
-        court_name=court["name"],
+        code=lead["code"],
+        status=main["status"],
+        court_id=main["court_id"],
+        court_name=" & ".join(courts[r["court_id"]]["name"] for r in on),
+        courts=[
+            BookingCourtOut(court_id=r["court_id"], court_name=courts[r["court_id"]]["name"], status=r["status"], total=r["total"])
+            for r in rows
+        ],
         play_date=play_date_of(start),
-        start_at=row["start_at"],
-        end_at=to_iso(start + timedelta(hours=row["hours"])),
-        hours=row["hours"],
-        customer_name=row["customer_name"],
-        customer_phone_masked=mask_phone(row["customer_phone"]),
-        payment_method=row["payment_method"],
-        paddles=bool(row["paddles"]),
-        line_items=[LineItemOut(start_at=to_iso(i.start), rate=i.rate, rate_type=i.rate_type) for i in items],
-        court_cost=row["court_cost"],
-        addons_cost=row["addons_cost"],
-        total=row["total"],
-        created_at=row["created_at"],
-        hold_expires_at=row["hold_expires_at"],
-        submitted_at=row["submitted_at"],
-        proof_type=row["proof_type"],
-        closed_at=row["closed_at"],
+        start_at=main["start_at"],
+        end_at=to_iso(start + timedelta(hours=main["hours"])),
+        hours=main["hours"],
+        customer_name=lead["customer_name"],
+        customer_phone_masked=mask_phone(lead["customer_phone"]),
+        payment_method=lead["payment_method"],
+        paddles=bool(lead["paddles"]),
+        line_items=items,
+        court_cost=sum(r["court_cost"] for r in on),
+        addons_cost=sum(r["addons_cost"] for r in on),
+        total=sum(r["total"] for r in on),
+        created_at=lead["created_at"],
+        hold_expires_at=lead["hold_expires_at"],
+        submitted_at=lead["submitted_at"] or main["submitted_at"],
+        proof_type=lead["proof_type"] or main["proof_type"],
+        closed_at=main["closed_at"],
         server_now=to_iso(now),
-        arrived=bool(row["arrived_at"]),
-        late=row["status"] == "confirmed" and bool(row["late_at"]) and not row["weather_hold_at"],
-        weather_hold=row["status"] == "confirmed" and bool(row["weather_hold_at"]),
-        paid_late=row["status"] == "expired" and bool(row["paid_late_at"]),
-        reschedule=reschedule_state(row, now),
-        reschedule_count=row["reschedule_count"],
+        arrived=any(r["arrived_at"] for r in on),
+        late=all(_is_late(r) for r in on),  # Late only when no court of it is on time
+        weather_hold=any(r["status"] == "confirmed" and r["weather_hold_at"] for r in on),
+        paid_late=main["status"] == "expired" and bool(main["paid_late_at"]),
+        reschedule=booking_reschedule_state(on, now),
+        reschedule_count=main["reschedule_count"],
         pending_reason=pending_reason,
         amount_paid=amount_paid,
-        payment_reference=row["reference_number"] if row["submitted_at"] else None,
+        payment_reference=lead["reference_number"] if lead["submitted_at"] else None,
     )
 
 
@@ -423,39 +507,46 @@ def create_booking(conn: sqlite3.Connection, data: CreateBookingIn, ip: str) -> 
     with write_transaction(conn):
         release_expired(conn, now)
 
-        court = conn.execute("SELECT * FROM courts WHERE id = ? AND active = 1", (data.court_id,)).fetchone()
-        if court is None:
-            raise BookingError("court_invalid", "That court isn't available.")
+        courts = []
+        for court_id in data.court_ids:
+            court = conn.execute("SELECT * FROM courts WHERE id = ? AND active = 1", (court_id,)).fetchone()
+            if court is None:
+                raise BookingError("court_invalid", "That court isn't available.")
+            courts.append(court)
+        courts.sort(key=lambda c: (c["sort_order"], c["id"]))
 
         # A mobile number is not one player: families and groups share one, so it may hold several times.
-        # The per-device cap below is what stops one visitor from sitting on many hours.
+        # The per-device cap below is what stops one visitor from sitting on many hours. Two courts are one booking.
         holds_by_ip = conn.execute(
-            "SELECT COUNT(*) FROM bookings WHERE status = 'held' AND client_ip = ?", (ip,)
+            "SELECT COUNT(DISTINCT COALESCE(group_id, id)) FROM bookings WHERE status = 'held' AND client_ip = ?", (ip,)
         ).fetchone()[0]
         if holds_by_ip >= settings.max_active_holds_per_ip:
             raise TooMany("hold_limit", "Too many bookings are waiting for payment from this device. Finish one first.")
 
-        items = price_hours(start, data.hours, court["day_rate"], court["night_rate"])
-        court_cost = sum(i.rate for i in items)
-        addons_cost = settings.paddle_fee if data.paddles else 0
-        booking_id = str(uuid.uuid4())
-        code = new_code(conn)
-        conn.execute(
-            """INSERT INTO bookings (
-                   id, code, status, court_id, start_at, hours, customer_name, customer_phone,
-                   payment_method, paddles, court_cost, addons_cost, total, consent_at, consent_version,
-                   marketing_opt_in, client_ip, created_at, hold_expires_at)
-               VALUES (?, ?, 'held', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                booking_id, code, court["id"], to_iso(start), data.hours, data.customer_name, data.customer_phone,
-                data.payment_method, int(data.paddles), court_cost, addons_cost, court_cost + addons_cost,
-                to_iso(now), data.consent_version, int(data.marketing_opt_in), ip, to_iso(now),
-                to_iso(now + timedelta(minutes=settings.hold_minutes)),
-            ),
-        )
-        claim_slots(conn, court["name"], court["id"], items, booking_id)
-        token = _issue_token(conn, booking_id, now)
-        row = conn.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,)).fetchone()
+        # One row per court, all with the same hours, timer and player. Each court is priced on its own, and the paddle
+        # rental is per court (plan D5): one payment pays the sum. Any clash rolls the whole booking back.
+        ids = [str(uuid.uuid4()) for _ in courts]
+        both = len(courts) > 1
+        for booking_id, court in zip(ids, courts):
+            items = price_hours(start, data.hours, court["day_rate"], court["night_rate"])
+            court_cost = sum(i.rate for i in items)
+            addons_cost = settings.paddle_fee if data.paddles else 0
+            conn.execute(
+                """INSERT INTO bookings (
+                       id, code, status, court_id, start_at, hours, customer_name, customer_phone,
+                       payment_method, paddles, court_cost, addons_cost, total, consent_at, consent_version,
+                       marketing_opt_in, client_ip, created_at, hold_expires_at, group_id)
+                   VALUES (?, ?, 'held', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    booking_id, new_code(conn), court["id"], to_iso(start), data.hours, data.customer_name,
+                    data.customer_phone, data.payment_method, int(data.paddles), court_cost, addons_cost,
+                    court_cost + addons_cost, to_iso(now), data.consent_version, int(data.marketing_opt_in), ip,
+                    to_iso(now), to_iso(now + timedelta(minutes=settings.hold_minutes)), ids[0] if both else None,
+                ),
+            )
+            claim_slots(conn, court["name"], court["id"], items, booking_id, taken=TAKEN_BOTH if both else TAKEN)
+        token = _issue_token(conn, ids[0], now)
+        row = conn.execute("SELECT * FROM bookings WHERE id = ?", (ids[0],)).fetchone()
     return to_view(conn, row, now), token
 
 
@@ -465,55 +556,68 @@ PAID_AFTER_EXPIRY = (
 )
 
 
-def _held_for_proof(conn: sqlite3.Connection, code: str, token: str | None, now: datetime) -> tuple[sqlite3.Row, bool]:
-    """The booking a payment is for, and whether its hold has already run out. A payment that comes in up to
-    `late_payment_minutes` after the deadline is still taken (see `_settle_late_payment`); later than that, the hold is
-    simply over."""
+def _held_for_proof(
+    conn: sqlite3.Connection, code: str, token: str | None, now: datetime
+) -> tuple[list[sqlite3.Row], bool]:
+    """The booking a payment is for (every court of it, lead first), and whether its hold has already run out. A
+    payment that comes in up to `late_payment_minutes` after the deadline is still taken (see `_settle_late_payment`);
+    later than that, the hold is simply over."""
     release_expired(conn, now)
-    row = _authorized(conn, code, token)
+    row = lead_row(conn, _authorized(conn, code, token))
     if row["status"] == "expired":
         if row["submitted_at"]:  # a late payment for it is already on record
             raise Conflict("already_submitted", "Payment proof was already submitted for this booking.")
         if now - from_iso(row["hold_expires_at"]) > timedelta(minutes=settings.late_payment_minutes):
             raise Gone("hold_expired", f"Your {settings.hold_minutes}-minute hold ran out, so the slot was released. Please book again.")
-        return row, True
+        return same_state(conn, row), True
     if row["submitted_at"] and row["status"] in ("pending_verification", "confirmed"):
         raise Conflict("already_submitted", "Payment proof was already submitted for this booking.")
     if row["status"] != "held":
         raise Conflict("not_held", "This booking is no longer waiting for payment.")
-    return row, False
+    return same_state(conn, row), False
 
 
-def _settle_late_payment(conn: sqlite3.Connection, row: sqlite3.Row, now: datetime) -> bool:
-    """A payment arrived after the hold ran out (plan item 9). If its hours are all still free, take them back: the
-    booking is held again and the payment confirms it as usual (True). If someone else has any of them, nothing is
-    taken (False): the caller keeps the payment on the expired booking for the host. Inside the write transaction, so
-    nobody can take the hours between the look and the claim."""
-    court = conn.execute("SELECT * FROM courts WHERE id = ?", (row["court_id"],)).fetchone()
-    items = price_hours(from_iso(row["start_at"]), row["hours"], court["day_rate"], court["night_rate"])
-    starts = [to_iso(i.start) for i in items]
-    marks = ",".join("?" * len(starts))
-    if conn.execute(f"SELECT 1 FROM booking_slots WHERE court_id = ? AND slot_start IN ({marks})", (court["id"], *starts)).fetchone():
-        return False
-    claim_slots(conn, court["name"], court["id"], items, row["id"])
-    conn.execute("UPDATE bookings SET status = 'held', closed_at = NULL, close_reason = NULL WHERE id = ?", (row["id"],))
-    record_event(conn, row["code"], "paid_after_timer", f"Paid {_late_by(row, now)} after the hold ran out; the hours were still free", now)
+def _settle_late_payment(conn: sqlite3.Connection, rows: list[sqlite3.Row], now: datetime) -> bool:
+    """A payment arrived after the hold ran out (plan item 9). If the booking's hours are all still free (on every one
+    of its courts), take them back: the booking is held again and the payment confirms it as usual (True). If someone
+    else has any of them, nothing is taken (False): the caller keeps the payment on the expired booking for the host.
+    Inside the write transaction, so nobody can take the hours between the look and the claim."""
+    claims = []
+    for row in rows:
+        court = conn.execute("SELECT * FROM courts WHERE id = ?", (row["court_id"],)).fetchone()
+        items = price_hours(from_iso(row["start_at"]), row["hours"], court["day_rate"], court["night_rate"])
+        starts = [to_iso(i.start) for i in items]
+        marks = ",".join("?" * len(starts))
+        if conn.execute(f"SELECT 1 FROM booking_slots WHERE court_id = ? AND slot_start IN ({marks})", (court["id"], *starts)).fetchone():
+            return False
+        claims.append((row, court, items))
+    for row, court, items in claims:
+        claim_slots(conn, court["name"], court["id"], items, row["id"])  # all free: checked just above
+        conn.execute("UPDATE bookings SET status = 'held', closed_at = NULL, close_reason = NULL WHERE id = ?", (row["id"],))
+        record_event(conn, row["code"], "paid_after_timer", f"Paid {_late_by(row, now)} after the hold ran out; the hours were still free", now)
     return True
 
 
-def _keep_late_payment(conn: sqlite3.Connection, row: sqlite3.Row, now: datetime, **fields: object) -> None:
+def _own_fields(fields: dict[str, object], lead: bool) -> dict[str, object]:
+    """What one court's row stores of a payment: all of it on the lead row, all but the payment itself on the others."""
+    return fields if lead else {k: v for k, v in fields.items() if k not in PAYMENT_FIELDS}
+
+
+def _set(conn: sqlite3.Connection, booking_id: str, sql: str, args: tuple, fields: dict[str, object]) -> None:
+    cols = "".join(f", {k} = ?" for k in fields)
+    conn.execute(f"UPDATE bookings SET {sql}{cols} WHERE id = ?", (*args, *fields.values(), booking_id))
+
+
+def _keep_late_payment(conn: sqlite3.Connection, rows: list[sqlite3.Row], now: datetime, **fields: object) -> None:
     """Someone else has the hours: the booking stays expired, but the payment is kept on it for the host to move it to
-    a free time or refund it. The reference stays spent like any other."""
-    cols = ", ".join(f"{k} = ?" for k in fields)
-    conn.execute(
-        f"UPDATE bookings SET submitted_at = ?, paid_late_at = ?, {cols} WHERE id = ?",
-        (to_iso(now), to_iso(now), *fields.values(), row["id"]),
-    )
-    record_event(
-        conn, row["code"], "paid_late",
-        f"Paid {_late_by(row, now)} after the hold ran out, but someone else had booked the slot. Move it to a free time or refund it.",
-        now,
-    )
+    a free time or refund it. The reference stays spent like any other. Every court of it shows Paid late."""
+    for i, row in enumerate(rows):
+        _set(conn, row["id"], "submitted_at = ?, paid_late_at = ?", (to_iso(now), to_iso(now)), _own_fields(fields, i == 0))
+        record_event(
+            conn, row["code"], "paid_late",
+            f"Paid {_late_by(row, now)} after the hold ran out, but someone else had booked the slot. Move it to a free time or refund it.",
+            now,
+        )
 
 
 def _late_by(row: sqlite3.Row, now: datetime) -> str:
@@ -521,14 +625,15 @@ def _late_by(row: sqlite3.Row, now: datetime) -> str:
     return f"{seconds // 60} min {seconds % 60} s" if seconds >= 60 else f"{seconds} s"
 
 
-def _confirm_with_proof(conn: sqlite3.Connection, booking_id: str, now: datetime, flags: list, **fields: object) -> None:
-    """Proof in hand: the booking is confirmed now. Anything that looked off is kept as notes for the host."""
-    cols = ", ".join(f"{k} = ?" for k in fields)
-    conn.execute(
-        f"""UPDATE bookings SET status = 'confirmed', submitted_at = ?, decided_at = ?, client_ip = NULL,
-               review_flags = ?, {cols} WHERE id = ?""",
-        (to_iso(now), to_iso(now), json.dumps([{"code": f.code, "message": f.message} for f in flags]), *fields.values(), booking_id),
-    )
+def _confirm_with_proof(conn: sqlite3.Connection, rows: list[sqlite3.Row], now: datetime, flags: list, **fields: object) -> None:
+    """Proof in hand: the booking is confirmed now, every court of it (`rows`, lead first). The payment itself is
+    stored on the lead row only. Anything that looked off is kept as notes for the host."""
+    notes = json.dumps([{"code": f.code, "message": f.message} for f in flags])
+    for i, row in enumerate(rows):
+        _set(
+            conn, row["id"], "status = 'confirmed', submitted_at = ?, decided_at = ?, client_ip = NULL, review_flags = ?",
+            (to_iso(now), to_iso(now), notes), _own_fields(fields, i == 0),
+        )
 
 
 def payment_used(conn: sqlite3.Connection, *, reference: str | None = None, receipt_sha256: str | None = None, exclude_id: str | None = None) -> str | None:
@@ -549,11 +654,12 @@ def _last4(value: str) -> str | None:
     return digits[-4:] if len(digits) >= 4 else None
 
 
-def expected_payment(row: sqlite3.Row, now: datetime) -> receipt_reader.Expected:
-    """A genuine payment for this booking: its total, made during the hold, to one of the club's accounts."""
+def expected_payment(row: sqlite3.Row, now: datetime, total: int | None = None) -> receipt_reader.Expected:
+    """A genuine payment for this booking: its total (`total`: all of its courts), made during the hold, to one of the
+    club's accounts."""
     accounts = [a for a in settings.payment_accounts if a.enabled]
     return receipt_reader.Expected(
-        total=row["total"],
+        total=row["total"] if total is None else total,
         window_start=from_iso(row["created_at"]),
         window_end=now,
         tolerance=timedelta(minutes=settings.paid_time_tolerance_minutes),
@@ -583,7 +689,8 @@ def submit_receipt(
     kept_late = False
     try:
         with write_transaction(conn):
-            row, late = _held_for_proof(conn, code, token, now)
+            rows, late = _held_for_proof(conn, code, token, now)
+            row = rows[0]  # the lead: the receipt is stored on it
             if payment_used(conn, receipt_sha256=digest):
                 raise Conflict(
                     "receipt_used", "This receipt was already used for another booking. Upload the receipt for this payment."
@@ -594,17 +701,18 @@ def submit_receipt(
                     "payment_used",
                     "This payment was already used for another booking. Upload the receipt for this booking's payment.",
                 )
-            flags = receipt_reader.assess(reading, expected_payment(row, now), engine_ran=lines is not None)
+            total = sum(r["total"] for r in rows)
+            flags = receipt_reader.assess(reading, expected_payment(row, now, total), engine_ran=lines is not None)
             stored = receipts.save(row["id"], data, ext, digest)
             proof = dict(
                 proof_type="receipt", receipt_path=stored.path, receipt_sha256=stored.sha256, payer_name=payer_name,
                 reference_number=ref, paid_at=to_iso(reading.paid_at) if reading and reading.paid_at else None,
             )
-            if late and not _settle_late_payment(conn, row, now):
-                _keep_late_payment(conn, row, now, review_flags=json.dumps([{"code": f.code, "message": f.message} for f in flags]), **proof)
+            if late and not _settle_late_payment(conn, rows, now):
+                _keep_late_payment(conn, rows, now, review_flags=json.dumps([{"code": f.code, "message": f.message} for f in flags]), **proof)
                 kept_late = True
             else:
-                _confirm_with_proof(conn, row["id"], now, flags, **proof)
+                _confirm_with_proof(conn, rows, now, flags, **proof)
             conn.execute(
                 """INSERT OR REPLACE INTO receipt_scans (booking_id, engine, provider, amount_centavos, reference, paid_at,
                        recipient_name, recipient_number, sender_name, sender_number, success, raw_text, duration_ms, created_at)
@@ -674,7 +782,8 @@ def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, dat
     now = clock.now()
     kept_late = False
     with write_transaction(conn):
-        row, late = _held_for_proof(conn, code, token, now)
+        rows, late = _held_for_proof(conn, code, token, now)
+        row = rows[0]  # the lead: the reference is stored on it, so one reference still backs one booking
         strike_key = f"reference:{row['code']}"
         if ratelimit.struck_out(strike_key, REFERENCE_TRIES, REFERENCE_TRIES_WINDOW):
             raise TooMany("reference_locked", REFERENCE_LOCKED)
@@ -701,11 +810,11 @@ def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, dat
         flags = receipt_reader.typed_flags() if settings.proof_mode == "receipt" else []
         proof = dict(proof_type="reference", reference_number=ref, paid_at=to_iso(paid_at) if paid_at else None, payer_name=data.payer_name)
         try:
-            if late and not _settle_late_payment(conn, row, now):
-                _keep_late_payment(conn, row, now, **proof)
+            if late and not _settle_late_payment(conn, rows, now):
+                _keep_late_payment(conn, rows, now, **proof)
                 kept_late = True
             else:
-                _confirm_with_proof(conn, row["id"], now, flags, **proof)
+                _confirm_with_proof(conn, rows, now, flags, **proof)
         except sqlite3.IntegrityError:  # the unique index is the last line of defence
             raise _refuse_reference(strike_key, row["code"], ref, "taken at the same moment") from None
         row = conn.execute("SELECT * FROM bookings WHERE id = ?", (row["id"],)).fetchone()
@@ -720,7 +829,7 @@ def release_hold(conn: sqlite3.Connection, code: str, token: str | None) -> Book
     now = clock.now()
     with write_transaction(conn):
         release_expired(conn, now)
-        row = _authorized(conn, code, token)
+        row = lead_row(conn, _authorized(conn, code, token))
         if row["status"] in ("cancelled", "expired", "rejected"):
             return to_view(conn, row, now)
         if row["status"] != "held":
@@ -729,12 +838,15 @@ def release_hold(conn: sqlite3.Connection, code: str, token: str | None) -> Book
                 "Paid bookings are final: there are no cancellations or refunds. You can reschedule once, at least "
                 f"{settings.reschedule_min_hours} hours before your start time, or message the host.",
             )
-        conn.execute(
-            "UPDATE bookings SET status = 'cancelled', closed_at = ?, close_reason = 'customer', client_ip = NULL WHERE id = ?",
-            (to_iso(now), row["id"]),
-        )
+        rows = same_state(conn, row)  # every court of it: they were held together
+        for r in rows:
+            conn.execute(
+                "UPDATE bookings SET status = 'cancelled', closed_at = ?, close_reason = 'customer', client_ip = NULL WHERE id = ?",
+                (to_iso(now), r["id"]),
+            )
         view = to_view(conn, conn.execute("SELECT * FROM bookings WHERE id = ?", (row["id"],)).fetchone(), now)
-        forget_hold(conn, row["id"])
+        for r in rows:
+            forget_hold(conn, r["id"])
     return view
 
 

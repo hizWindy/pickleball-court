@@ -5,7 +5,9 @@ Run it from backend/ (it starts its own server on a throwaway database, so the d
     .venv\\Scripts\\python scripts\\stress_double_booking.py
 
 Pass: one winner per court-hour, and no court-hour owned by two bookings (checked from the bookings themselves, not
-from the slot table that is supposed to prevent it). 2026-11-25: 98 requests, zero overlaps.
+from the slot table that is supposed to prevent it). Two-court bookings (release 4) race one-court bookings for the same
+hours: a two-court booking gets both courts or nothing. 2026-11-25: 98 requests, zero overlaps (before release 4); then
+177 requests with two-court bookings, zero overlaps and no two-court booking left with one court.
 """
 
 from __future__ import annotations
@@ -94,6 +96,14 @@ def overlaps(db_path: Path) -> tuple[list, int, int]:
     return clashes, len(owners), guard_rows
 
 
+def half_pairs(db_path: Path) -> list:
+    """Two-court bookings that ended up with only one court: there must be none (both courts or nothing)."""
+    db = sqlite3.connect(db_path)
+    rows = db.execute("SELECT group_id FROM bookings WHERE group_id IS NOT NULL GROUP BY group_id HAVING COUNT(*) != 2").fetchall()
+    db.close()
+    return [r[0] for r in rows]
+
+
 def main() -> None:
     data = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(tempfile.mkdtemp(prefix="housepickle-stress-"))
     shutil.rmtree(data, ignore_errors=True)
@@ -109,15 +119,19 @@ def main() -> None:
         desk_headers = {"X-HP-Admin": "1"}
         counter = iter(range(1, 10_000))
 
-        def player(court: str, hour: int, hours: int):
+        def player(court: str | list[str], hour: int, hours: int):
+            """One court ("court-1"), or both at once (["court-1", "court-2"])."""
             n = next(counter)
             ip = f"10.0.{n // 250}.{n % 250 + 1}"  # a different phone each time
             body = {
-                "courtId": court, "date": day, "hour": hour, "hours": hours, "paddles": False,
+                "date": day, "hour": hour, "hours": hours, "paddles": False,
                 "customerName": f"Player {n}", "customerPhone": "0917 123 4567", "paymentMethod": "gcash",
                 "consent": True, "consentVersion": "2026-10-v1",
+                **({"courtIds": court} if isinstance(court, list) else {"courtId": court}),
             }
             return lambda c: c.post(f"{BASE}/api/bookings", json=body, headers={"X-Forwarded-For": ip})
+
+        both = ["court-1", "court-2"]
 
         def desk_add(court: str, hour: int, hours: int, kind: str = "walk_in"):
             body = {"kind": kind, "courtId": court, "date": day, "hour": hour, "hours": hours,
@@ -144,10 +158,29 @@ def main() -> None:
         w3 = fire("Wave 3 (desk edit vs players for Court 1, 10 PM)", [desk_move(existing, hour=22)] + [player("court-1", 22, 1) for _ in range(15)])
         assert sum(1 for s in w3 if s in (200, 201)) == 1, "more than one booking won Court 1 at 10 PM"
 
+        # Wave 4: both courts at once (8-10 AM) against one-court bookings inside those hours, on either court.
+        jobs = [player(both, 8, 2) for _ in range(20)]
+        jobs += [player("court-1", 9, 1) for _ in range(8)] + [player("court-2", 8, 1) for _ in range(8)] + [desk_add("court-2", 9, 1)] * 4
+        w4 = fire("Wave 4 (two courts vs one court, 8-10 AM)", jobs)
+        pairs_won = sum(1 for s in w4[:20] if s == 201)
+        assert pairs_won <= 1, "two bookings of both courts won the same hours"
+        if pairs_won:  # then nothing else got in
+            assert sum(1 for s in w4[20:] if s == 201) == 0, "a one-court booking got in beside a two-court one"
+
+        # Wave 5: two-court bookings of different lengths overlapping each other and one-court bookings, 12-3 PM.
+        jobs = []
+        for _ in range(5):
+            jobs += [player(both, 12, 1), player(both, 12, 2), player(both, 13, 2), player("court-1", 14, 1), player("court-2", 13, 1)]
+        jobs += [desk_add("court-1", 12, 1), desk_add("court-2", 14, 1, "block")] * 2
+        w5 = fire("Wave 5 (overlapping two-court bookings, 12-3 PM)", jobs)
+
         clashes, owned, guard_rows = overlaps(data / "housepickle.db")
-        print(f"\nRequests fired: {len(w1) + len(w2) + len(w3)} | court-hours owned: {owned} | slot-table rows: {guard_rows}")
+        broken = half_pairs(data / "housepickle.db")
+        fired = len(w1) + len(w2) + len(w3) + len(w4) + len(w5)
+        print(f"\nRequests fired: {fired} | court-hours owned: {owned} | slot-table rows: {guard_rows}")
         print("Court-hours owned by two bookings:", clashes or "none")
-        assert not clashes and guard_rows == owned
+        print("Two-court bookings left with one court:", broken or "none")
+        assert not clashes and guard_rows == owned and not broken
         print("RESULT: no double booking under simultaneous load.")
     finally:
         server.terminate()

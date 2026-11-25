@@ -63,6 +63,17 @@ class EventOut(ApiModel):
     created_at: str
 
 
+class LinkedOut(ApiModel):
+    """The other court of a two-court booking."""
+
+    code: str
+    court_id: str
+    court_name: str
+    status: BookingStatus
+    label: AdminLabel
+    holds_court: bool
+
+
 class AdminBookingOut(ApiModel):
     code: str
     status: BookingStatus
@@ -110,6 +121,12 @@ class AdminBookingOut(ApiModel):
     restore_until: str | None  # end of that undo for a released Late booking; guests are never told about it
     can_mark_arrived: bool
     can_release: bool  # Late or rain-delayed and still holding its hours: Release court / Open these hours
+    # Both courts booked at once: each court is its own booking here (Arrived, Late, Release work per court), linked to
+    # the other. The player paid once, for both: `group_total`. The payment is stored on the first court's booking.
+    group_id: str | None = None
+    linked: list[LinkedOut] = []  # the other court(s) of the booking; empty for one court
+    group_total: int = 0  # the whole booking's price, every court of it (this booking's total for one court)
+    payment_code: str | None = None  # on the second court: the booking whose row holds the shared payment
 
 
 class AdminBookingDetail(AdminBookingOut):
@@ -207,6 +224,8 @@ class AdminUpdateIn(ApiModel):
 
 class ReasonIn(ApiModel):
     reason: str | None = Field(default=None, max_length=200)
+    # A two-court booking: reject or void both courts (true) or only this one (false, the default, as for one court)
+    both_courts: bool = False
 
 
 class NoteIn(ApiModel):

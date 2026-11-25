@@ -57,6 +57,22 @@ export function passState(booking: Booking): PassState {
   return { key: booking.status, ...STATUS_COPY[booking.status] };
 }
 
+/**
+ * The courts line of a pass: "Court 1", or "Court 1 & Court 2" for a booking of both. If the host ended one court of a
+ * two-court booking (the group was smaller, say), the pass shows the court still on and says the other one is off.
+ */
+export function courtsLine(booking: Booking): { label: string; value: string; note?: string } {
+  const courts = booking.courts ?? [];
+  const off = courts.filter((c) => c.status !== booking.status && (c.status === 'cancelled' || c.status === 'rejected'));
+  const on = Math.max(1, courts.length - off.length);
+  const names = off.map((c) => c.courtName).join(' & ');
+  return {
+    label: on > 1 ? 'Courts' : 'Court',
+    value: booking.courtName,
+    note: off.length ? `${names} ${off.length > 1 ? 'are' : 'is'} no longer part of this booking` : undefined,
+  };
+}
+
 /** The QR opens this booking on the site, so staff always see the live status, never a stale image. */
 export const passUrl = (code: string) => `${window.location.origin}/?pass=${encodeURIComponent(code)}`;
 
@@ -172,12 +188,16 @@ export async function renderPassPng(booking: Booking): Promise<Blob> {
 
   // Details grid
   const sched = fmtSchedule(booking.startAt, booking.endAt);
+  const courts = courtsLine(booking);
   const rows: [string, string][] = [
     ['PLAYER', booking.customerName],
-    ['COURT', booking.courtName],
+    [courts.label.toUpperCase(), booking.courtName],
     ['DATE', sched.note ? `${sched.day} (${sched.note})` : sched.day],
     ['TIME', `${sched.time}  ·  ${booking.hours} hr${booking.hours > 1 ? 's' : ''}`],
-    ['TOTAL', `${peso(booking.total)} via ${paymentLabel(booking.paymentMethod)}${booking.paddles ? '  ·  incl. paddles' : ''}`],
+    [
+      'TOTAL',
+      `${peso(booking.total)} via ${paymentLabel(booking.paymentMethod)}${booking.paddles ? `  ·  incl. paddles${courts.label === 'Courts' ? ' for each court' : ''}` : ''}`,
+    ],
   ];
   let y = 760;
   for (const [label, value] of rows) {

@@ -13,6 +13,7 @@ Bookings can't be cancelled. A paid booking moves in two ways:
 * proof of ownership is the booking code plus the mobile number on it, or this device's booking token.
 
 The move happens in one transaction: the old hours are given up and the new ones taken, or nothing changes.
+A two-court booking moves as one: both courts to the new time (the court choice is for one-court bookings), or neither.
 """
 
 from __future__ import annotations
@@ -31,19 +32,21 @@ from app.schemas import BookingOut, RescheduleIn, RescheduleLookupIn, Reschedule
 from app.slots import current_play_date, play_date_of, price_hours, slot_start
 
 _NOT_FOUND = "We couldn't find a booking with that code and mobile number."
+_TAKEN_BOTH = "{court} at {time} is taken, so neither court was moved. Please choose another time."
 
 
 def _owned(conn: sqlite3.Connection, data: RescheduleLookupIn, token: str | None) -> sqlite3.Row:
-    """The booking, if the caller can prove it is theirs. One answer for every way of being wrong."""
+    """The booking, if the caller can prove it is theirs. One answer for every way of being wrong. For two courts, the
+    lead row, whichever court's code was given: the player knows the booking by one code."""
     if token:
         try:
-            return core.authorized(conn, data.code, token)
+            return core.lead_row(conn, core.authorized(conn, data.code, token))
         except NotFound:
             pass  # a stale token on this device: fall back to the mobile number
     if data.customer_phone:
         row = conn.execute("SELECT * FROM bookings WHERE code = ?", (core.normalize_code(data.code),)).fetchone()
         if row is not None and row["customer_phone"] and hmac.compare_digest(row["customer_phone"], data.customer_phone):
-            return row
+            return core.lead_row(conn, row)
     raise NotFound("not_found", _NOT_FOUND)
 
 
@@ -78,7 +81,10 @@ def reschedule(conn: sqlite3.Connection, data: RescheduleIn, token: str | None) 
     with write_transaction(conn):
         core.release_expired(conn, now)
         row = _owned(conn, data, token)
-        state = core.reschedule_state(row, now)
+        # The courts that move: every court of the booking still on (the host may have ended one on its own)
+        rows = core.current_rows(core.group_rows(conn, row))
+        rows = core.lead_first(rows, next((r for r in rows if r["id"] == row["id"]), rows[0]))
+        state = core.booking_reschedule_state(rows, now)
         if state == "used":
             raise Conflict("reschedule_used", "This booking was already rescheduled once. Please message the host.")
         if state == "too_late":
@@ -90,10 +96,14 @@ def reschedule(conn: sqlite3.Connection, data: RescheduleIn, token: str | None) 
         if state == "unavailable":
             raise Conflict("reschedule_unavailable", "This booking can't be rescheduled online. Please message the host.")
 
-        court_id = data.court_id or row["court_id"]
-        court = conn.execute("SELECT * FROM courts WHERE id = ? AND active = 1", (court_id,)).fetchone()
-        if court is None:
-            raise BookingError("court_invalid", "That court isn't available.")
+        both = len(rows) > 1
+        moves = []  # (row, court it goes to)
+        for r in rows:
+            court_id = data.court_id if data.court_id and not both else r["court_id"]  # two courts keep their courts
+            court = conn.execute("SELECT * FROM courts WHERE id = ? AND active = 1", (court_id,)).fetchone()
+            if court is None:
+                raise BookingError("court_invalid", "That court isn't available.")
+            moves.append((r, court))
 
         earliest, latest = _date_range(row, now)
         if latest < earliest or not earliest <= data.date <= latest:
@@ -104,34 +114,39 @@ def reschedule(conn: sqlite3.Connection, data: RescheduleIn, token: str | None) 
         start = slot_start(data.date, data.hour)
         if start <= now:
             raise Conflict("slot_past", "That time has already started. Please pick a later slot.")
-        if (court["id"], to_iso(start)) == (row["court_id"], row["start_at"]) and not row["weather_hold_at"]:
+        weather = any(r["weather_hold_at"] for r in rows)
+        if all((c["id"], to_iso(start)) == (r["court_id"], r["start_at"]) for r, c in moves) and not weather:
             raise BookingError("same_slot", "That's the time you already have. Pick a different one.")
 
-        items = price_hours(start, row["hours"], court["day_rate"], court["night_rate"])
-        new_cost = sum(i.rate for i in items)
-        if new_cost > row["court_cost"]:
+        priced = [(r, c, price_hours(start, r["hours"], c["day_rate"], c["night_rate"])) for r, c in moves]
+        new_cost = sum(i.rate for _, _, items in priced for i in items)
+        paid = sum(r["court_cost"] for r in rows)
+        if new_cost > paid:
             raise BookingError(
                 "costs_more",
-                f"That time costs ₱{new_cost - row['court_cost']:,} more than your booking. "
+                f"That time costs ₱{new_cost - paid:,} more than your booking. "
                 "Pick a time at the same or a lower rate, or message the host.",
             )
 
-        old = (row["court_id"], row["start_at"])
         # The old hours go and the new ones are taken in one step (a rain-delayed booking keeps its old hours until now,
-        # unless the host opened them already: then there are none to give back, and that's fine).
-        core.release_slots(conn, row["id"])
-        core.claim_slots(conn, court["name"], court["id"], items, row["id"])  # a clash rolls the whole move back
-        weather = bool(row["weather_hold_at"])
-        conn.execute(
-            """UPDATE bookings SET court_id = ?, start_at = ?, reschedule_count = reschedule_count + ?,
-                   weather_hold_at = NULL, late_at = NULL, released_at = NULL, arrived_at = NULL WHERE id = ?""",
-            (court["id"], to_iso(start), 0 if weather else 1, row["id"]),
-        )
-        kept = f" (kept ₱{row['court_cost']:,} paid; the new slot costs ₱{new_cost:,})" if new_cost < row["court_cost"] else ""
-        core.record_event(
-            conn, row["code"], "rain_rescheduled" if weather else "guest_rescheduled",
-            f"{_label(conn, old[0], old[1])} → {court['name']} · {_stamp(to_iso(start))}{kept}", now,
-        )
+        # unless the host opened them already: then there are none to give back, and that's fine). All the old hours go
+        # first, so a booking can move onto hours it held itself.
+        for r in rows:
+            core.release_slots(conn, r["id"])
+        for r, court, items in priced:
+            # a clash rolls the whole move back
+            core.claim_slots(conn, court["name"], court["id"], items, r["id"], taken=_TAKEN_BOTH if both else core.TAKEN)
+            conn.execute(
+                """UPDATE bookings SET court_id = ?, start_at = ?, reschedule_count = reschedule_count + ?,
+                       weather_hold_at = NULL, late_at = NULL, released_at = NULL, arrived_at = NULL WHERE id = ?""",
+                (court["id"], to_iso(start), 0 if weather else 1, r["id"]),
+            )
+            own = sum(i.rate for i in items)
+            kept = f" (kept ₱{r['court_cost']:,} paid; the new slot costs ₱{own:,})" if own < r["court_cost"] else ""
+            core.record_event(
+                conn, r["code"], "rain_rescheduled" if weather else "guest_rescheduled",
+                f"{_label(conn, r['court_id'], r['start_at'])} → {court['name']} · {_stamp(to_iso(start))}{kept}", now,
+            )
         row = conn.execute("SELECT * FROM bookings WHERE id = ?", (row["id"],)).fetchone()
     return core.to_view(conn, row, now)
 

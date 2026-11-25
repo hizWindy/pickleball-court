@@ -164,12 +164,15 @@ def release_booking(code: str, data: NoteIn | None = None, conn: sqlite3.Connect
 
 @router.post("/bookings/{code}/reject", response_model=AdminBookingDetail, dependencies=Guard, **OUT)
 def reject_booking(code: str, data: ReasonIn | None = None, conn: sqlite3.Connection = Conn) -> AdminBookingDetail:
-    return svc.reject(conn, code, data.reason if data else None)
+    """`bothCourts`: for a two-court booking, reject the payment for both courts (or only this one)."""
+    return svc.reject(conn, code, data.reason if data else None, both_courts=bool(data and data.both_courts))
 
 
 @router.post("/bookings/{code}/cancel", response_model=AdminBookingDetail, dependencies=Guard, **OUT)
 def cancel_booking(code: str, data: ReasonIn | None = None, conn: sqlite3.Connection = Conn) -> AdminBookingDetail:
-    return svc.cancel(conn, code, data.reason if data else None)
+    """Void (or, for an unpaid hold, release it: always every court of it). `bothCourts`: void both courts of a
+    two-court booking (or only this one)."""
+    return svc.cancel(conn, code, data.reason if data else None, both_courts=bool(data and data.both_courts))
 
 
 @router.delete("/bookings/{code}", status_code=status.HTTP_204_NO_CONTENT, dependencies=Guard)

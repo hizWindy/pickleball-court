@@ -4,7 +4,7 @@ import { CalendarClock, CheckCircle2, Clock, CloudRain, Download, MapPin, Share2
 import confetti from 'canvas-confetti';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { device } from '../../lib/device';
-import { downloadPass, passFileName, passState, qrDataUrl, renderPassPng } from '../../lib/pass';
+import { courtsLine, downloadPass, passFileName, passState, qrDataUrl, renderPassPng } from '../../lib/pass';
 import { paymentLabel } from '../../lib/payment';
 import { isIOS, saveImage, saveLabel } from '../../lib/saveImage';
 import { fmtReference, fmtSchedule, peso, pesoAuto } from '../../lib/time';
@@ -54,7 +54,8 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
   const passKey = booking
     ? JSON.stringify([
         booking.code, booking.status, booking.pendingReason, booking.late, booking.weatherHold, booking.arrived, booking.customerName,
-        booking.courtName, booking.startAt, booking.endAt, booking.hours, booking.total, booking.paddles, booking.paymentMethod, booking.paymentReference,
+        booking.courtName, booking.courts?.length, booking.startAt, booking.endAt, booking.hours, booking.total, booking.paddles,
+        booking.paymentMethod, booking.paymentReference,
       ])
     : null;
   useEffect(() => {
@@ -136,6 +137,7 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
 
   const sched = booking ? fmtSchedule(booking.startAt, booking.endAt) : null;
   const state = booking ? passState(booking) : null;
+  const courtLine = booking ? courtsLine(booking) : { label: 'Court', value: '' };
   const closed = !!booking && CLOSED.includes(booking.status);
   const confirmed = booking?.status === 'confirmed';
   const rain = !!booking?.weatherHold;
@@ -245,11 +247,15 @@ export const PassView: React.FC<Props> = ({ code, token, initial, autoDownload, 
                   </div>
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
                     <Item label="Player" value={booking.customerName} wide />
-                    <Item label="Court" value={booking.courtName} />
+                    <Item label={courtLine.label} value={booking.courtName} sub={courtLine.note} />
                     <Item label="Duration" value={`${booking.hours} hr${booking.hours > 1 ? 's' : ''}`} />
                     <Item label="Date" value={sched.day} sub={sched.note} />
                     <Item label="Time" value={sched.time} />
-                    <Item label="Total" value={peso(booking.total)} sub={booking.paddles ? 'Includes paddles' : undefined} />
+                    <Item
+                      label="Total"
+                      value={peso(booking.total)}
+                      sub={booking.paddles ? (courtLine.label === 'Courts' ? 'Includes paddles for each court' : 'Includes paddles') : undefined}
+                    />
                     <Item label="Paid with" value={paymentLabel(booking.paymentMethod)} />
                   </dl>
                 </div>

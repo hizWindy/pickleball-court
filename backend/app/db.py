@@ -60,7 +60,9 @@ CREATE TABLE IF NOT EXISTS bookings (
     reschedule_count    INTEGER NOT NULL DEFAULT 0,  -- guest-initiated reschedules used (a weather delay is free)
     weather_hold_at     TEXT,   -- the host called a rain delay: the guest picks a new time (the hours stay closed until then)
     released_at         TEXT,   -- the host gave a Late or rain-delayed booking's hours back (Release court / Open these hours)
-    paid_late_at        TEXT    -- a payment came in after the hold ran out and someone else had the slot: kept for the host
+    paid_late_at        TEXT,   -- a payment came in after the hold ran out and someone else had the slot: kept for the host
+    group_id            TEXT    -- both courts booked at once: each court's row carries the id of the first court's row
+                                -- (which holds the payment). NULL for a one-court booking.
 );
 
 CREATE INDEX IF NOT EXISTS idx_bookings_status_expiry ON bookings(status, hold_expires_at);
@@ -170,6 +172,7 @@ MIGRATIONS = [
     ("bookings", "weather_hold_at", "TEXT"),
     ("bookings", "released_at", "TEXT"),
     ("bookings", "paid_late_at", "TEXT"),
+    ("bookings", "group_id", "TEXT"),
     ("receipt_scans", "sender_name", "TEXT"),
     ("receipt_scans", "sender_number", "TEXT"),
 ]
@@ -201,6 +204,8 @@ def apply_schema(conn: sqlite3.Connection) -> None:
         existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+    # Indexes on added columns come after the columns exist (an older database gets them from the loop above).
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bookings_group ON bookings(group_id) WHERE group_id IS NOT NULL")
     if not had_arrivals:
         conn.execute(
             "UPDATE bookings SET arrived_at = start_at WHERE status = 'confirmed' AND source != 'blocked' AND start_at <= ?",

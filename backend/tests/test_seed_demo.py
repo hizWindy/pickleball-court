@@ -15,13 +15,19 @@ def _rows(admin):
 def test_the_seeder_makes_every_state_and_can_run_twice(admin):
     first = seed_demo.run()
     codes = {r[0] for r in first}
-    assert len(codes) == len(first) == 21
+    assert len(codes) == len(first) == 23  # (a two-court booking is one line, under its first court's code)
 
     labels = sorted(b["label"] for b in _rows(admin))
-    assert labels == sorted(["awaiting", "expired", "late", "blocked", "paid_late", *["paid"] * 14, "rain_delay", "rain_delay"])
+    assert labels == sorted(["awaiting", "expired", "late", "blocked", "paid_late", *["paid"] * 17, "rain_delay", "rain_delay", "cancelled"])
+    assert len(_rows(admin)) == 25
     assert [b["paymentMethod"] for b in _rows(admin) if b["customerName"] == "Mara Bautista"] == ["maribank"]
     # The Late group still holds its court (the host decides), and the rain-delayed ones keep their hours closed.
     assert all(b["holdsCourt"] for b in _rows(admin) if b["label"] in ("late", "rain_delay"))
+    # Two courts at once: linked cards with one price, and one where the host voided a court.
+    santos = [b for b in _rows(admin) if b["customerName"] == "Santos family"]
+    assert sorted(b["courtId"] for b in santos) == ["court-1", "court-2"] and {b["groupTotal"] for b in santos} == {1160}
+    assert all(len(b["linked"]) == 1 for b in santos)
+    assert sorted(b["label"] for b in _rows(admin) if b["customerName"] == "Barkada Cup") == ["cancelled", "paid"]
 
     # The hours that are easy to get wrong are there on both courts: 5 AM, 7 PM and 4 AM, and one past midnight.
     edges = {(b["courtId"], b["hour"]) for b in _rows(admin) if b["customerName"].startswith("Edge")}
@@ -39,7 +45,7 @@ def test_the_seeder_makes_every_state_and_can_run_twice(admin):
 
     # Running it again replaces the demo bookings instead of piling up.
     second = seed_demo.run()
-    assert len(_rows(admin)) == 21
+    assert len(_rows(admin)) == 25
     assert not codes & {r[0] for r in second}
 
 
@@ -47,7 +53,7 @@ def test_the_seeder_can_add_enough_bookings_to_page_past_200(admin):
     rows = seed_demo.run(many=True)
     assert rows[-1][1] == f"{seed_demo.MANY} regulars"
     listing = admin.get("/api/admin/bookings", params={"pageSize": 200}).json()
-    assert listing["total"] >= 21 - 1 + seed_demo.MANY and len(listing["items"]) == 200  # (the expired hold isn't under All)
+    assert listing["total"] >= 25 - 1 + seed_demo.MANY and len(listing["items"]) == 200  # (the expired hold isn't under All)
     second_page = admin.get("/api/admin/bookings", params={"pageSize": 200, "page": 2}).json()["items"]
     assert len(second_page) == listing["total"] - 200
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
 from app.config import PAYMENT_METHODS
@@ -17,6 +17,7 @@ PaymentMethod = Literal[PAYMENT_METHODS]  # gcash, gotyme, maribank
 PaidWith = Literal[(*PAYMENT_METHODS, "cash", "none")]
 BookingStatus = Literal["held", "pending_verification", "confirmed", "rejected", "expired", "cancelled"]
 SlotState = Literal["available", "held", "booked", "past"]
+MAX_COURTS = 2  # a booking can take both courts at once (plan item 11)
 
 
 class ApiModel(BaseModel):
@@ -80,7 +81,10 @@ class AvailabilityOut(ApiModel):
 
 # ── Bookings ──────────────────────────────────────────────────────────────────
 class CreateBookingIn(ApiModel):
-    court_id: str
+    # `courtIds` books one court or both at once. `courtId` (one court) is what the site sent before two-court bookings,
+    # so a phone still running that version keeps working. After validation both are set: `court_ids` is the list.
+    court_id: str | None = None
+    court_ids: list[str] | None = Field(default=None, max_length=MAX_COURTS)
     date: date
     hour: int = Field(ge=0, le=23)
     hours: int = Field(ge=1, le=24)
@@ -102,6 +106,14 @@ class CreateBookingIn(ApiModel):
     def _phone(cls, v: str) -> str:
         return normalize_ph_mobile(v)
 
+    @model_validator(mode="after")
+    def _one_or_both_courts(self) -> CreateBookingIn:
+        ids = list(dict.fromkeys(c.strip() for c in (self.court_ids or [self.court_id or ""]) if c and c.strip()))
+        if not ids:
+            raise ValueError("Pick a court.")
+        self.court_ids, self.court_id = ids, ids[0]
+        return self
+
 
 class ReferenceProofIn(ApiModel):
     reference_number: str = Field(max_length=40)
@@ -119,17 +131,29 @@ class LineItemOut(ApiModel):
     start_at: str
     rate: int
     rate_type: Literal["standard", "night_owl"]
+    court_id: str | None = None  # which court the hour is on (a two-court booking lists each hour once per court)
 
 
 RescheduleState = Literal["open", "weather", "used", "too_late", "unavailable"]
 PendingReason = Literal["amount_short", "amount_unreadable"]
 
 
-class BookingOut(ApiModel):
-    code: str
-    status: BookingStatus
+class BookingCourtOut(ApiModel):
+    """One court of a booking (a two-court booking has two). The host may end one court on its own: then its status says
+    so, and the booking's own fields describe the court that is still on."""
+
     court_id: str
     court_name: str
+    status: BookingStatus
+    total: int
+
+
+class BookingOut(ApiModel):
+    code: str  # the booking's code: for two courts, the first court's (the one the player was given)
+    status: BookingStatus
+    court_id: str  # the (first) court still on
+    court_name: str  # every court still on, e.g. "Court 1 & Court 2"
+    courts: list[BookingCourtOut]  # each court of the booking, first court first
     play_date: date
     start_at: str
     end_at: str
@@ -137,8 +161,9 @@ class BookingOut(ApiModel):
     customer_name: str
     customer_phone_masked: str
     payment_method: PaidWith
-    paddles: bool
+    paddles: bool  # paddle rental, one pair per court
     line_items: list[LineItemOut]
+    # For the courts still on, added up: a two-court booking is paid with one payment of `total`
     court_cost: int
     addons_cost: int
     total: int

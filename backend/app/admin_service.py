@@ -34,6 +34,7 @@ from app.admin_schemas import (
     Funnel,
     HourForecastOut,
     Kpis,
+    LinkedOut,
     MethodPoint,
     NavCounts,
     OverviewOut,
@@ -198,11 +199,49 @@ def _needs_review(row: sqlite3.Row) -> bool:
     return row["status"] == "pending_verification"
 
 
-def to_admin(row: sqlite3.Row, courts: dict[str, str], now: datetime | None = None) -> AdminBookingOut:
+def _groups(conn: sqlite3.Connection, rows: list[sqlite3.Row]) -> dict[str, list[sqlite3.Row]]:
+    """The courts of every two-court booking among `rows`, by group, in court order. One query for a whole page."""
+    ids = sorted({r["group_id"] for r in rows if r["group_id"]})
+    found: dict[str, list[sqlite3.Row]] = defaultdict(list)
+    for i in range(0, len(ids), 500):
+        chunk = ids[i : i + 500]
+        for r in conn.execute(
+            f"""SELECT b.* FROM bookings b JOIN courts c ON c.id = b.court_id
+                WHERE b.group_id IN ({",".join("?" * len(chunk))}) ORDER BY c.sort_order, b.court_id""",
+            chunk,
+        ):
+            found[r["group_id"]].append(r)
+    return found
+
+
+def _admin_list(conn: sqlite3.Connection, rows: list[sqlite3.Row], now: datetime) -> list[AdminBookingOut]:
+    names = _court_names(conn)
+    groups = _groups(conn, rows)
+    return [to_admin(r, names, now, groups.get(r["group_id"])) for r in rows]
+
+
+def to_admin(
+    row: sqlite3.Row, courts: dict[str, str], now: datetime | None = None, group: list[sqlite3.Row] | None = None
+) -> AdminBookingOut:
+    """One court's booking for the desk. `group`: every court of its booking, when it is one of two (see `_groups`)."""
     now = now or clock.now()
     start = from_iso(row["start_at"])
     restorable, restore_until = _restore_state(row, now)
+    group = group or [row]
+    lead = next((g for g in group if g["id"] == row["group_id"]), None)
+    # The second court shows the shared payment's reference too (it is stored on the first court's row only).
+    payment_code = lead["code"] if lead is not None and lead["id"] != row["id"] and lead["submitted_at"] else None
     return AdminBookingOut(
+        group_id=row["group_id"],
+        linked=[
+            LinkedOut(
+                code=g["code"], court_id=g["court_id"], court_name=courts.get(g["court_id"], g["court_id"]),
+                status=g["status"], label=label_of(g, now), holds_court=core.holds_court(g),
+            )
+            for g in group if g["id"] != row["id"]
+        ],
+        group_total=sum(g["total"] for g in group),
+        payment_code=payment_code,
         code=row["code"],
         status=row["status"],
         label=label_of(row, now),
@@ -230,7 +269,7 @@ def to_admin(row: sqlite3.Row, courts: dict[str, str], now: datetime | None = No
         hold_expires_at=row["hold_expires_at"],
         proof_type=row["proof_type"],
         has_receipt=bool(row["receipt_path"]),
-        reference_number=row["reference_number"],
+        reference_number=row["reference_number"] or (lead["reference_number"] if payment_code else None),
         paid_at=row["paid_at"],
         payer_name=row["payer_name"],
         admin_note=row["admin_note"],
@@ -253,7 +292,7 @@ def to_admin(row: sqlite3.Row, courts: dict[str, str], now: datetime | None = No
 
 
 def _detail(conn: sqlite3.Connection, row: sqlite3.Row) -> AdminBookingDetail:
-    base = to_admin(row, _court_names(conn))
+    base = to_admin(row, _court_names(conn), group=core.group_rows(conn, row))
     court = conn.execute("SELECT day_rate, night_rate FROM courts WHERE id = ?", (row["court_id"],)).fetchone()
     items = price_hours(from_iso(row["start_at"]), row["hours"], court["day_rate"], court["night_rate"])
     events = conn.execute(
@@ -305,7 +344,8 @@ def nav_counts(conn: sqlite3.Connection) -> NavCounts:
                        AND released_at IS NULL AND {_END_SQL} > ?) AS late,
                    (SELECT COUNT(*) FROM bookings WHERE {_PLAYED} AND weather_hold_at IS NOT NULL) AS rain_delay,
                    (SELECT COUNT(*) FROM bookings WHERE status = 'expired' AND paid_late_at IS NOT NULL) AS paid_late,
-                   (SELECT COUNT(*) FROM bookings WHERE source = 'online' AND submitted_at IS NOT NULL) AS payments,
+                   (SELECT COUNT(DISTINCT COALESCE(group_id, id)) FROM bookings
+                       WHERE source = 'online' AND submitted_at IS NOT NULL) AS payments,
                    (SELECT rev FROM desk_rev WHERE id = 1) AS rev""",
         (to_iso(now),),
     ).fetchone()
@@ -398,14 +438,14 @@ def list_bookings(
     page = max(1, page)
     total = conn.execute(f"SELECT COUNT(*) FROM bookings{filtered_sql}", filtered_args).fetchone()[0]
     rows = conn.execute(
+        # Bookings that start together list court by court (both courts of one booking side by side, Court 1 first), and
         # `id` last: rows that tie keep one fixed order, so pages never repeat or skip a booking.
-        f"SELECT * FROM bookings{filtered_sql} ORDER BY {order}, id LIMIT ? OFFSET ?",
+        f"SELECT * FROM bookings{filtered_sql} ORDER BY {order}, court_id, id LIMIT ? OFFSET ?",
         [*filtered_args, *order_args, page_size, (page - 1) * page_size],
     ).fetchall()
-    courts = _court_names(conn)
     everything = sum(counts.values()) - (counts["expired"] - by_label["paid_late"] if all_hides_expired else 0)
     return AdminBookingList(
-        items=[to_admin(r, courts, now) for r in rows],
+        items=_admin_list(conn, rows, now),
         total=total,
         page=page,
         page_size=page_size,
@@ -443,8 +483,7 @@ def schedule(conn: sqlite3.Connection, play_date: date) -> AdminSchedule:
            ORDER BY start_at""",
         (first, last, first, last),
     ).fetchall()
-    courts = _court_names(conn)
-    return AdminSchedule(date=play_date, server_now=to_iso(now), bookings=[to_admin(r, courts, now) for r in rows])
+    return AdminSchedule(date=play_date, server_now=to_iso(now), bookings=_admin_list(conn, rows, now))
 
 
 # ── Writes ────────────────────────────────────────────────────────────────────
@@ -554,27 +593,47 @@ def update(conn: sqlite3.Connection, code: str, data: AdminUpdateIn) -> AdminBoo
     return _refreshed(conn, code)
 
 
+def _both(conn: sqlite3.Connection, row: sqlite3.Row, both_courts: bool) -> list[sqlite3.Row]:
+    """The courts an action on this booking covers: this one, or (`both_courts`) every court of its booking still in the
+    same state. An unpaid hold always counts as one: its courts were held together and are paid or let go together."""
+    if row["status"] == "held" or both_courts:
+        return [r for r in core.group_rows(conn, row) if r["status"] == row["status"]]
+    return [row]
+
+
+def _also(rows: list[sqlite3.Row], note: str | None) -> str | None:
+    """The note on each court's history when one action covered both courts."""
+    if len(rows) < 2:
+        return note
+    return "; ".join(p for p in (note, f"both courts ({', '.join(r['code'] for r in rows)})") if p)
+
+
 def confirm(conn: sqlite3.Connection, code: str) -> AdminBookingDetail:
+    """Confirm by hand (the player paid the host directly), reopen a rejected / voided / expired booking, or mark an
+    automatically confirmed payment as looked at. An unpaid two-court hold is confirmed whole; anything else per court."""
     now = clock.now()
     with write_transaction(conn):
         core.release_expired(conn, now)
         row = _row(conn, code)
         if row["status"] != "confirmed":
-            reopened = row["status"] not in ACTIVE
-            if reopened:  # a rejected / expired / cancelled booking gave its hours up, so take them back
-                court = _court(conn, row["court_id"])
-                items = price_hours(from_iso(row["start_at"]), row["hours"], court["day_rate"], court["night_rate"])
-                core.claim_slots(conn, court["name"], court["id"], items, row["id"])
-            # Confirming a session that has already begun: the host knows who is on court, so it isn't Late. A reopened
-            # booking holds its hours again, so it is no longer Late, rain-delayed or released either.
-            started = to_iso(now) if from_iso(row["start_at"]) <= now else None
-            conn.execute(
-                """UPDATE bookings SET status = 'confirmed', decided_at = ?, checked_at = ?, closed_at = NULL, close_reason = NULL,
-                       arrived_at = COALESCE(arrived_at, ?), late_at = NULL, weather_hold_at = NULL, released_at = NULL
-                   WHERE id = ?""",
-                (to_iso(now), to_iso(now), started, row["id"]),
-            )
-            _event(conn, row["code"], "confirmed", f"was {row['status']}" if reopened else None, now)
+            rows = _both(conn, row, both_courts=False)
+            for r in rows:
+                reopened = r["status"] not in ACTIVE
+                if reopened:  # a rejected / expired / cancelled booking gave its hours up, so take them back
+                    court = _court(conn, r["court_id"])
+                    items = price_hours(from_iso(r["start_at"]), r["hours"], court["day_rate"], court["night_rate"])
+                    core.claim_slots(conn, court["name"], court["id"], items, r["id"])
+                # Confirming a session that has already begun: the host knows who is on court, so it isn't Late. A
+                # reopened booking holds its hours again, so it is no longer Late, rain-delayed or released either.
+                started = to_iso(now) if from_iso(r["start_at"]) <= now else None
+                conn.execute(
+                    """UPDATE bookings SET status = 'confirmed', decided_at = ?, checked_at = ?, closed_at = NULL,
+                           close_reason = NULL, client_ip = NULL, arrived_at = COALESCE(arrived_at, ?), late_at = NULL,
+                           weather_hold_at = NULL, released_at = NULL
+                       WHERE id = ?""",
+                    (to_iso(now), to_iso(now), started, r["id"]),
+                )
+                _event(conn, r["code"], "confirmed", _also(rows, f"was {r['status']}" if reopened else None), now)
         elif not row["checked_at"]:
             conn.execute("UPDATE bookings SET checked_at = ? WHERE id = ?", (to_iso(now), row["id"]))
             _event(conn, row["code"], "checked", None, now)
@@ -586,7 +645,9 @@ def mark_checked(conn: sqlite3.Connection, code: str) -> AdminBookingDetail:
     return confirm(conn, code)
 
 
-def reject(conn: sqlite3.Connection, code: str, reason: str | None) -> AdminBookingDetail:
+def reject(conn: sqlite3.Connection, code: str, reason: str | None, both_courts: bool = False) -> AdminBookingDetail:
+    """The payment isn't real: the hours go back on sale. For a two-court booking, `both_courts` rejects it for both
+    (the usual case: it was one payment), or only for this court (plan D5)."""
     now = clock.now()
     with write_transaction(conn):
         core.release_expired(conn, now)
@@ -596,33 +657,42 @@ def reject(conn: sqlite3.Connection, code: str, reason: str | None) -> AdminBook
         paid_online = row["source"] == "online" and bool(row["submitted_at"])
         if not (row["status"] in ("held", "pending_verification") or (row["status"] == "confirmed" and paid_online)):
             raise Conflict("cannot_reject", "Only an online payment can be rejected. Cancel the booking instead.")
-        conn.execute(
-            """UPDATE bookings SET status = 'rejected', closed_at = ?, decided_at = ?, checked_at = ?,
-                   close_reason = 'admin_rejected' WHERE id = ?""",
-            (to_iso(now), to_iso(now), to_iso(now), row["id"]),
-        )
-        core.release_slots(conn, row["id"])
-        _event(conn, row["code"], "rejected", (reason or "").strip() or None, now)
+        rows = _both(conn, row, both_courts)
+        for r in rows:
+            conn.execute(
+                """UPDATE bookings SET status = 'rejected', closed_at = ?, decided_at = ?, checked_at = ?,
+                       close_reason = 'admin_rejected', client_ip = NULL WHERE id = ?""",
+                (to_iso(now), to_iso(now), to_iso(now), r["id"]),
+            )
+            core.release_slots(conn, r["id"])
+            _event(conn, r["code"], "rejected", _also(rows, (reason or "").strip() or None), now)
     return _refreshed(conn, code)
 
 
-def cancel(conn: sqlite3.Connection, code: str, reason: str | None) -> AdminBookingDetail:
+def cancel(conn: sqlite3.Connection, code: str, reason: str | None, both_courts: bool = False) -> AdminBookingDetail:
+    """Void a booking (the hours go back on sale; any refund is between the host and the player), lift a block, or
+    release an unpaid hold (every court of it, and no trace is kept). For a paid two-court booking, `both_courts` voids
+    both courts, or only this one (plan D5)."""
     now = clock.now()
     with write_transaction(conn):
         core.release_expired(conn, now)
         row = _row(conn, code)
         if row["status"] in ("cancelled", "expired", "rejected"):
             return _detail(conn, row)
-        conn.execute(
-            "UPDATE bookings SET status = 'cancelled', closed_at = ?, close_reason = 'admin_cancelled' WHERE id = ?",
-            (to_iso(now), row["id"]),
-        )
-        core.release_slots(conn, row["id"])
+        rows = _both(conn, row, both_courts)
+        for r in rows:
+            conn.execute(
+                "UPDATE bookings SET status = 'cancelled', closed_at = ?, close_reason = 'admin_cancelled' WHERE id = ?",
+                (to_iso(now), r["id"]),
+            )
+            core.release_slots(conn, r["id"])
         if row["status"] == "held":  # released before anything was paid: it was never a booking, keep no trace
             last = _refreshed(conn, code)
-            core.forget_hold(conn, row["id"])
+            for r in rows:
+                core.forget_hold(conn, r["id"])
             return last
-        _event(conn, row["code"], "cancelled", (reason or "").strip() or None, now)
+        for r in rows:
+            _event(conn, r["code"], "cancelled", _also(rows, (reason or "").strip() or None), now)
     return _refreshed(conn, code)
 
 
@@ -722,13 +792,13 @@ def weather_report(conn: sqlite3.Connection) -> WeatherOut:
     if hours is None:
         return WeatherOut(available=False, updated_at=None, warn_percent=settings.rain_warn_percent, hours=[], at_risk=[])
     horizon = now + timedelta(hours=weather.FORECAST_DAYS * 24)
-    names = _court_names(conn)
-    risks = []
+    found = []
     for row in conn.execute(_AT_RISK_SQL, (to_iso(horizon), to_iso(now))).fetchall():
         start = from_iso(row["start_at"])
         peak = weather.peak(hours, start, start + timedelta(hours=row["hours"]))
         if peak is not None and peak >= settings.rain_warn_percent:
-            risks.append(RainRiskOut(booking=to_admin(row, names, now), peak=peak))
+            found.append((row, peak))
+    risks = [RainRiskOut(booking=b, peak=p) for b, (_, p) in zip(_admin_list(conn, [r for r, _ in found], now), found)]
     return WeatherOut(
         available=True,
         updated_at=to_iso(now),
@@ -758,11 +828,8 @@ def rain_delay_preview(conn: sqlite3.Connection, play_date: date, from_hour: int
     with write_transaction(conn):
         core.release_expired(conn, now)
     start, end = _rain_window(play_date, from_hour, hours)
-    names = _court_names(conn)
-    return RainDelayPreview(
-        window_start=to_iso(start), window_end=to_iso(end),
-        bookings=[to_admin(r, names, now) for r in _in_window(conn, start, end) if from_iso(r["start_at"]) + timedelta(hours=r["hours"]) > now],
-    )
+    rows = [r for r in _in_window(conn, start, end) if from_iso(r["start_at"]) + timedelta(hours=r["hours"]) > now]
+    return RainDelayPreview(window_start=to_iso(start), window_end=to_iso(end), bookings=_admin_list(conn, rows, now))
 
 
 def rain_delay(conn: sqlite3.Connection, data: RainDelayIn) -> RainDelayResult:
@@ -784,33 +851,42 @@ def rain_delay(conn: sqlite3.Connection, data: RainDelayIn) -> RainDelayResult:
             conn.execute("UPDATE bookings SET weather_hold_at = ? WHERE id = ?", (to_iso(now), row["id"]))
             _event(conn, row["code"], "rain_delay", (data.note or "").strip() or "Rain delay called", now)
             moved.append(row["code"])
-    names = _court_names(conn)
     rows = [conn.execute("SELECT * FROM bookings WHERE code = ?", (c,)).fetchone() for c in moved]
-    return RainDelayResult(moved=[to_admin(r, names, now) for r in rows])
+    return RainDelayResult(moved=_admin_list(conn, rows, now))
 
 
 def delete(conn: sqlite3.Connection, code: str) -> None:
+    """Erase a record for good. One court of a paid two-court booking can go on its own (the other keeps its link and
+    the shared payment stays spent); an unpaid hold goes with all of its courts."""
     now = clock.now()
     with write_transaction(conn):
         row = _row(conn, code)
-        summary = f"{row['customer_name']} · {play_date_of(from_iso(row['start_at']))} · ₱{row['total']} · was {row['status']}"
-        # The record goes, but its payment stays spent: it can never pay for another booking.
-        for kind, value in (("reference", row["reference_number"]), ("receipt", row["receipt_sha256"])):
-            if value:
-                conn.execute(
-                    "INSERT OR IGNORE INTO spent_payments (kind, value, booking_code, deleted_at) VALUES (?, ?, ?, ?)",
-                    (kind, value, row["code"], to_iso(now)),
-                )
-        conn.execute("DELETE FROM bookings WHERE id = ?", (row["id"],))  # slots and access tokens cascade
-        if row["status"] != "held":  # an unpaid hold leaves no trace
-            _event(conn, row["code"], "deleted", summary, now)
-    if row["receipt_path"]:
-        receipts.delete(row["receipt_path"])
+        rows = _both(conn, row, both_courts=False)
+        for r in rows:
+            summary = f"{r['customer_name']} · {play_date_of(from_iso(r['start_at']))} · ₱{r['total']} · was {r['status']}"
+            # The record goes, but its payment stays spent: it can never pay for another booking.
+            for kind, value in (("reference", r["reference_number"]), ("receipt", r["receipt_sha256"])):
+                if value:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO spent_payments (kind, value, booking_code, deleted_at) VALUES (?, ?, ?, ?)",
+                        (kind, value, r["code"], to_iso(now)),
+                    )
+            conn.execute("DELETE FROM bookings WHERE id = ?", (r["id"],))  # slots and access tokens cascade
+            if r["status"] != "held":  # an unpaid hold leaves no trace
+                _event(conn, r["code"], "deleted", summary, now)
+    for r in rows:
+        if r["receipt_path"]:
+            receipts.delete(r["receipt_path"])
 
 
 # ── Overview ──────────────────────────────────────────────────────────────────
 def _pct_or_none(num: int, den: int) -> float | None:
     return round(100 * num / den, 1) if den else None
+
+
+def _booking_key(row: sqlite3.Row) -> str:
+    """One key per booking: both courts of a two-court booking share it."""
+    return row["group_id"] or row["id"]
 
 
 def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
@@ -833,7 +909,9 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
     ).fetchall()
     current = [r for r in sold if r["paid_on"] >= mid]
     previous = [r for r in sold if r["paid_on"] < mid]
-    all_time = conn.execute(f"SELECT COALESCE(SUM(total), 0) AS revenue, COUNT(*) AS n FROM bookings WHERE {_PLAYED}").fetchone()
+    all_time = conn.execute(
+        f"SELECT COALESCE(SUM(total), 0) AS revenue, COUNT(DISTINCT COALESCE(group_id, id)) AS n FROM bookings WHERE {_PLAYED}"
+    ).fetchone()
 
     daily = {start_date + timedelta(days=i): [0, 0, 0] for i in range(days)}  # revenue, bookings, hours
     by_hour = [0] * 24
@@ -843,22 +921,27 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
     by_rate = {"standard": [0, 0], "night_owl": [0, 0]}  # revenue, hours
     customers: dict[str, dict] = {}
 
+    # Money and court-hours add up per court. A booking of both courts is still one booking, though: counted once in the
+    # booking numbers (and once per court in each court's own figures).
+    seen: set[str] = set()
     for r in current:
+        first = _booking_key(r) not in seen
+        seen.add(_booking_key(r))
         start = from_iso(r["start_at"])
         pd = play_date_of(start)  # the day it is played: for "best days" and the busy hours
         d = daily.setdefault(play_date_of(from_iso(r["paid_on"])), [0, 0, 0])  # the day it was paid: for the chart
         d[0] += r["total"]
-        d[1] += 1
+        d[1] += first
         d[2] += r["hours"]
         weekday[pd.weekday()][0] += r["total"]
-        weekday[pd.weekday()][1] += 1
+        weekday[pd.weekday()][1] += first
         bc = by_court.setdefault(r["court_id"], [0, 0, 0])
         bc[0] += r["total"]
         bc[1] += r["hours"]
         bc[2] += 1
         bm = by_method[r["payment_method"]]
         bm[0] += r["total"]
-        bm[1] += 1
+        bm[1] += first
         day_rate, night_rate = rate_of.get(r["court_id"], (0, 0))
         for item in price_hours(start, r["hours"], day_rate, night_rate):
             by_hour[item.hour] += 1
@@ -866,9 +949,11 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
             by_rate[item.rate_type][1] += 1
         key = r["customer_phone"] or r["customer_name"].lower()
         c = customers.setdefault(key, {"name": r["customer_name"], "phone": r["customer_phone"], "bookings": 0, "hours": 0, "spent": 0})
-        c["bookings"] += 1
+        c["bookings"] += first
         c["hours"] += r["hours"]
         c["spent"] += r["total"]
+    bookings_now = len(seen)
+    bookings_before = len({_booking_key(r) for r in previous})
 
     # Utilisation is about the court being used, so it follows the day it is played, not the day it was paid.
     elapsed_hours = 0
@@ -885,7 +970,11 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
 
     # Outcome of online bookings created in this window (walk-ins have no payment step to measure).
     funnel_counts = {s: 0 for s in STATUSES}
-    for r in conn.execute("SELECT status, COUNT(*) AS n FROM bookings WHERE source = 'online' AND created_at >= ? GROUP BY status", (mid,)):
+    for r in conn.execute(
+        """SELECT status, COUNT(DISTINCT COALESCE(group_id, id)) AS n FROM bookings
+           WHERE source = 'online' AND created_at >= ? GROUP BY status""",
+        (mid,),
+    ):
         funnel_counts[r["status"]] = r["n"]
     closed = funnel_counts["confirmed"] + funnel_counts["rejected"] + funnel_counts["expired"] + funnel_counts["cancelled"]
 
@@ -915,10 +1004,10 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
             revenue_all_time=all_time["revenue"],
             paid_bookings_all_time=all_time["n"],
             revenue_prev=sum(r["total"] for r in previous),
-            bookings=len(current),
-            bookings_prev=len(previous),
+            bookings=bookings_now,
+            bookings_prev=bookings_before,
             hours=sum(r["hours"] for r in current),
-            avg_booking=round(revenue / len(current)) if current else 0,
+            avg_booking=round(revenue / bookings_now) if bookings_now else 0,
             paddle_revenue=sum(r["addons_cost"] for r in current),
             utilisation_pct=round(100 * min(1.0, elapsed_hours / capacity), 1) if capacity else 0.0,
             court_hours_available=capacity,
@@ -934,7 +1023,7 @@ def overview(conn: sqlite3.Connection, days: int) -> OverviewOut:
         by_rate=[RatePoint(rate_type=k, revenue=v[0], hours=v[1]) for k, v in by_rate.items()],
         funnel=Funnel(**funnel_counts),
         pending=Pipeline(count=pending["n"], amount=pending["amount"], flagged=pending["flagged"]),
-        up_next=[to_admin(r, names, now) for r in upcoming],
+        up_next=_admin_list(conn, upcoming, now),
         top_customers=[TopCustomer(**c) for c in top],
     )
 

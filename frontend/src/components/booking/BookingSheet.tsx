@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { AlertCircle, ArrowLeft, Calendar, Check, ChevronRight, Clock, Lock, Minus, Moon, Pencil, Plus, ShieldCheck, Sparkles, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Calendar, Check, ChevronRight, Clock, Link2, Lock, Minus, Moon, Pencil, Plus, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { useToday } from '../../hooks/useToday';
 import { device } from '../../lib/device';
@@ -11,7 +11,7 @@ import { useAvailability, useConfig } from '../../hooks/useBookingData';
 import type { AppConfig, Availability, BookingDraftSeed, BookingWithToken, PaymentMethod, SlotAvailability, TimePeriod } from '../../types';
 import { reviewNotices } from '../../data/houseRules';
 import { PrivacyNotice } from './PrivacyNotice';
-import { inputClass, PERIODS } from './helpers';
+import { courtNames, inputClass, PERIODS, priceBooking, type BookingPrice } from './helpers';
 import { Calendar as MonthCalendar, Field, Label, StepTitle } from './shared';
 import { cx, InlineError, PrimaryButton, useBodyScrollLock } from './ui';
 
@@ -50,7 +50,8 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
   const [date, setDate] = useState<string | null>(seed.date ?? null);
   const [hour, setHour] = useState<number | null>(seed.hour ?? null);
   const [period, setPeriod] = useState<TimePeriod | null>(null);
-  const [courtId, setCourtId] = useState<string | null>(seed.courtId ?? null);
+  // One court, or every court at once (a bigger group): the server takes both in one step, or neither.
+  const [courtIds, setCourtIds] = useState<string[]>(seed.courtId ? [seed.courtId] : []);
   const [hours, setHours] = useState(1);
   const [paddles, setPaddles] = useState(false);
   const [name, setName] = useState(saved?.name ?? '');
@@ -104,28 +105,26 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
     return true;
   };
 
-  const court = config?.courts.find((c) => c.id === courtId) ?? null;
-  const lineItems = useMemo(() => {
-    if (!court || hour == null) return [];
-    return Array.from({ length: hours }, (_, i) => {
-      const h = (hour + i) % 24;
-      return { hour: h, rate: isNightHour(h) ? court.nightRate : court.dayRate, night: isNightHour(h) };
-    });
-  }, [court, hour, hours]);
-  const courtCost = lineItems.reduce((s, i) => s + i.rate, 0);
-  const total = courtCost + (paddles ? config?.paddleFee ?? 0 : 0);
+  // The chosen courts, in the club's order, and what they cost together (each court priced on its own, paid once).
+  const chosen = useMemo(() => config?.courts.filter((c) => courtIds.includes(c.id)) ?? [], [config, courtIds]);
+  const price = useMemo(
+    () => (chosen.length && hour != null ? priceBooking(chosen, hour, hours, paddles, config?.paddleFee ?? 0) : null),
+    [chosen, hour, hours, paddles, config]
+  );
+  const total = price?.total ?? 0;
 
   const phoneNormalized = normalizePhone(phone);
   const nameValid = name.trim().replace(/\s+/g, ' ').length >= 2;
   const account = config?.paymentAccounts.find((a) => a.method === method);
-  const selectionFree = court != null && hour != null && courtFreeFor(court.id, hours);
+  const selectionFree = chosen.length > 0 && hour != null && chosen.every((c) => courtFreeFor(c.id, hours));
 
-  // If the chosen court stops being free (someone else grabbed it), pick the other one if possible.
+  // If the one chosen court stops being free (someone else grabbed it), pick the other one if possible. Both courts are
+  // never cut down to one behind the player's back: the picker says which court is taken instead.
   useEffect(() => {
-    if (step !== 'court' || hour == null || !avail || !config) return;
-    if (courtId && courtFreeFor(courtId, hours)) return;
+    if (step !== 'court' || hour == null || !avail || !config || courtIds.length > 1) return;
+    if (courtIds.length === 1 && courtFreeFor(courtIds[0], hours)) return;
     const alt = config.courts.find((c) => courtFreeFor(c.id, hours));
-    if (alt && alt.id !== courtId) setCourtId(alt.id);
+    if (alt && alt.id !== courtIds[0]) setCourtIds([alt.id]);
   }, [step, hour, hours, avail, nextAvail, config]); // courtFreeFor is derived from these
 
   const stepIndex = STEPS.findIndex((s) => s.id === step);
@@ -149,12 +148,12 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
   };
 
   const confirmHold = async () => {
-    if (!config || !court || hour == null || !phoneNormalized) return;
+    if (!config || !chosen.length || hour == null || !phoneNormalized) return;
     setSubmitting(true);
     setError(null);
     try {
       const result = await api.createBooking({
-        courtId: court.id,
+        courtIds: chosen.map((c) => c.id),
         date: activeDate,
         hour,
         hours,
@@ -269,14 +268,14 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
                   hour={hour}
                   hours={hours}
                   onHours={setHours}
-                  courtId={courtId}
-                  onCourt={setCourtId}
+                  courtIds={courtIds}
+                  onCourts={setCourtIds}
                   courtFreeFor={courtFreeFor}
                   slotAt={slotAt}
                   loading={!avail || (crossesDay && !nextAvail)}
                   paddles={paddles}
                   onPaddles={setPaddles}
-                  lineItems={lineItems}
+                  price={price}
                 />
               )}
               {step === 'details' && config && (
@@ -295,20 +294,19 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
                   phoneValid={!!phoneNormalized}
                 />
               )}
-              {step === 'review' && config && court && hour != null && (
+              {step === 'review' && config && price && hour != null && (
                 <ReviewStep
                   config={config}
                   today={today}
                   date={activeDate}
                   hour={hour}
                   hours={hours}
-                  courtName={court.name}
+                  courtName={courtNames(chosen)}
                   name={name.trim()}
                   phone={phoneNormalized ?? phone}
                   methodLabel={account?.label ?? method}
                   paddles={paddles}
-                  lineItems={lineItems}
-                  total={total}
+                  price={price}
                   consent={consent}
                   onConsent={setConsent}
                   marketing={marketing}
@@ -346,9 +344,9 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
                 )}
 
                 {/* Court chip */}
-                {court && step !== 'date' && step !== 'time' && (
+                {chosen.length > 0 && step !== 'date' && step !== 'time' && (
                   <span className="inline-flex items-center rounded-xl bg-[#15803D] px-2.5 py-1 text-xs font-heading font-black uppercase tracking-wider text-white shadow-xs">
-                    {court.name}
+                    {chosen.length > 1 ? `${chosen.length} courts` : chosen[0].name}
                   </span>
                 )}
 
@@ -361,7 +359,7 @@ export const BookingSheet: React.FC<Props> = ({ seed, onClose, onHeld }) => {
               </div>
 
               {/* Total cost badge */}
-              {court && hour != null && step !== 'date' && step !== 'time' && (
+              {price && step !== 'date' && step !== 'time' && (
                 <div className="flex items-baseline gap-1 shrink-0 pl-1">
                   <span className="text-[10px] font-sport font-extrabold uppercase tracking-widest text-zinc-400">Total</span>
                   <span className="font-heading font-black text-sm sm:text-base text-zinc-950 tracking-tight text-[#15803D]">
@@ -590,41 +588,41 @@ function Legend({ holdMinutes }: { holdMinutes: number }) {
 
 // ── Step 3: Court & duration ──────────────────────────────────────────────────
 function CourtStep({
-  config, date, hour, hours, onHours, courtId, onCourt, courtFreeFor, slotAt, loading, paddles, onPaddles, lineItems,
+  config, date, hour, hours, onHours, courtIds, onCourts, courtFreeFor, slotAt, loading, paddles, onPaddles, price,
 }: {
   config: AppConfig;
   date: string;
   hour: number;
   hours: number;
   onHours: (n: number) => void;
-  courtId: string | null;
-  onCourt: (id: string) => void;
+  courtIds: string[];
+  onCourts: (ids: string[]) => void;
   courtFreeFor: (id: string, n: number) => boolean;
   slotAt: (offset: number) => SlotAvailability | undefined;
   loading: boolean;
   paddles: boolean;
   onPaddles: (v: boolean) => void;
-  lineItems: { hour: number; rate: number; night: boolean }[];
+  price: BookingPrice | null;
 }) {
   const endHour = (hour + hours) % 24;
   const note = afterMidnightNote(date, hour);
+  const allIds = config.courts.map((c) => c.id);
+  const both = courtIds.length > 1;
+  const courtId = both ? null : courtIds[0] ?? null;
 
+  // The longest run of free hours from this start time on one court
+  const runOn = (id: string) => Array.from({ length: config.maxHours }, (_, i) => i + 1).filter((n) => courtFreeFor(id, n)).pop() ?? 0;
   // Maximum continuous hours available starting from this hour across all courts
-  const maxContinuousOverall = Math.max(
-    0,
-    ...config.courts.map(
-      (c) =>
-        Array.from({ length: config.maxHours }, (_, i) => i + 1)
-          .filter((n) => courtFreeFor(c.id, n))
-          .pop() ?? 0
-    )
-  );
+  const maxContinuousOverall = Math.max(0, ...allIds.map(runOn));
+  // With both courts chosen, as long as every court is free
+  const maxForChoice = both ? Math.min(...allIds.map(runOn)) : maxContinuousOverall;
+  const fits = (n: number) => (both ? allIds.every((id) => courtFreeFor(id, n)) : allIds.some((id) => courtFreeFor(id, n)));
 
   // The stepper stops at the longest run the club can actually give you from this start time; the chips are only shortcuts.
-  const hoursLimit = loading ? config.maxHours : Math.max(1, Math.min(config.maxHours, maxContinuousOverall));
+  const hoursLimit = loading ? config.maxHours : Math.max(1, Math.min(config.maxHours, maxForChoice));
   const quickHours = Math.min(config.quickHours ?? 5, config.maxHours);
   // Only worth saying when it bites: a quick pick is blocked, or the stepper just hit the wall.
-  const showLimit = !loading && maxContinuousOverall > 0 && maxContinuousOverall < config.maxHours && (maxContinuousOverall < quickHours || hours >= hoursLimit);
+  const showLimit = !loading && maxForChoice > 0 && maxForChoice < config.maxHours && (maxForChoice < quickHours || hours >= hoursLimit);
 
   // Is another court available for all requested hours?
   const altCourt =
@@ -653,7 +651,7 @@ function CourtStep({
           <Label>How long?</Label>
           {showLimit && (
             <span className="text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
-              Max {maxContinuousOverall} hr{maxContinuousOverall > 1 ? 's' : ''} available
+              Max {maxForChoice} hr{maxForChoice > 1 ? 's' : ''} available{both ? ' on both courts' : ''}
             </span>
           )}
         </div>
@@ -686,8 +684,7 @@ function CourtStep({
 
         <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Quick pick">
           {Array.from({ length: quickHours }, (_, i) => i + 1).map((n) => {
-            const anyFree = config.courts.some((c) => courtFreeFor(c.id, n));
-            const isBlocked = !loading && !anyFree;
+            const isBlocked = !loading && !fits(n);
             return (
               <button
                 key={n}
@@ -728,7 +725,7 @@ function CourtStep({
             </div>
             <button
               type="button"
-              onClick={() => onCourt(altCourt.id)}
+              onClick={() => onCourts([altCourt.id])}
               className="self-start sm:self-center shrink-0 rounded-xl bg-emerald-700 px-3.5 py-1.5 font-bold text-white shadow-xs hover:bg-emerald-800 transition cursor-pointer"
             >
               Switch to {altCourt.name} →
@@ -754,7 +751,7 @@ function CourtStep({
         <div className="space-y-2">
           {config.courts.map((c) => {
             const free = courtFreeFor(c.id, hours);
-            const isSel = courtId === c.id && free;
+            const isSel = !both && courtId === c.id && free;
 
             // Conflict inspection for this specific court
             const conflictOffset = !free
@@ -774,7 +771,7 @@ function CourtStep({
                 key={c.id}
                 type="button"
                 disabled={!free}
-                onClick={() => onCourt(c.id)}
+                onClick={() => onCourts([c.id])}
                 aria-pressed={isSel}
                 className={cx(
                   'flex w-full items-center justify-between rounded-2xl border p-4 text-left transition cursor-pointer disabled:cursor-not-allowed',
@@ -825,6 +822,9 @@ function CourtStep({
               </button>
             );
           })}
+          {config.courts.length > 1 && (
+            <BothCourts config={config} hour={hour} hours={hours} paddles={paddles} selected={both} loading={loading} courtFreeFor={courtFreeFor} slotAt={slotAt} onPick={() => onCourts(allIds)} />
+          )}
         </div>
       </section>
 
@@ -834,33 +834,127 @@ function CourtStep({
             <img src="/images/gear-paddle.webp" alt="" className="h-11 w-11 rounded-xl object-cover" />
             <div>
               <span className="block text-sm font-bold text-zinc-950">Rent paddles</span>
-              <span className="text-xs text-zinc-500">One pair · balls included · +{peso(config.paddleFee)}</span>
+              <span className="text-xs text-zinc-500">
+                {both
+                  ? `One pair per court · balls included · +${peso(config.paddleFee * courtIds.length)}`
+                  : `One pair · balls included · +${peso(config.paddleFee)}`}
+              </span>
             </div>
           </div>
           <input type="checkbox" checked={paddles} onChange={(e) => onPaddles(e.target.checked)} className="h-5 w-5 accent-[#15803D]" />
         </label>
       </section>
 
-      {lineItems.length > 0 && (
+      {price && (
         <section className="rounded-2xl bg-zinc-50 p-4 text-sm">
-          {lineItems.map((li, i) => (
-            <div key={i} className="flex justify-between py-0.5 text-zinc-600">
-              <span>
-                {hourLabel(li.hour)} – {hourLabel((li.hour + 1) % 24)}
-                <span className="ml-1.5 text-xs font-semibold text-emerald-700">{li.night ? 'Evening' : 'Morning'}</span>
-              </span>
-              <span>{peso(li.rate)}</span>
-            </div>
-          ))}
-          {paddles && (
-            <div className="flex justify-between py-0.5 text-zinc-600">
-              <span>Paddle rental</span>
-              <span>{peso(config.paddleFee)}</span>
-            </div>
-          )}
+          <PriceLines price={price} />
         </section>
       )}
     </div>
+  );
+}
+
+/** Both courts at once, for a bigger group: free only when every court is free for every hour. */
+function BothCourts({
+  config, hour, hours, paddles, selected, loading, courtFreeFor, slotAt, onPick,
+}: {
+  config: AppConfig;
+  hour: number;
+  hours: number;
+  paddles: boolean;
+  selected: boolean;
+  loading: boolean;
+  courtFreeFor: (id: string, n: number) => boolean;
+  slotAt: (offset: number) => SlotAvailability | undefined;
+  onPick: () => void;
+}) {
+  const free = config.courts.every((c) => courtFreeFor(c.id, hours));
+  const isSel = selected && free;
+  // The first court-hour in the way, to say which one
+  const blocked = free
+    ? null
+    : config.courts
+        .map((c) => {
+          const offset = Array.from({ length: hours }, (_, i) => i).find((i) => slotAt(i)?.courts[c.id] !== 'available');
+          return offset != null ? { court: c, hour: (hour + offset) % 24, held: slotAt(offset)?.courts[c.id] === 'held' } : null;
+        })
+        .find((b) => b != null);
+  const total = priceBooking(config.courts, hour, hours, paddles, config.paddleFee).total;
+  return (
+    <button
+      type="button"
+      disabled={!free}
+      onClick={onPick}
+      aria-pressed={isSel}
+      className={cx(
+        'flex w-full items-center justify-between gap-3 rounded-2xl border border-dashed p-4 text-left transition cursor-pointer disabled:cursor-not-allowed',
+        isSel ? 'border-solid border-[#15803D] bg-emerald-50 ring-2 ring-emerald-200' : free ? 'border-zinc-300 bg-white hover:border-emerald-300' : 'border-rose-200 bg-rose-50/40 text-zinc-500'
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2', isSel ? 'border-[#15803D] bg-[#15803D] text-white' : free ? 'border-zinc-300' : 'border-rose-300 bg-rose-100 text-rose-600')}>
+          {isSel ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : !free ? <Lock className="h-3 w-3" /> : null}
+        </span>
+        <div>
+          <span className={cx('flex items-center gap-1.5 text-[15px] font-bold', free ? 'text-zinc-950' : 'text-zinc-800')}>
+            <Link2 className="h-4 w-4 text-[#15803D]" /> Both courts
+          </span>
+          <span className="text-xs text-zinc-500">
+            {free || loading ? (
+              `${courtNames(config.courts)} together · for a bigger group, one payment`
+            ) : blocked ? (
+              <span className="font-semibold text-rose-700">
+                {blocked.court.name} is {blocked.held ? 'on hold' : 'reserved'} at {hourLabel(blocked.hour)}
+              </span>
+            ) : (
+              <span className="font-semibold text-rose-700">Not both free for this time</span>
+            )}
+          </span>
+        </div>
+      </div>
+      {loading ? (
+        <span className="text-xs font-semibold text-zinc-400">Checking…</span>
+      ) : free ? (
+        <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">{peso(total)}</span>
+      ) : null}
+    </button>
+  );
+}
+
+/** The hours with their rate group (for two courts, how each hour adds up), the paddles and, if asked, the total. */
+function PriceLines({ price, withTotal = false }: { price: BookingPrice; withTotal?: boolean }) {
+  const n = price.courts.length;
+  return (
+    <>
+      {price.courts[0].hours.map((h, i) => {
+        const rates = price.courts.map((c) => c.hours[i].rate);
+        const same = rates.every((r) => r === rates[0]);
+        return (
+          <div key={i} className="flex justify-between gap-3 py-0.5 text-zinc-600">
+            <span>
+              {hourLabel(h.hour)} – {hourLabel((h.hour + 1) % 24)}
+              <span className="ml-1.5 text-xs font-semibold text-emerald-700">{h.night ? 'Evening' : 'Morning'}</span>
+            </span>
+            <span>
+              {n > 1 && same && <span className="text-zinc-400">{n} × {peso(rates[0])} = </span>}
+              {peso(rates.reduce((s, r) => s + r, 0))}
+            </span>
+          </div>
+        );
+      })}
+      {price.addons > 0 && (
+        <div className="flex justify-between py-0.5 text-zinc-600">
+          <span>Paddle rental{n > 1 ? ` (${n} pairs)` : ''}</span>
+          <span>{peso(price.addons)}</span>
+        </div>
+      )}
+      {withTotal && (
+        <div className="flex justify-between pt-2 text-base font-bold text-zinc-950">
+          <span>Total{n > 1 ? ` · ${n} courts, one payment` : ''}</span>
+          <span>{peso(price.total)}</span>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -965,8 +1059,7 @@ function ReviewStep(props: {
   phone: string;
   methodLabel: string;
   paddles: boolean;
-  lineItems: { hour: number; rate: number; night: boolean }[];
-  total: number;
+  price: BookingPrice;
   consent: boolean;
   onConsent: (v: boolean) => void;
   marketing: boolean;
@@ -979,6 +1072,7 @@ function ReviewStep(props: {
   const endHour = (hour + hours) % 24;
   const note = afterMidnightNote(date, hour);
   const days = daysBetween(props.today, date);
+  const both = props.price.courts.length > 1;
   return (
     <div className="space-y-5">
       <StepTitle title="Review your booking" subtitle="Check everything. You can still edit any part." />
@@ -990,9 +1084,9 @@ function ReviewStep(props: {
             {days === 0 ? ' · Today' : days === 1 ? ' · Tomorrow' : ''}
           </span>
         </ReviewRow>
-        <ReviewRow label="Court" onEdit={() => props.onEdit('court')}>
+        <ReviewRow label={both ? 'Courts' : 'Court'} onEdit={() => props.onEdit('court')}>
           <span className="block font-semibold text-zinc-950">{props.courtName}</span>
-          <span className="text-zinc-600">{props.paddles ? 'With paddle rental' : 'No paddle rental'}</span>
+          <span className="text-zinc-600">{props.paddles ? (both ? 'With paddle rental, one pair per court' : 'With paddle rental') : 'No paddle rental'}</span>
         </ReviewRow>
         <ReviewRow label="Player" onEdit={() => props.onEdit('details')}>
           <span className="block font-semibold text-zinc-950">{props.name}</span>
@@ -1003,33 +1097,23 @@ function ReviewStep(props: {
           <span className="text-zinc-600">{config.proofMode === 'receipt' ? 'Send money, then upload your receipt' : 'Send money, then enter your reference number'}</span>
         </ReviewRow>
         <div className="space-y-1 p-4 text-sm">
-          {props.lineItems.map((li, i) => (
-            <div key={i} className="flex justify-between text-zinc-600">
-              <span>{hourLabel(li.hour)} – {hourLabel((li.hour + 1) % 24)} ({li.night ? 'Evening' : 'Morning'})</span>
-              <span>{peso(li.rate)}</span>
-            </div>
-          ))}
-          {props.paddles && (
-            <div className="flex justify-between text-zinc-600"><span>Paddle rental</span><span>{peso(config.paddleFee)}</span></div>
-          )}
-          <div className="flex justify-between pt-2 text-base font-bold text-zinc-950">
-            <span>Total</span>
-            <span>{peso(props.total)}</span>
-          </div>
+          <PriceLines price={props.price} withTotal />
         </div>
       </div>
 
       {!props.stillFree && (
-        <InlineError>This slot was just taken by someone else. Tap Edit on “When” or “Court” to pick another.</InlineError>
+        <InlineError>
+          {both ? 'One of the courts was just taken by someone else.' : 'This slot was just taken by someone else.'} Tap Edit on “When” or “Court” to pick another.
+        </InlineError>
       )}
 
       <div className="flex gap-3 rounded-2xl bg-amber-50 p-4 text-sm text-amber-950 ring-1 ring-amber-100">
         <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
         <p>
-          When you confirm, this slot is <strong>held for you for {config.holdMinutes} minutes</strong>. Send the <strong>full amount</strong> and{' '}
+          When you confirm, {both ? 'both courts are' : 'this slot is'} <strong>held for you for {config.holdMinutes} minutes</strong>. Send the <strong>full amount</strong>{both ? ' for both courts, in one payment,' : ''} and{' '}
           {config.proofMode === 'receipt'
-            ? 'upload your receipt within that time, or the slot is released for others. Your booking is confirmed as soon as you upload the receipt.'
-            : 'enter your reference number and name within that time, or the slot is released for others. Your booking is confirmed as soon as you submit them. Keep your own transaction receipt from your app: it is your proof of payment.'}
+            ? `upload your receipt within that time, or ${both ? 'both courts are' : 'the slot is'} released for others. Your booking is confirmed as soon as you upload the receipt.`
+            : `enter your reference number and name within that time, or ${both ? 'both courts are' : 'the slot is'} released for others. Your booking is confirmed as soon as you submit them. Keep your own transaction receipt from your app: it is your proof of payment.`}
         </p>
       </div>
 
