@@ -8,12 +8,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
+from app.config import PAYMENT_METHODS
 from app.validation import clean_name, normalize_ph_mobile
 
-PaymentMethod = Literal["gcash", "gotyme"]
+PaymentMethod = Literal[PAYMENT_METHODS]  # gcash, gotyme, maribank
 # How a booking was paid, as a guest can see it: online bookings use a PaymentMethod; a booking the host added at the desk
 # (a walk-in or phone booking that the guest later looks up, e.g. to rebook after rain) may be cash.
-PaidWith = Literal["gcash", "gotyme", "cash", "none"]
+PaidWith = Literal[(*PAYMENT_METHODS, "cash", "none")]
 BookingStatus = Literal["held", "pending_verification", "confirmed", "rejected", "expired", "cancelled"]
 SlotState = Literal["available", "held", "booked", "past"]
 
@@ -38,6 +39,9 @@ class PaymentAccountOut(ApiModel):
     qr_image: str
     account_hint: str
     enabled: bool
+    # All-digit reference lengths this bank's receipts may show besides GCash's 13 (the pay screen's shape check
+    # mirrors it; the made-up-number rules stay on the server)
+    reference_digits: list[int]
 
 
 class ConfigOut(ApiModel):

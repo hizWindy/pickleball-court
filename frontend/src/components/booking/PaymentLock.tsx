@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, BookOpen, Check, ClipboardPaste, Clock, Download, ImagePlus, Keyboard, Maximize2, QrCode, ReceiptText, RefreshCw, Upload } from 'lucide-react';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { prepareReceipt } from '../../lib/image';
+import { paymentLabel } from '../../lib/payment';
 import { checkReference, formatReference, SHAPE_LABEL } from '../../lib/reference';
 import { isIOS, saveImage, saveLabel, usePrefetchedImage } from '../../lib/saveImage';
 import { fmtCountdown, fmtSchedule, fmtTime, pesoExact } from '../../lib/time';
@@ -81,7 +82,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
     }
   }, [code, token, onSubmitted, onClosed]);
 
-  // Re-check with the server on open and whenever the player comes back from GCash/GoTyme.
+  // Re-check with the server on open and whenever the player comes back from their payment app.
   useEffect(() => {
     sync();
     const onVisible = () => document.visibilityState === 'visible' && sync();
@@ -202,7 +203,9 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
 
   const sched = booking ? fmtSchedule(booking.startAt, booking.endAt) : null;
   const isGcash = booking?.paymentMethod === 'gcash';
-  const refCheck = checkReference(ref);
+  // The app the player pays in, by its own name (never "GoTyme" for anything that isn't GCash).
+  const appName = account?.label ?? (booking ? paymentLabel(booking.paymentMethod) : 'GCash');
+  const refCheck = checkReference(ref, account?.referenceDigits ?? []);
   const canPaste = typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function';
   const pasteReference = async () => {
     try {
@@ -247,7 +250,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
           </div>
           {booking && !timeUp && (
             <p className="mt-3 text-xs text-emerald-100/90">
-              Held for you until <strong className="text-white">{fmtTime(booking.holdExpiresAt)}</strong>. Leaving to open {isGcash ? 'GCash' : 'GoTyme'} is fine; this page will be here when you come back.
+              Held for you until <strong className="text-white">{fmtTime(booking.holdExpiresAt)}</strong>. Leaving to open {appName} is fine; this page will be here when you come back.
             </p>
           )}
         </header>
@@ -319,7 +322,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                   )}
                   <Row label="Account name" value={account?.accountName ?? '—'} />
                   {account?.accountNumber ? (
-                    <Row label={isGcash ? 'GCash number' : 'GoTyme account'} value={account.accountNumber} mono copy={account.accountNumber} />
+                    <Row label={isGcash ? 'GCash number' : `${appName} account`} value={account.accountNumber} mono copy={account.accountNumber} />
                   ) : account?.accountHint ? (
                     <Row label="Account number" value={account.accountHint} mono />
                   ) : null}
@@ -550,7 +553,9 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                         ) : refCheck.state === 'hint' && refTouched ? (
                           <span className="font-medium text-amber-800">{refCheck.message}</span>
                         ) : (
-                          <span className="text-zinc-500">GCash: 13 numbers · GoTyme: starts with GT</span>
+                          <span className="text-zinc-500">
+                            GCash: 13 numbers · GoTyme: starts with GT{booking.paymentMethod === 'maribank' && ' · MariBank: as on your receipt'}
+                          </span>
                         )}
                       </p>
                       <details className="mt-2 text-xs text-zinc-600">
@@ -558,6 +563,7 @@ export const PaymentLock: React.FC<Props> = ({ code, token, initial, onSubmitted
                         <ul className="mt-1.5 list-disc space-y-1 pl-5">
                           <li><strong>GCash:</strong> open Transactions, tap your payment, then copy the Ref No. (13 numbers, like 1092 837 461928).</li>
                           <li><strong>GoTyme:</strong> the reference number is at the bottom of your receipt (it starts with GT).</li>
+                          <li><strong>MariBank:</strong> open the transfer in your transaction history and copy its reference number.</li>
                           <li>Paid from another bank or wallet? Use the reference number on that app's receipt.</li>
                         </ul>
                       </details>

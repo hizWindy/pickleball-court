@@ -48,7 +48,7 @@ export const PrivacyNotice: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           </p>
         </div>
         <p className="rounded-2xl bg-emerald-50 p-3 text-xs text-emerald-900">
-          Tip: download or screenshot your own transaction receipt from GCash / GoTyme and keep it. We only need the reference number and the sender name.
+          Tip: download or screenshot your own transaction receipt from GCash, GoTyme or MariBank and keep it. We only need the reference number and the sender name.
         </p>
       </div>
     </div>

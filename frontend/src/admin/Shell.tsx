@@ -70,7 +70,7 @@ export const Shell: React.FC<ShellProps> = ({ tab, onTab, badges, onAdd, onSignO
     <div id="admin-shell" className="min-h-dvh bg-[#F6F8FA] text-zinc-900">
       <header className="sticky top-0 z-30 h-14 bg-zinc-950 text-white">
         <div className="mx-auto flex h-full max-w-[1200px] items-center gap-2 px-4 lg:px-6">
-          <img src="/icon.svg" alt="" className="h-8 w-8 rounded-lg" />
+          <img src="/brand/emblem-on-dark.svg" alt="" width={32} height={32} className="h-8 w-8 object-contain" />
           <span className="hidden font-heading text-[15px] font-black tracking-wide sm:block">
             HOUSE<span className="text-[#D2EE5E]">PICKLE</span>
           </span>

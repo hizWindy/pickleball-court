@@ -32,6 +32,20 @@ def _env_int(name: str, default: int) -> int:
     return int(os.getenv(name, str(default)))
 
 
+def _env_lengths(name: str, default: str) -> tuple[int, ...]:
+    """A list of lengths: "12,16", a range "10-20", or both ("12,14-16"). Empty means none."""
+    lengths: set[int] = set()
+    for part in filter(None, (p.strip() for p in _env(name, default).split(","))):
+        low, _, high = part.partition("-")
+        lengths.update(range(int(low), int(high or low) + 1))
+    return tuple(sorted(lengths))
+
+
+# Every way to pay online, in the order players see them (plan D8: GCash, GoTyme, MariBank). A new method is a name here
+# and an account in `Settings.payment_accounts`; the API's types follow this list.
+PAYMENT_METHODS = ("gcash", "gotyme", "maribank")
+
+
 @dataclass(frozen=True)
 class PaymentAccount:
     method: str
@@ -42,6 +56,9 @@ class PaymentAccount:
     qr_image: str = ""
     # Shown instead of the number when only a masked version is known, e.g. "•••• 1204"
     account_hint: str = ""
+    # Lengths of an all-digit reference this bank's own receipts may show, besides GCash's 13. Only bookings paid to
+    # this account accept them; the made-up-number rules still apply.
+    reference_digits: tuple[int, ...] = ()
 
     @property
     def enabled(self) -> bool:
@@ -130,6 +147,21 @@ class Settings:
             account_hint=_env("GOTYME_ACCOUNT_HINT", "•••• 1204"),
         )
     )
+    # MariBank's QR is InstaPay too, so it can be paid from GCash, Maya, MariBank or any bank app. Only the masked number
+    # is shown (plan D8). MariBank's own receipt reference format isn't known yet (plan A2): until it is, a MariBank
+    # booking also takes an all-digit reference of 10 to 20 numbers. Set MARIBANK_REFERENCE_DIGITS to the real
+    # length(s) once the receipts are in.
+    maribank: PaymentAccount = field(
+        default_factory=lambda: PaymentAccount(
+            "maribank",
+            "MariBank",
+            _env("MARIBANK_ACCOUNT_NAME", "Reymark Vergara"),
+            _env("MARIBANK_ACCOUNT_NUMBER", ""),
+            qr_image=_env("MARIBANK_QR_IMAGE", "/images/payment-qr-maribank.jpg"),
+            account_hint=_env("MARIBANK_ACCOUNT_HINT", "•••• 8703"),
+            reference_digits=_env_lengths("MARIBANK_REFERENCE_DIGITS", "10-20"),
+        )
+    )
     frontend_dist: Path = field(
         default_factory=lambda: Path(_env("FRONTEND_DIST", str(BASE_DIR.parent / "frontend" / "dist")))
     )
@@ -142,8 +174,13 @@ class Settings:
     def receipts_dir(self) -> Path:
         return self.data_dir / "receipts"
 
+    @property
+    def payment_accounts(self) -> tuple[PaymentAccount, ...]:
+        """Every account players can pay, in PAYMENT_METHODS order. Everything that lists or checks accounts reads this."""
+        return (self.gcash, self.gotyme, self.maribank)
+
     def payment_account(self, method: str) -> PaymentAccount | None:
-        return {"gcash": self.gcash, "gotyme": self.gotyme}.get(method)
+        return next((a for a in self.payment_accounts if a.method == method), None)
 
 
 settings = Settings()

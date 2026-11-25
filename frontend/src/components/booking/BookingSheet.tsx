@@ -4,6 +4,7 @@ import { AlertCircle, ArrowLeft, Calendar, Check, ChevronRight, Clock, Lock, Min
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { useToday } from '../../hooks/useToday';
 import { device } from '../../lib/device';
+import { PAYMENT_BADGE } from '../../lib/payment';
 import { normalizePhone } from '../../lib/phone';
 import { addDays, afterMidnightNote, daysBetween, fmtDate, hourLabel, hourTimeLabel, hrsLabel, isNightHour, peso } from '../../lib/time';
 import { useAvailability, useConfig } from '../../hooks/useBookingData';
@@ -921,8 +922,9 @@ function DetailsStep({
       <section>
         <Label>Pay with</Label>
         <div className="grid grid-cols-2 gap-2">
-          {config.paymentAccounts.map((a) => {
+          {config.paymentAccounts.map((a, i, all) => {
             const isSel = method === a.method && a.enabled;
+            const badge = PAYMENT_BADGE[a.method] ?? { text: a.label.slice(0, 2), colour: '#52525B' };
             return (
               <button
                 key={a.method}
@@ -933,11 +935,12 @@ function DetailsStep({
                 className={cx(
                   'rounded-2xl border p-4 text-left transition cursor-pointer disabled:cursor-not-allowed',
                   isSel ? 'border-[#15803D] bg-emerald-50 ring-2 ring-emerald-200' : 'border-zinc-200 bg-white hover:border-emerald-300',
-                  !a.enabled && 'opacity-50'
+                  !a.enabled && 'opacity-50',
+                  all.length % 2 === 1 && i === all.length - 1 && 'col-span-2' // an odd one out takes the whole row
                 )}
               >
-                <span className={cx('mb-2 inline-flex h-8 w-8 items-center justify-center rounded-xl text-xs font-black text-white', a.method === 'gcash' ? 'bg-[#007DFE]' : 'bg-[#00B0A0]')}>
-                  {a.method === 'gcash' ? 'G' : 'GT'}
+                <span className="mb-2 inline-flex h-8 w-8 items-center justify-center rounded-xl text-xs font-black text-white" style={{ backgroundColor: badge.colour }}>
+                  {badge.text}
                 </span>
                 <span className="block text-[15px] font-bold text-zinc-950">{a.label}</span>
                 <span className="text-xs text-zinc-500">{a.enabled ? (config.proofMode === 'receipt' ? 'Send money, upload receipt' : 'Send money, enter reference no.') : 'Coming soon'}</span>

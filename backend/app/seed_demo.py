@@ -60,7 +60,7 @@ class _Seeder:
         self.n = 0
         self.rows: list[tuple[str, str, str, str]] = []  # (code, who, when, what you will see)
 
-    def book(self, name: str, day: date, hour: int, hours: int = 1, paddles: bool = False) -> tuple[str, str, int, int]:
+    def book(self, name: str, day: date, hour: int, hours: int = 1, paddles: bool = False, method: str = "gcash") -> tuple[str, str, int, int]:
         """Hold a slot, trying the next free hour/court if that one is taken (a real dev database is rarely empty)."""
         last: Exception | None = None
         first = PLAY_DAY_HOURS.index(hour)
@@ -73,7 +73,7 @@ class _Seeder:
                         self.conn,
                         CreateBookingIn(
                             court_id=court, date=day, hour=h, hours=hours, paddles=paddles, customer_name=name,
-                            customer_phone=DEMO_PHONE, payment_method="gcash", consent=True,
+                            customer_phone=DEMO_PHONE, payment_method=method, consent=True,
                             consent_version=settings.consent_version,
                         ),
                         ip=f"demo-{self.n}",
@@ -83,13 +83,15 @@ class _Seeder:
                     last = exc
         raise RuntimeError(f"No free slot found for {name} on {day}: {last}")
 
-    def demo_reference(self) -> str:
-        """A made-up 13-digit reference that starts 9990 (so it is easy to spot) and passes the same checks a real one must."""
-        return f"9990{(self.n * 7919 + 4817305) % 10**9:09d}"
+    def demo_reference(self, digits: int = 13) -> str:
+        """A made-up reference that starts 9990 (so it is easy to spot) and passes the same checks a real one must:
+        GCash's 13 numbers, or 16 for a MariBank one. (Checked: none of the first 5,000 looks made up.)"""
+        return f"9990{(self.n * 7919 + 4817305) * 104729 % 10 ** (digits - 4):0{digits - 4}d}"
 
-    def paid(self, name: str, day: date, hour: int, **kw) -> tuple[str, int, int]:
-        code, token, h, hours = self.book(name, day, hour, **kw)
-        core.submit_reference(self.conn, code, token, ReferenceProofIn(reference_number=self.demo_reference(), payer_name=name))
+    def paid(self, name: str, day: date, hour: int, method: str = "gcash", **kw) -> tuple[str, int, int]:
+        code, token, h, hours = self.book(name, day, hour, method=method, **kw)
+        ref = self.demo_reference(16 if method == "maribank" else 13)
+        core.submit_reference(self.conn, code, token, ReferenceProofIn(reference_number=ref, payer_name=name))
         return code, h, hours
 
     def desk(self, name: str, day: date, hour: int, hours: int = 1, court: str = "court-1", kind: str = "walk_in") -> str | None:
@@ -127,6 +129,9 @@ def run(many: bool = False) -> list[tuple[str, str, str, str]]:
 
         code, h, n = s.paid("Liza Tan", later, 8)
         s.add(code, "Liza Tan", _label(later, h, n), "Confirmed")
+
+        code, h, n = s.paid("Mara Bautista", tomorrow, 17, method="maribank")
+        s.add(code, "Mara Bautista", _label(tomorrow, h, n), "Confirmed, paid by MariBank (16-number reference)")
 
         # Two guests whose booking was rain-delayed: they see "Rebook now".
         rainy = [s.paid("Juan dela Cruz", tomorrow, 15), s.paid("Grace Lim", tomorrow, 16, hours=2)]

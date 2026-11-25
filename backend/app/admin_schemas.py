@@ -7,10 +7,10 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
-from app.schemas import ApiModel, BookingStatus, LineItemOut
+from app.schemas import ApiModel, BookingStatus, LineItemOut, PaidWith
 from app.validation import clean_name, normalize_ph_mobile
 
-AdminPayment = Literal["gcash", "gotyme", "cash", "none"]
+AdminPayment = PaidWith  # an online method, cash at the desk, or "none" for a block
 Source = Literal["online", "walk_in", "blocked"]
 # What the host sees on a booking. Day to day only the first four matter: Paid, Late, Done, Rain delay.
 AdminLabel = Literal[

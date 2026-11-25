@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from datetime import date, datetime
 
 _PH_MOBILE = re.compile(r"^09\d{9}$")
@@ -32,8 +33,9 @@ def clean_name(raw: str) -> str:
 # ── Reference numbers ─────────────────────────────────────────────────────────
 # The club's QR codes are InstaPay QR Ph, so a player can pay from any bank or e-wallet and the reference may be
 # GCash's (13 numbers), GoTyme's (GT + date + 8 numbers) or another bank's. The shape typed decides the rules, not
-# which QR was picked. A format check cannot prove a payment happened (the host still checks it in their own app); it
-# only turns away mistakes and lazy made-up numbers.
+# which QR was picked, with one addition: a booking paid to an account that prints all-digit references of its own
+# (MariBank) also takes those lengths (`also_digits`). A format check cannot prove a payment happened (the host still
+# checks it in their own app); it only turns away mistakes and lazy made-up numbers.
 REFERENCE_FORMAT_HINT = "Enter the reference exactly as shown on your receipt."
 REFERENCE_INSTAPAY_HINT = "That looks like the short InstaPay number. Use the 13-digit Ref No. from your receipt."
 REFERENCE_GCASH_HINT = "A GCash reference has 13 numbers. Check it against your receipt."
@@ -92,14 +94,17 @@ def _looks_made_up(ref: str) -> bool:
     return ref.isdigit() and len(set(ref)) < 4
 
 
-def normalize_reference(raw: str, *, booked_on: date | None = None) -> str:
+def normalize_reference(raw: str, *, booked_on: date | None = None, also_digits: Collection[int] = ()) -> str:
     """The clean reference, or a ValueError. A plain ValueError carries a hint that depends only on what was typed;
-    ReferenceRejected carries the one generic reply. `booked_on` (Manila date of the booking) is for the GoTyme date."""
+    ReferenceRejected carries the one generic reply. `booked_on` (Manila date of the booking) is for the GoTyme date.
+    `also_digits`: all-digit lengths the booking's own bank prints besides GCash's 13 (MariBank's, see config)."""
     ref = clean_reference(raw)
     if not ref or not ref.isascii():
         raise ValueError(REFERENCE_FORMAT_HINT)
     if ref.isdigit():
-        if len(ref) != 13:
+        if len(ref) != 13 and len(ref) not in also_digits:
+            if also_digits:  # another bank's number is possible here: don't steer the player to GCash's format
+                raise ValueError(REFERENCE_FORMAT_HINT)
             raise ValueError(REFERENCE_INSTAPAY_HINT if 8 <= len(ref) <= 12 else REFERENCE_GCASH_HINT)
     elif m := _GOTYME.fullmatch(ref):
         try:

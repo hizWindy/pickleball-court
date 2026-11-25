@@ -6,13 +6,13 @@ export const Footer: React.FC<{ onCheckBooking: () => void }> = ({ onCheckBookin
     <footer className="bg-[#F6F8FA] border-t border-zinc-200/80 py-10 text-xs text-zinc-500">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-3">
-          <img src="/icon.svg" alt="HousePickle Club" className="w-8 h-8 rounded-xl shadow-xs" />
+          <img src="/brand/emblem.svg" alt="House Pickle Club" width={32} height={32} className="w-8 h-8 object-contain" />
           <div>
             <div className="flex items-center gap-1.5 leading-none">
-              <span className="font-heading font-black text-sm tracking-wide text-zinc-950">
-                HOUSE<span className="text-[#15803D]">PICKLE</span>
+              <span className="font-heading font-black text-sm tracking-wide text-[#112D43]">
+                HOUSE<span className="text-[#91B843]">PICKLE</span>
               </span>
-              <span className="font-heading font-extrabold text-[9px] tracking-widest text-[#15803D] uppercase bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
+              <span className="font-heading font-extrabold text-[9px] tracking-widest text-[#112D43] uppercase bg-[#91B843]/15 px-1 py-0.2 rounded border border-[#91B843]/60">
                 CLUB
               </span>
             </div>

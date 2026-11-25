@@ -7,7 +7,7 @@
 //
 // Pages are network-first (so a deploy shows up straight away), hashed files are cache-first, images are served
 // from the cache and refreshed in the background. The booking API is never touched.
-const VERSION = 'housepickle-v8';
+const VERSION = 'housepickle-v9';
 const SHELL = `${VERSION}-shell`;
 const ASSETS = 'housepickle-assets';
 const MAX_ASSETS = 160;
@@ -15,9 +15,10 @@ const MAX_ASSETS = 160;
 const SHELL_FILES = [
   '/',
   '/manifest.webmanifest',
-  '/icon.svg',
-  '/favicon.svg',
-  '/housepickle-emblem.svg',
+  '/brand/favicon.svg',
+  '/brand/emblem.svg',
+  '/brand/emblem-on-dark.svg',
+  '/brand/icon-192.png',
   '/images/player-cutout-1.webp',
   '/images/player-cutout-2.webp',
 ];

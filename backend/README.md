@@ -1,6 +1,6 @@
 # HousePickle Club — Booking API
 
-FastAPI + SQLite backend for court booking with manual GCash / GoTyme payment verification.
+FastAPI + SQLite backend for court booking with manual GCash / GoTyme / MariBank payment verification.
 
 ## Run it
 
@@ -27,8 +27,8 @@ Tests: `pytest` (they use a throwaway database and a fake clock). Among them:
 Load test (a real server on a throwaway database, 100+ simultaneous requests from players and the desk for the same
 court-hours): `.venv\Scripts\python scripts\stress_double_booking.py`. It passes when every court-hour has one owner.
 
-**Demo data for your own computer:** `python -m app.seed_demo` makes 18 bookings under one demo number (`0999 000 0001`;
-blocks carry a demo note instead): paid ones, two **rain-delayed** guests (they see *Rebook now* on "Check my booking"),
+**Demo data for your own computer:** `python -m app.seed_demo` makes 19 bookings under one demo number (`0999 000 0001`;
+blocks carry a demo note instead): paid ones (one by MariBank), two **rain-delayed** guests (they see *Rebook now* on "Check my booking"),
 an unpaid hold, an expired one, a block, a Late booking, and walk-ins at the hours that are easy to get wrong (5 AM,
 7 PM and 4 AM on both courts, and 11 PM - 2 AM). `--many` adds 270 walk-ins to try "Show more" past 200. It prints the
 codes. Run it again for a fresh set (only the demo bookings are replaced) and it refuses to run on Render. Try it: the
@@ -44,7 +44,7 @@ site's *Check my booking* with a code and that number, and `/admin` > Schedule, 
 | Proof = **receipt screenshot** (main path) or **typed reference + payment time + payer name** (fallback). | `submit_receipt`, `submit_reference` |
 | The same receipt image or reference number can never back two bookings, even after deletion or rejection. | unique indexes on `receipt_sha256`, `reference_number` |
 | A typed payment time must fall inside the hold window (±5 min). | `_resolve_paid_time` |
-| A typed all-digit GCash reference must be 13 digits. Other references (GoTyme `GT…`, banks paying the InstaPay QR) are only sanity-checked. | `validation.normalize_reference` |
+| A typed all-digit GCash reference must be 13 digits. Other references (GoTyme `GT…`, banks paying the InstaPay QR) are only sanity-checked. A booking paid to MariBank also takes MariBank's own all-digit references (`MARIBANK_REFERENCE_DIGITS`, 10-20 until real receipts confirm the length). | `validation.normalize_reference` |
 | Full payment **confirms the booking at once**. A receipt image is read on our server (amount, reference, date, recipient). **The amount is checked against the checkout total:** equal → confirmed; more → confirmed and flagged `amount_over`; **short, or no amount readable although the OCR worked → the slot stays reserved but the booking waits for the host** (`pending_verification`). Other mismatches are review flags the host can reject. If the OCR engine is unavailable, the booking is still confirmed and flagged `unreadable`. | `submit_receipt`, `receipt_reader.assess`, `HOLD_FOR_HOST` |
 | One payment can never confirm two bookings: the same image (hash) or the same reference number, whether typed or read off a different screenshot. | `submit_receipt`, `uq_bookings_reference` |
 | **No cancellations.** A paid booking is final (no refunds). A guest can only *release an unpaid hold*; anything else answers `409 bookings_final`. The host can still void a booking from the desk (mistakes, duplicates). | `release_hold` |
@@ -189,4 +189,5 @@ Every admin change is written to `admin_events`, which survives deleting the boo
 - Everything lives in `DATA_DIR` (default `backend/data/`): `housepickle.db` plus `receipts/`. Put it on a persistent disk and back it up. Serverless hosts won't work.
 - Receipts are never served publicly. Only the signed-in admin can open them.
 - Production: `npm run build` in `frontend/`, then `uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"`. The API serves the built PWA from the same origin, so no CORS setup is needed. Put it behind HTTPS, which PWAs and the clipboard require.
-- Payment methods: each needs an account number or a QR image to be offered, otherwise it shows "Coming soon". The QR images live in `frontend/public/images/` (`payment-qr-gcash.jpg`, `payment-qr-gotyme.jpg`) and can be swapped via `GCASH_QR_IMAGE` / `GOTYME_QR_IMAGE`. GoTyme shows `GOTYME_ACCOUNT_HINT` (last digits only) because the full account number was never shared.
+- Payment methods (GCash, GoTyme, MariBank, in that order: one list, `Settings.payment_accounts`): each needs an account number or a QR image to be offered, otherwise it shows "Coming soon". The QR images live in `frontend/public/images/` (`payment-qr-gcash.jpg`, `payment-qr-gotyme.jpg`, `payment-qr-maribank.jpg`, all InstaPay QR Ph, so any bank or e-wallet app can pay them) and can be swapped via `GCASH_QR_IMAGE` / `GOTYME_QR_IMAGE` / `MARIBANK_QR_IMAGE`. GoTyme and MariBank show only the last digits (`GOTYME_ACCOUNT_HINT`, `MARIBANK_ACCOUNT_HINT`).
+- Brand files (the House Pickle Club logo, traced to SVG from the owner's 2000 px image until a designer's vector file replaces it): `frontend/public/brand/` (`logo-stacked*.svg`, `emblem*.svg`, `favicon.svg`, app icons as PNG). Use the `-on-dark` versions on dark colours and photos. New names on purpose: phones never mix them up with the old logo in their cache.

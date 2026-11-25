@@ -28,8 +28,8 @@ export interface TimeSlot {
 }
 
 // ── Booking API (mirrors backend/app/schemas.py) ─────────────────────────────
-/** The accounts a player can pay online. */
-export type PaymentMethod = 'gcash' | 'gotyme';
+/** The accounts a player can pay online, in the order they are offered (PAYMENT_METHODS in backend/app/config.py). */
+export type PaymentMethod = 'gcash' | 'gotyme' | 'maribank';
 /** How a booking was paid: online, or cash at the desk for a booking the host added ('none' for a block). */
 export type PaidWith = PaymentMethod | 'cash' | 'none';
 export type BookingStatus = 'held' | 'pending_verification' | 'confirmed' | 'rejected' | 'expired' | 'cancelled';
@@ -51,6 +51,8 @@ export interface PaymentAccount {
   qrImage: string;
   accountHint: string;
   enabled: boolean;
+  /** All-digit reference lengths this bank's receipts may show, besides GCash's 13 (MariBank's). */
+  referenceDigits: number[];
 }
 
 export interface AppConfig {
@@ -139,7 +141,7 @@ export interface Booking {
   pendingReason: PendingReason | null;
   /** Pesos the receipt showed, if the server could read it. */
   amountPaid: number | null;
-  /** The GCash / GoTyme reference of the payment, once proof is in (read off the receipt, or typed in). */
+  /** The reference of the payment (GCash, GoTyme, MariBank...), once proof is in (read off the receipt, or typed in). */
   paymentReference: string | null;
 }
 

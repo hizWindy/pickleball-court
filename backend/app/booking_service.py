@@ -324,9 +324,9 @@ def get_config(conn: sqlite3.Connection) -> ConfigOut:
             PaymentAccountOut(
                 method=a.method, label=a.label, account_name=a.account_name,
                 account_number=a.account_number, qr_image=a.qr_image, account_hint=a.account_hint,
-                enabled=a.enabled,
+                enabled=a.enabled, reference_digits=list(a.reference_digits),
             )
-            for a in (settings.gcash, settings.gotyme)
+            for a in settings.payment_accounts
         ],
         paddle_fee=settings.paddle_fee,
         hold_minutes=settings.hold_minutes,
@@ -495,7 +495,7 @@ def _last4(value: str) -> str | None:
 
 def expected_payment(row: sqlite3.Row, now: datetime) -> receipt_reader.Expected:
     """A genuine payment for this booking: its total, made during the hold, to one of the club's accounts."""
-    accounts = [a for a in (settings.gcash, settings.gotyme) if a.enabled]
+    accounts = [a for a in settings.payment_accounts if a.enabled]
     return receipt_reader.Expected(
         total=row["total"],
         window_start=from_iso(row["created_at"]),
@@ -614,8 +614,13 @@ def submit_reference(conn: sqlite3.Connection, code: str, token: str | None, dat
         strike_key = f"reference:{row['code']}"
         if ratelimit.struck_out(strike_key, REFERENCE_TRIES, REFERENCE_TRIES_WINDOW):
             raise TooMany("reference_locked", REFERENCE_LOCKED)
+        account = settings.payment_account(row["payment_method"])
         try:
-            ref = normalize_reference(data.reference_number, booked_on=from_iso(row["created_at"]).astimezone(MANILA).date())
+            ref = normalize_reference(
+                data.reference_number,
+                booked_on=from_iso(row["created_at"]).astimezone(MANILA).date(),
+                also_digits=account.reference_digits if account else (),
+            )
         except ReferenceRejected as exc:
             raise _refuse_reference(strike_key, row["code"], data.reference_number, exc.reason) from None
         except ValueError as exc:  # a hint that depends only on what was typed

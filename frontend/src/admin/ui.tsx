@@ -187,7 +187,7 @@ export function Segmented<T extends string | number>({
           disabled={o.disabled}
           onClick={() => onChange(o.value)}
           className={cx(
-            'min-h-9 flex-1 rounded-lg px-3 text-[13px] font-semibold transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-40',
+            'min-h-9 flex-1 rounded-lg px-2 text-[13px] font-semibold transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 sm:px-3',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15803D]',
             o.value === value ? 'bg-white text-zinc-950 shadow-xs ring-1 ring-zinc-200' : 'text-zinc-500 hover:text-zinc-800'
           )}

@@ -16,18 +16,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenDirectBooking, onCheckBook
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <a href="#" className="flex items-center gap-1.5 sm:gap-2 group shrink-0">
               <img
-                src="/icon.svg"
-                alt="HousePickle Club"
+                src="/brand/emblem.svg"
+                alt="House Pickle Club"
                 width={32}
                 height={32}
-                className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl shadow-xs group-hover:scale-105 transition-transform shrink-0"
+                className="w-6 h-6 sm:w-8 sm:h-8 object-contain group-hover:scale-105 transition-transform shrink-0"
               />
               <div className="flex flex-col">
+                {/* The wordmark in the logo's own colours: HOUSE navy, PICKLE lime, CLUB navy between lime rules. */}
                 <div className="flex items-center gap-0.5 sm:gap-1 leading-none">
-                  <span className="font-heading font-black text-xs xs:text-sm sm:text-base md:text-lg tracking-tight text-zinc-950 whitespace-nowrap">
-                    HOUSE<span className="text-[#15803D]">PICKLE</span>
+                  <span className="font-heading font-black text-xs xs:text-sm sm:text-base md:text-lg tracking-tight text-[#112D43] whitespace-nowrap">
+                    HOUSE<span className="text-[#91B843]">PICKLE</span>
                   </span>
-                  <span className="font-heading font-extrabold text-[8px] sm:text-[10px] tracking-widest text-[#15803D] uppercase bg-emerald-50 px-1 py-0.2 sm:px-1.5 sm:py-0.5 rounded border border-emerald-200 ml-0.5">
+                  <span className="font-heading font-extrabold text-[8px] sm:text-[10px] tracking-widest text-[#112D43] uppercase bg-[#91B843]/15 px-1 py-0.2 sm:px-1.5 sm:py-0.5 rounded border border-[#91B843]/60 ml-0.5">
                     CLUB
                   </span>
                 </div>

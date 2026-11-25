@@ -48,7 +48,7 @@ export const Login: React.FC<{ onSignedIn: () => void }> = ({ onSignedIn }) => {
       <CourtLines />
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="relative w-full max-w-sm">
         <div className="mb-8 flex items-center gap-3">
-          <img src="/icon.svg" alt="" className="h-11 w-11 rounded-xl" />
+          <img src="/brand/emblem-on-dark.svg" alt="" width={44} height={44} className="h-11 w-11 object-contain" />
           <div className="leading-none">
             <div className="flex items-center gap-2">
               <span className="font-heading text-lg font-black tracking-wide">

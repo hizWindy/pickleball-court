@@ -7,7 +7,7 @@ import { hourLabel, peso, slotStartMs as slotMs } from '../lib/time';
 import type { AppConfig } from '../types';
 import { adminApi } from './api';
 import { useDesk, type FormSeed } from './desk';
-import { hourSpan, isNight, nextDayHint, PLAY_HOURS, startChoice } from './format';
+import { hourSpan, isNight, METHOD_LABEL, nextDayHint, PLAY_HOURS, startChoice } from './format';
 import { useRemote } from './hooks';
 import { Btn, Card, cx, ErrorNote, Field, Label, Segmented, SelectInput, Sheet, Switch, TextArea, TextInput } from './ui';
 import type { AdminBookingDetail, AdminPayment, CreateBody, UpdateBody } from './types';
@@ -15,6 +15,8 @@ import type { AdminBookingDetail, AdminPayment, CreateBody, UpdateBody } from '.
 export type FormMode = { type: 'create'; seed?: FormSeed } | { type: 'edit'; code: string };
 
 const BLOCK_REASONS = ['Maintenance', 'Tournament', 'Private event', 'Lessons'];
+/** How a booking added at the desk was paid: cash first (most walk-ins), then the club's accounts in checkout order. */
+const DESK_METHODS: AdminPayment[] = ['cash', 'gcash', 'gotyme', 'maribank'];
 
 function priceOf(config: AppConfig, courtId: string, hour: number, hours: number, paddles: boolean) {
   const court = config.courts.find((c) => c.id === courtId) ?? config.courts[0];
@@ -332,11 +334,7 @@ const FormBody: React.FC<{
                   label="Payment method"
                   value={method}
                   onChange={(v) => setMethod(v as AdminPayment)}
-                  options={[
-                    { value: 'cash', label: 'Cash' },
-                    { value: 'gcash', label: 'GCash' },
-                    { value: 'gotyme', label: 'GoTyme' },
-                  ]}
+                  options={DESK_METHODS.map((m) => ({ value: m, label: METHOD_LABEL[m] }))}
                 />
               )}
             </Field>

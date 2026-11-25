@@ -2,7 +2,8 @@
  * What a typed payment reference should look like, for instant, friendly feedback while the guest types.
  *
  * The QR codes are InstaPay, so a guest can pay from any app and the reference may be GCash's (13 numbers), GoTyme's
- * (GT + the day + 8 numbers) or another bank's. The shape typed decides the rules, not which QR was picked.
+ * (GT + the day + 8 numbers) or another bank's. The shape typed decides the rules, not which QR was picked, except that
+ * a booking paid to MariBank also takes MariBank's all-digit lengths (the server sends them: `referenceDigits`).
  *
  * This only judges the shape. The server has the last word, and it alone turns away made-up numbers and the wrong
  * day, so those rules are not shipped to the phone (nobody should be able to read how to get around them).
@@ -35,12 +36,16 @@ export function cleanReference(raw: string): string {
   return head + body;
 }
 
-export function checkReference(raw: string): RefCheck {
+/** `alsoDigits`: all-digit lengths the booking's own bank prints besides GCash's 13 (`referenceDigits` of its account). */
+export function checkReference(raw: string, alsoDigits: readonly number[] = []): RefCheck {
   const ref = cleanReference(raw);
   if (!ref) return { state: 'empty' };
   if (!/^[\x20-\x7e]+$/.test(ref)) return { state: 'hint', message: REFERENCE_FORMAT_HINT };
   if (/^[0-9]+$/.test(ref)) {
     if (ref.length === 13) return { state: 'ok', shape: 'gcash', clean: ref };
+    if (alsoDigits.includes(ref.length)) return { state: 'ok', shape: 'other', clean: ref };
+    // Where another bank's all-digit number is possible, don't steer the guest to GCash's format.
+    if (alsoDigits.length) return { state: 'hint', message: REFERENCE_FORMAT_HINT };
     return { state: 'hint', message: ref.length >= 8 && ref.length <= 12 ? REFERENCE_INSTAPAY_HINT : REFERENCE_GCASH_HINT };
   }
   if (/^GT[0-9]{16}$/.test(ref)) return { state: 'ok', shape: 'gotyme', clean: ref };
@@ -49,12 +54,13 @@ export function checkReference(raw: string): RefCheck {
 }
 
 /**
- * Spaces a GCash number the way GCash prints it (4-3-6) so the guest can compare it with the receipt by eye.
- * Only numbers typed on their own are touched; anything else stays exactly as typed. Display only: the server
- * strips the spaces again.
+ * Spaces a GCash number the way GCash prints it (4-3-6) so the guest can compare it with the receipt by eye, and a
+ * longer all-digit bank number (MariBank's) in fours. Only numbers typed on their own are touched; anything else stays
+ * exactly as typed. Display only: the server strips the spaces again.
  */
 export function formatReference(raw: string): string {
   const compact = raw.replace(/[\s-]/g, '');
+  if (/^[0-9]{14,20}$/.test(compact)) return compact.replace(/(.{4})(?=.)/g, '$1 ');
   if (!/^[0-9]{1,13}$/.test(compact)) return raw;
   return [compact.slice(0, 4), compact.slice(4, 7), compact.slice(7)].filter(Boolean).join(' ');
 }

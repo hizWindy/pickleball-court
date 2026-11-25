@@ -75,7 +75,7 @@ export const CourtShowcase: React.FC<CourtShowcaseProps> = ({ onBookCourt }) => 
             <div className="absolute bottom-4 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6 flex flex-col sm:flex-row sm:items-end justify-between gap-3 text-white">
               <div>
                 <div className="flex items-center gap-3 mb-1">
-                  <img src="/housepickle-emblem.svg" alt="HousePickle Emblem" className="w-9 h-9 sm:w-10 sm:h-10 object-contain drop-shadow-md" />
+                  <img src="/brand/emblem-on-dark.svg" alt="House Pickle Club emblem" width={40} height={40} className="w-9 h-9 sm:w-10 sm:h-10 object-contain drop-shadow-md" />
                   <span className="font-heading font-black text-xl sm:text-2xl md:text-3xl uppercase tracking-tight text-white drop-shadow-sm">
                     HOUSE<span className="text-[#84CC16]">PICKLE</span> CLUB
                   </span>

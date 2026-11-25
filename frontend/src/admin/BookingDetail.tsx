@@ -407,7 +407,7 @@ const ReadRow: React.FC<{ label: string; ok?: boolean; children: React.ReactNode
   </div>
 );
 
-/** The two numbers the host matches up: the booking's code (on the guest's pass) and the payment's reference (in the GCash / GoTyme app). */
+/** The two numbers the host matches up: the booking's code (on the guest's pass) and the payment's reference (in the GCash, GoTyme or MariBank app). */
 const References: React.FC<{ b: AdminBookingDetail }> = ({ b }) => {
   const paymentRef = b.referenceNumber ?? b.scan?.reference ?? null;
   const noRef =

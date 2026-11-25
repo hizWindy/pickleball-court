@@ -21,7 +21,7 @@ export const LABEL: Record<AdminLabel, { label: string; tone: Tone }> = {
   cancelled: { label: 'Cancelled', tone: 'zinc' },
 };
 
-export const PROVIDER_LABEL: Record<string, string> = { gcash: 'GCash', gotyme: 'GoTyme', maya: 'Maya', other: 'Another bank' };
+export const PROVIDER_LABEL: Record<string, string> = { gcash: 'GCash', gotyme: 'GoTyme', maribank: 'MariBank', maya: 'Maya', other: 'Another bank' };
 
 export const METHOD_LABEL: Record<AdminPayment, string> = PAYMENT_LABEL;
 

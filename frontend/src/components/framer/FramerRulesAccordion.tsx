@@ -72,7 +72,7 @@ function buildFaq(config: AppConfig | null): AccordionItem[] {
       id: 'not-confirmed',
       category: 'Payment',
       question: 'Why is my booking not confirmed yet?',
-      answer: "Your booking is confirmed as soon as you submit your reference number and name, but the host still checks every payment in the GCash / GoTyme app. If the amount is short or the payment can't be found, the host will message you. If it was short, send the rest to the same account and text the host your new reference number. Keep your own transaction receipt as proof."
+      answer: "Your booking is confirmed as soon as you submit your reference number and name, but the host still checks every payment in the GCash, GoTyme or MariBank app. If the amount is short or the payment can't be found, the host will message you. If it was short, send the rest to the same account and text the host your new reference number. Keep your own transaction receipt as proof."
     },
     {
       id: 'cancel',
